@@ -157,3 +157,34 @@ The Fable entries describe Fable only. This snapshot has no independently measur
 | gpt-6.1-terra/medium | 72.98 (n=2, 63.00–82.95, +9.98) | 59.63 (n=2, 50.00–69.27, +9.63) | 61.55 (n=4, 43.65–74.21, −0.45) | 56.00 (n=1, 56.00–56.00, 0.00, AA only) |
 | gpt-6-luna/high | 30.00 (n=1, 30.00–30.00, 0.00, AA only) | 22.00 (n=1, 22.00–22.00, 0.00, AA only) | 41.20 (n=2, 29.00–53.41, +12.20) | 45.00 (n=1, 45.00–45.00, 0.00, AA only) |
 | deepseek-flash/max | 58.21 (n=2, 54.41–62.00, −3.79) | 28.00 (n=1, 28.00–28.00, 0.00, AA only) | 37.69 (n=2, 32.38–43.00, −5.31) | 71.00 (n=1, 71.00–71.00, 0.00, AA only) |
+
+## Historical routing reference
+
+This is the compact reference behind the original failover ladders. It mixes
+the archived multi-source profile averages (rounded) with matching snapshots
+for rows available from a single source. Estimated times have an asterisk.
+This table records the original routing baseline. Fresh comparisons should
+use matching model variants, effort, task profiles and benchmark cohorts.
+
+| Model (effort) | Provider / client | Index | Coding | Reasoning | Accuracy | Knowledge work | s/task |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fable 5.2 `medium` | Anthropic / Claude | 56.4 | 85 | 77 | 65 | 84 | 447 |
+| Opus 5.5 `medium` | Anthropic / Claude | 48.2 | 76 | 65 | 53 | 78 | 414 |
+| Opus 5.5 `high` | Anthropic / Claude | 51.8 | 81 | 72 | 55 | 85 | 566 |
+| Sonnet 5.5 `high` | Anthropic / Claude | 41.5 | 73 | 62 | 46 | 78 | 405 |
+| Haiku 5.5 `high` | Anthropic / Claude | 29.9 | 57 | 50 | 52 | 53 | 392 |
+| gpt-6.2-astra `high` | OpenAI / Codex | 60.1 | 95 | 92 | 60 | 83 | ~357 |
+| gpt-6.2-astra `medium` | OpenAI / Codex | 57.0 | 89 | 79 | 61 | 83 | 264 |
+| gpt-6.2-sol `xhigh` | OpenAI / Codex | 55.7 | 88 | 83 | 58 | 81 | 306* |
+| gpt-6.2-sol `high` | OpenAI / Codex | 54.9 | 82 | 76 | 56 | 82 | 258* |
+| gpt-6.2-sol `medium` | OpenAI / Codex | 52.7 | 87 | 76 | 54 | 77 | 186 |
+| gpt-6.1-terra `medium` | OpenAI / Codex | 38.2 | 73 | 60 | 62 | 56 | 172 |
+| gpt-6-luna `high` | OpenAI / Codex | 21.4 | 30 | 22 | 41 | 45 | 348 |
+| gemini-4-hydrogen `high` | Google / agy | 50.8 | 79 | 69 | 82 | 81 | 500 |
+| gemini-4-hydrogen `medium` | Google / agy | 41.2 | 63 | 55 | 79 | 70 | 227 |
+| gemini-4-neon `high` | Google / agy | 60.0 | 89 | 84 | 84 | 92 | ~888 |
+| gemini-4-neon `medium` | Google / agy | 55.0 | 84 | 78 | – | 84 | ~498 |
+| gemini-4-neon `xhigh` | Google / agy | 61.4 | 96 | 87 | 84 | 90 | ~1290 |
+| gemini-4-argon `medium` | Google / agy | 47.6 | 79 | 69 | 72 | 83 | 1802 |
+| gemini-3.8-flash `high` | Google / agy | 30.8 | 43 | 40 | 54 | 52 | 876 |
+| deepseek-flash (V4.1 Flash, highest effort; scored as "1017") | DeepSeek | 32.6 | 58 | 28 | 38 | 71 | 832 |

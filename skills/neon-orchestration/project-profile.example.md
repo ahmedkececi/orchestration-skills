@@ -5,10 +5,10 @@ Use this as a copyable starting point for the project profile that your reposito
 | Setting | Example or decision to fill in |
 | --- | --- |
 | Project instruction files | Applicable repository instructions and any project-specific contribution guide |
-| Manager | Neon at high effort, or the Neon orchestrator mode |
+| Manager | Orchestrator (Neon), or Neon at high effort when selectable, if available |
 | Authorized workers | Provider, account or pool label, exact model ID, effort, runner, available tools and allowed input classes |
-| Default execution | Keep heavy execution away from the manager's shared Google allowance when possible. Use Sol high or an authorized Claude worker for implementation. Check whether a Google worker actually uses a separate quota before dispatch. |
-| Measurement data | `.orchestration/model-measurements.md` or the bundled historical snapshot. Record required task profiles, quality floors and any authorized per-lane overrides. |
+| Default execution | Codex Sol at high, then Claude Opus at medium or Claude Sonnet at high, subject to the approved workers |
+| Measurement data | Use `.orchestration/model-measurements.md` when refreshed. Record any project-specific quality floors or routing overrides. |
 | Independent review | An authorized fresh worker from a different model family, with a same-family fallback policy if appropriate |
 | Data policy | Which providers can see public, internal or restricted data and which classes must remain local |
 | Workspace | Writeable paths, worktree or branch conventions, allowed network access and rules for starting local services |

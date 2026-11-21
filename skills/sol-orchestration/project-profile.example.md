@@ -5,10 +5,10 @@ Use this as a copyable starting point for the project profile that your reposito
 | Setting | Example or decision to fill in |
 | --- | --- |
 | Project instruction files | Applicable repository instructions and any project-specific contribution guide |
-| Manager | Sol at xhigh effort |
+| Manager | Sol at xhigh effort, if available |
 | Authorized workers | Provider, account or pool label, exact model ID, effort, runner, available tools and allowed input classes |
-| Default execution | Use Opus medium or Sonnet high for execution when that keeps capacity available in the manager's pool. Sol high is eligible for bounded work when Codex has headroom. Escalate difficult units separately. |
-| Measurement data | `.orchestration/model-measurements.md` or the bundled historical snapshot. Record required task profiles, quality floors and any authorized per-lane overrides. |
+| Default execution | Claude Opus at medium, then Codex Sol at high, subject to the approved workers |
+| Measurement data | Use `.orchestration/model-measurements.md` when refreshed. Record any project-specific quality floors or routing overrides. |
 | Independent review | An authorized fresh worker from a different model family, with a same-family fallback policy if appropriate |
 | Data policy | Which providers can see public, internal or restricted data and which classes must remain local |
 | Workspace | Writeable paths, worktree or branch conventions, allowed network access and rules for starting local services |
