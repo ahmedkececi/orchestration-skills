@@ -133,3 +133,10 @@ Google-authored work is **same-family** and must be labeled as such in the
 final report. Use `gemini-4-neon` `medium` for a scoped second eye on GPT or
 Claude artifacts (or `gpt-6.2-astra` `medium` on Google artifacts).
 `deepseek-flash` checks only bulk or low-stakes output.
+
+### Independent review rules and Test Integrity Invariant
+
+- **`BLOCKER` vs `NIT` severity classification.** Every finding in an independent review is classified as either **`BLOCKER`** (defect, regression, or spec/security/data violation — blocks acceptance) or **`NIT`** (non-blocking style or preference note — never triggers rework on its own).
+- **Max 2 review rounds (circuit breaker).** After 2 failed review rounds on a unit, escalate one tier with full evidence; if already at the highest eligible tier, stop and escalate to the operator with root cause and evidence rather than looping indefinitely.
+- **High-stakes tie-breaker.** If the coordinator and independent cross-family reviewer disagree on a high-stakes, security, or irreversible finding, never silently override — consult a 3rd authorized model family or present both positions with evidence to the operator for decision.
+- **Test Integrity Invariant.** Workers must never weaken, skip, or delete existing test assertions to make a suite pass unless explicitly required by the acceptance criteria. Independent reviewers must explicitly inspect test-file diffs and verify the relevant regression check ran cleanly.

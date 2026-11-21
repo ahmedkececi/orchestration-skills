@@ -40,3 +40,5 @@ Use the host's live source tools. Open primary sources, distinguish release date
 Add `--preview` when requested. Read the resulting workspace file or preview and report the new model IDs, source links, observed scores, missing scores and any incomplete catalog coverage. When the host cannot access a source, retain prior measurements and label the gap. A documented model becomes eligible for routing through the project's separately authorized runner, data scope and budget.
 
 For an explicit user-supplied measurement export, use the [import procedure](references/collection.md). To register a new provider for future scans, use [add-provider-orchestration-skills](../add-provider-orchestration-skills/).
+
+For deterministic lane ranking against workspace measurements and `.orchestration/provider-state.json`, run `python3 -B scripts/resolve_lanes.py --workspace /path/to/project --role coding` (see [scripts/resolve_lanes.py](scripts/resolve_lanes.py) for `--role`, `--author-family`, `--providers`, `--restricted-data`, and `--format json`).

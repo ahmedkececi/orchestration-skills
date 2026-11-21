@@ -32,6 +32,8 @@ jobs:
             skills/update-orchestration-skills/scripts/benchmarks.py \
             skills/update-orchestration-skills/scripts/catalogs.py \
             skills/update-orchestration-skills/scripts/refresh.py \
+            skills/update-orchestration-skills/scripts/resolve_lanes.py \
+            tests/test_resolve_lanes.py \
             tests/test_skills.py \
             tests/test_updater.py
 
@@ -43,6 +45,7 @@ jobs:
               'skills/update-orchestration-skills/references/benchmark-suite.json',
               'skills/update-orchestration-skills/references/provider-catalogs.json',
               'examples/measurements.json',
+              'examples/provider-state.json',
           ]:
               json.loads(pathlib.Path(p).read_text(encoding='utf-8'))
               print('Valid JSON:', p)
@@ -55,3 +58,8 @@ jobs:
         run: |
           python3 -B skills/update-orchestration-skills/scripts/refresh.py \
             --workspace . --input examples/measurements.json --preview > /dev/null
+
+      - name: Smoke test deterministic lane resolver
+        run: |
+          python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+            --workspace . --role coding --state examples/provider-state.json > /dev/null

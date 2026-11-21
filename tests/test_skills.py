@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import unicodedata
 import unittest
 from urllib.parse import unquote
 
@@ -46,6 +47,24 @@ TOP_LEVEL_DOCS = (
 INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
 MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\n]+)\)")
 FENCE_OPEN_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+ATX_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}[ \t]+(.+?)\s*#*\s*$")
+MD_INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)\n]+\)")
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+HTML_ANCHOR_RE = re.compile(r"""<a\b[^>]*\b(?:id|name)=["']([^"']+)["']""", re.IGNORECASE)
+
+V120_INVARIANT_PATTERNS = (
+    ("five_hour_pct", re.compile(r"five_hour_pct")),
+    ("observed_at", re.compile(r"observed_at")),
+    ("BLOCKER", re.compile(r"\bBLOCKER\b")),
+    ("Timeout / Hung", re.compile(r"timeout\s*/\s*hung", re.IGNORECASE)),
+    ("Compaction", re.compile(r"\bcompaction\b", re.IGNORECASE)),
+    ("Test Integrity", re.compile(r"test\s+integrity", re.IGNORECASE)),
+    ("External Action", re.compile(r"external\s+action", re.IGNORECASE)),
+    ("git push", re.compile(r"git\s+push", re.IGNORECASE)),
+    ("resolve_lanes.py", re.compile(r"resolve_lanes\.py")),
+    ("scope_drift", re.compile(r"scope_drift")),
+    ("first_pass_ok", re.compile(r"first_pass_ok")),
+)
 
 
 def parse_frontmatter(text):
@@ -146,6 +165,50 @@ def strip_fenced_code_blocks(text):
     return "\n".join(out)
 
 
+def slugify_github_heading(heading_text):
+    """Generate a GitHub-Flavored Markdown heading anchor slug (Unicode-aware)."""
+    cleaned = MD_INLINE_LINK_RE.sub(r"\1", heading_text)
+    cleaned = HTML_TAG_RE.sub("", cleaned)
+    cleaned = cleaned.replace("`", "").replace("*", "")
+    cleaned = cleaned.strip().lower()
+
+    out = []
+    for ch in cleaned:
+        if ch == " ":
+            out.append("-")
+        elif ch in ("-", "_"):
+            out.append(ch)
+        else:
+            cat = unicodedata.category(ch)
+            if cat and cat[0] in ("L", "M", "N"):
+                out.append(ch)
+    return "".join(out)
+
+
+def extract_markdown_heading_anchors(text):
+    """Return the set of valid GitHub heading and explicit HTML anchors in Markdown text."""
+    stripped = strip_fenced_code_blocks(text)
+    anchors = set()
+    counts = {}
+
+    for line in stripped.splitlines():
+        for html_match in HTML_ANCHOR_RE.finditer(line):
+            anchors.add(html_match.group(1).strip().lower())
+
+        match = ATX_HEADING_RE.match(line)
+        if not match:
+            continue
+        base = slugify_github_heading(match.group(1))
+        if not base:
+            continue
+        seen = counts.get(base, 0)
+        anchor = base if seen == 0 else f"{base}-{seen}"
+        counts[base] = seen + 1
+        anchors.add(anchor)
+
+    return anchors
+
+
 def extract_markdown_link_targets(text):
     """Return raw link targets from Markdown outside fenced and inline code."""
     cleaned = INLINE_CODE_RE.sub("", strip_fenced_code_blocks(text))
@@ -223,29 +286,56 @@ class SkillIntegrityTests(unittest.TestCase):
 
     def test_all_local_relative_markdown_links_resolve(self):
         md_files = sorted(SKILLS_DIR.rglob("*.md")) + list(TOP_LEVEL_DOCS)
+        anchor_cache = {}
+
+        def get_anchors(path):
+            if path not in anchor_cache:
+                anchor_cache[path] = extract_markdown_heading_anchors(
+                    path.read_text(encoding="utf-8")
+                )
+            return anchor_cache[path]
+
         for md_path in md_files:
             self.assertTrue(md_path.is_file(), f"Expected Markdown file missing: {md_path}")
             text = md_path.read_text(encoding="utf-8")
             rel_md = md_path.relative_to(REPO_ROOT)
 
             for raw_target in extract_markdown_link_targets(text):
-                if raw_target.startswith(("http://", "https://", "mailto:", "#")):
+                if raw_target.startswith(("http://", "https://", "mailto:")):
                     continue
 
-                path_part = unquote(raw_target.split("#", 1)[0].split("?", 1)[0])
-                if not path_part:
-                    continue
+                path_and_query, _, raw_fragment = raw_target.partition("#")
+                path_part = unquote(path_and_query.split("?", 1)[0])
+                fragment = unquote(raw_fragment).strip().lower()
 
                 with self.subTest(source=str(rel_md), target=raw_target):
-                    resolved = (md_path.parent / path_part).resolve()
-                    self.assertTrue(
-                        resolved.is_relative_to(REPO_ROOT),
-                        f"Link {raw_target!r} in {rel_md} escapes repository root",
-                    )
-                    self.assertTrue(
-                        resolved.exists(),
-                        f"Broken relative link {raw_target!r} in {rel_md} -> {resolved}",
-                    )
+                    if not path_part:
+                        if not fragment:
+                            continue
+                        resolved = md_path.resolve()
+                    else:
+                        resolved = (md_path.parent / path_part).resolve()
+                        self.assertTrue(
+                            resolved.is_relative_to(REPO_ROOT),
+                            f"Link {raw_target!r} in {rel_md} escapes repository root",
+                        )
+                        self.assertTrue(
+                            resolved.exists(),
+                            f"Broken relative link {raw_target!r} in {rel_md} -> {resolved}",
+                        )
+
+                    if fragment:
+                        self.assertTrue(
+                            resolved.is_file() and resolved.suffix.lower() == ".md",
+                            f"Fragment link {raw_target!r} in {rel_md} does not target a Markdown file",
+                        )
+                        anchors = get_anchors(resolved)
+                        self.assertIn(
+                            fragment,
+                            anchors,
+                            f"Broken heading anchor #{fragment} in {rel_md} -> {resolved.relative_to(REPO_ROOT)} "
+                            f"(available: {sorted(anchors)})",
+                        )
 
     def test_workflow_templates_are_byte_identical(self):
         reference_preset = COORDINATOR_PRESETS[0]
@@ -263,6 +353,21 @@ class SkillIntegrityTests(unittest.TestCase):
                     reference_bytes,
                     f"{preset}/workflow-templates.md differs from {reference_preset}/workflow-templates.md",
                 )
+
+    def test_coordinator_presets_v120_invariants(self):
+        for preset in COORDINATOR_PRESETS:
+            preset_dir = SKILLS_DIR / preset
+            combined_parts = [(preset_dir / "SKILL.md").read_text(encoding="utf-8")]
+            for rel_ref in REQUIRED_COORDINATOR_REFERENCES:
+                combined_parts.append((preset_dir / rel_ref).read_text(encoding="utf-8"))
+            combined_text = "\n".join(combined_parts)
+
+            for label, pattern in V120_INVARIANT_PATTERNS:
+                with self.subTest(preset=preset, invariant=label):
+                    self.assertIsNotNone(
+                        pattern.search(combined_text),
+                        f"{preset} is missing v1.2.0 invariant {label!r}",
+                    )
 
 
 if __name__ == "__main__":

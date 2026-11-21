@@ -42,10 +42,12 @@ The [bundled model measurements](../../update-orchestration-skills/references/mo
 
 Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-orchestration-skills` in Codex, to refresh the workspace data. Install the [refresh skill](../../update-orchestration-skills/) alongside this preset. A refresh changes the measurement evidence available to routing; the project profile still governs authorization, pool access and model IDs. Use each model's exact measured variant and effort, and compare results only on matching task profiles and compatible source cohorts. Missing measurements remain unknown.
 
+To deterministically rank authorized models from live `.orchestration/model-measurements.md` and `.orchestration/provider-state.json` instead of relying only on static baseline tables, the coordinator can run `python3 -B <updater-skill-dir>/scripts/resolve_lanes.py --workspace . --role <coding|reasoning|accuracy|knowledge|review>` (adding `--author-family <family>` for cross-family review and `--restricted-data` when restricted-data rules apply).
+
 ## Routing ledger
 
 Append one line per delegation to `.orchestration/orchestration-ledger.md`: date, task type,
-lane, effort, attempts, verification result, escalation if any. When the same
+lane, effort, attempts, verification result, escalation if any, `scope_drift` (`yes|no`), and `first_pass_ok` (`yes|no`). When the same
 task type fails on a lane three times, or passes cleanly on a lighter lane
 three times, propose a change to the routing table to the operator.
 Optionally, to qualify `gpt-6.2-sol` for standard code debugging in your

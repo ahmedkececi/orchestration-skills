@@ -1,6 +1,6 @@
 # Try Ultimate Orchestration Skills
 
-This walkthrough has two parts. Run the actual measurement helper against an example bundle without signing in, then read a sample handoff at a quota limit. The models, scores and quota readings in this example are fixtures. They do not rank real providers.
+This walkthrough has three parts. Run the measurement helper against an example bundle, resolve authorized lanes deterministically from a sample quota state without signing in, then read a sample handoff at a quota limit. The models, scores and quota readings in this example are fixtures. They do not rank real providers.
 
 ## Preview model data offline
 
@@ -25,6 +25,24 @@ Under **Benchmark coverage by model and effort**, you will see the exact coverag
 
 This is a local import using sample data. The live refresh skill also supports checking public catalogs, model selection and source verification. [Refresh skill](../skills/update-orchestration-skills/)
 
+## Resolve lanes deterministically offline
+
+Use `resolve_lanes.py` to rank authorized lanes directly from `.orchestration/model-measurements.md` (falling back to the bundled historical snapshot) and a live or fixture `provider-state.json`:
+
+```sh
+python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --role coding --state examples/provider-state.json
+
+python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --role review --author-family openai --state examples/provider-state.json
+```
+
+What the output demonstrates:
+
+- **Coding (`--role coding`):** In `examples/provider-state.json`, Codex sits past the 85% weekly move threshold (`weekly_pct`), so Codex lanes are automatically deprioritized behind healthy equivalent pools rather than draining the near-full weekly cap.
+- **Cross-family review (`--role review --author-family openai`):** Non-OpenAI model families are ranked ahead for independent review, while OpenAI/Codex candidates are flagged `same-family` so reviews never silently fall back to same-family self-checking.
+- Pass `--restricted-data` to restrict candidates to Claude lanes, `--providers` to match your project profile allowlist, or `--format json` for structured output.
+
 ## Follow a quota handoff
 
 **Example task:** Update three files to render timestamps consistently. The project lets two independent model pools see the repository and run the relevant checks. The manager owns the plan and final review. A third authorized model family can independently review the result.
@@ -39,10 +57,10 @@ A checkpoint excerpt in `.orchestration/orchestration-checkpoint.md` follows the
 Goal and current baseline: Render UTC timestamps consistently across 3 report pages on branch `fix/utc-timestamps` (commit `a1b2c3d`).
 Accepted decisions and unresolved decisions: Accepted — reuse `src/utils/formatUtc.ts`. Unresolved — none.
 
-| Unit | Owner or lane | State | Path or evidence | Next check |
-| --- | --- | --- | --- | --- |
-| Unit 1 (summary page) | Worker A (Pool A) | done | `src/pages/summary.ts`; `npm test -- summary` passed | Verify diff in final check |
-| Units 2–3 (detail & export pages) | Worker B (Pool B) | in_progress | `src/pages/detail.ts`, `src/pages/export.ts` | Compare all 3 pages against UTC fixture |
+| Unit | Owner or lane | Depends on | State | Path or evidence | Next check |
+| --- | --- | --- | --- | --- | --- |
+| Unit 1 (summary page) | Worker A (Pool A) | — | done | `src/pages/summary.ts`; `npm test -- summary` passed | Verify diff in final check |
+| Units 2–3 (detail & export pages) | Worker B (Pool B) | Unit 1 | in_progress | `src/pages/detail.ts`, `src/pages/export.ts` | Compare all 3 pages against UTC fixture |
 
 | Pool | Current status | Reset time with timezone | Fallback |
 | --- | --- | --- | --- |
@@ -60,4 +78,4 @@ Use the [workflow templates](../skills/sol-orchestration/workflow-templates.md) 
 
 Yukarıdaki [çevrimdışı komutu](#preview-model-data-offline) Git ve Python 3.9+ ile çalıştırabilirsin. `awk` filtresi yalnızca canlı çalışma alanı tablolarını gösterir; boru (`|`) kısmını kaldırırsan üstte tarihsel arşiv, altta JSON gözlemleriyle birlikte tam çıktıyı görebilirsin. Doğrulanmamış testler `-` görünür; değerler gösterim amaçlıdır.
 
-[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz haftalık taşıma eşiğine (%85) ulaşınca kalan iş yetkili ikinci havuza aktarılır. `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.
+[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz haftalık taşıma eşiğine (%85) ulaşınca kalan iş yetkili ikinci havuza aktarılır. [Çevrimdışı hat çözümleme](#resolve-lanes-deterministically-offline) bölümündeki `resolve_lanes.py` komutları bu eşik ve çapraz aile inceleme sıralamasını örnek `provider-state.json` üzerinde doğrudan gösterir. `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.

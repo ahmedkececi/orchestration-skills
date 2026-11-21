@@ -341,8 +341,14 @@ itself ranks below V4.1 Flash. Do not route to it.
 11. **The main loop does not execute.** It thinks, directs, reviews and keeps
     the management records ("The manager rule"), across both planning and
     execution turns. No task is small enough to do itself.
-12. **Review findings go back.** A defect found in review returns to a lane
-    with the evidence; the main loop never patches it.
+12. **Review findings go back (with a circuit breaker).** Every `BLOCKER`
+    finding returns to a lane with the evidence (`NIT` notes never trigger
+    rework alone); the main loop never patches it. After 2 failed review rounds
+    on a unit, escalate one tier or stop and escalate to the operator.
+13. **External Action Gate.** Workers must never perform git-irreversible or
+    external side effects (`git push`, package publish, external API mutations,
+    live DB migrations, or destructive deletes outside writable paths); only
+    the coordinator executes them with explicit operator approval.
 
 ## Reference files (load on demand)
 
@@ -350,9 +356,9 @@ Load the matching reference file before acting in any of these situations — do
 
 | Reference file | Load when | Mandatory reminder |
 |---|---|---|
-| [references/delegation-and-verification.md](references/delegation-and-verification.md) | Splitting work in parallel, shaping a delegate brief, or checking results on the verification ladder | Every brief on every lane must end with the 4-line return contract (`STATUS`, `RESULT`, `EVIDENCE`, `NOT DONE`); a report with no `EVIDENCE` is treated as `partial`. |
-| [references/quota-and-failover.md](references/quota-and-failover.md) | Checking pool headroom, approaching thresholds, handling rate/quota errors, failing over, or writing a checkpoint/handoff | Move delegated units at **85 %** weekly / **90 %** five-hour; stop new large jobs and update `.orchestration/orchestration-checkpoint.md` at **90 %** weekly / **95 %** five-hour. |
-| [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Launching Native Swarm, `claude -p`, `codex exec`, headless Gemini, or DeepSeek; reading bundled/workspace model measurements; or logging to the routing ledger | Pin explicit `model` and `effort` on every call, read `.orchestration/model-measurements.md` before the bundled archive, and append one line per delegation to `.orchestration/orchestration-ledger.md`. |
+| [references/delegation-and-verification.md](references/delegation-and-verification.md) | Splitting work in parallel, shaping a delegate brief, or checking results on the verification ladder | Every brief on every lane must end with the 4-line return contract (`STATUS`, `RESULT`, `EVIDENCE`, `NOT DONE`); enforce `BLOCKER`/`NIT` review classification (max 2 rounds), high-stakes tie-breaker, and the Test Integrity Invariant. |
+| [references/quota-and-failover.md](references/quota-and-failover.md) | Checking pool headroom, approaching thresholds, handling rate/quota/timeout errors, failing over, recovering from compaction, or writing a checkpoint/handoff | Move delegated units at **85 %** weekly / **90 %** five-hour; stop new large jobs at **90 %** weekly / **95 %** five-hour; only the coordinator writes `.orchestration/*`; after compaction or resume, re-read `orchestration-checkpoint.md`, `provider-state.json`, and `git status --short` before spawning delegates. |
+| [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Launching Native Swarm, `claude -p`, `codex exec`, headless Gemini, or DeepSeek; resolving lanes deterministically; reading measurements; or logging to the routing ledger | Pin explicit `model` and `effort` on every call (non-interactive `< /dev/null`, `CI=true`), use `resolve_lanes.py` or `.orchestration/model-measurements.md` before the bundled archive, and log `scope_drift` / `first_pass_ok` to `.orchestration/orchestration-ledger.md`. |
 
 ## Exceptions
 

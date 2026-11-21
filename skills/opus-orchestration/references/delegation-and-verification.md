@@ -121,3 +121,21 @@ handover, the Astra main-loop check is separate from independent review.
 If Opus is unavailable, a Neon `high` second eye on Google-authored work
 is same-family. Use gemini-4-neon `medium` for a scoped second eye. Deepseek-flash checks only bulk or low-stakes
 output. Label a same-family review as such in the final report.
+
+Review and verification invariants:
+- **Severity classification (`BLOCKER` / `NIT`):** Independent review findings
+  classify every item as **`BLOCKER`** (defect, regression, or spec/security/data
+  violation — blocks acceptance) or **`NIT`** (non-blocking style or preference
+  note — never triggers rework on its own).
+- **Max 2 review rounds per unit (circuit breaker):** After 2 failed review
+  rounds on a unit, escalate one tier with the accumulated evidence; if already
+  at the highest eligible tier, stop and escalate to the operator with root
+  cause and evidence (never loop infinitely).
+- **High-stakes tie-breaker:** If the coordinator and independent cross-family
+  reviewer disagree on a high-stakes, security, or irreversible finding, do not
+  silently override — consult a 3rd authorized model family or present both
+  positions with evidence to the operator.
+- **Test Integrity Invariant:** Workers must never weaken, skip, or delete
+  existing test assertions to make a suite pass unless explicitly required by
+  the acceptance criteria; reviewers explicitly inspect test-file diffs and
+  verify the relevant regression command.

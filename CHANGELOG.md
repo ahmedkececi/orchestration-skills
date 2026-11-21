@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-21
+
+### Added
+- Deterministic offline lane resolver (`skills/update-orchestration-skills/scripts/resolve_lanes.py`) ranking authorized lanes from live `.orchestration/model-measurements.md` (or bundled snapshot) and `.orchestration/provider-state.json` by role (`coding`, `reasoning`, `accuracy`, `knowledge`, `review`), cross-family `--author-family` preference, `--restricted-data` filtering, quota thresholds, and 5-minute staleness TTL — plus sample state fixture (`examples/provider-state.json`) and zero-dependency tests (`tests/test_resolve_lanes.py`).
+- Enriched 7-field `.orchestration/provider-state.json` schema (`status`, `down_until`, `limit`, `five_hour_pct`, `weekly_pct`, `resets_at`, `observed_at`), 5-minute staleness/TTL policy, and coordinator single-writer invariant for `.orchestration/*` across all five coordinator presets.
+- Independent review `BLOCKER` / `NIT` severity classification, max-2-review-rounds circuit breaker, high-stakes tie-breaker rule, and Test Integrity Invariant across all five coordinator presets and `workflow-templates.md`.
+- Class F (`Timeout / Hung lane`) error classification with non-interactive CLI budgets (`< /dev/null`, `CI=true`), Class E per-session/cooldown counter reset, Compaction Recovery checklist, and External Action Gate (`git push`, package publish, external API mutations, live DB migrations, and out-of-scope destructive deletes forbidden for workers).
+- Structured `scope_drift` (`yes|no`) and `first_pass_ok` (`yes|no`) routing ledger fields, checkpoint `Depends on` column, `Restricted paths` and `External actions` rows in all five `project-profile.example.md` files, and an offline lane-resolution walkthrough in `examples/first-run.md`.
+
+### Changed
+- Enhanced `tests/test_skills.py` to validate `#fragment` heading anchors on local Markdown links (both same-file and cross-file) and assert all v1.2.0 orchestration invariants across all five coordinator presets.
+- Updated `README.md` (English and Turkish), `skills/update-orchestration-skills/SKILL.md`, and `.github/workflows/ci.yml` with deterministic lane resolution, safety guardrails, and resolver smoke/unit checks.
+
 ## [1.1.0] - 2026-11-21
 
 ### Added

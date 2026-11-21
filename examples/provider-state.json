@@ -1,0 +1,38 @@
+{
+  "claude": {
+    "status": "up",
+    "down_until": null,
+    "limit": null,
+    "five_hour_pct": 42,
+    "weekly_pct": 58,
+    "resets_at": null,
+    "observed_at": "2026-11-21T15:56:00Z"
+  },
+  "codex": {
+    "status": "up",
+    "down_until": null,
+    "limit": null,
+    "five_hour_pct": 25,
+    "weekly_pct": 87,
+    "resets_at": null,
+    "observed_at": "2026-11-21T15:57:00Z"
+  },
+  "gemini": {
+    "status": "up",
+    "down_until": null,
+    "limit": null,
+    "five_hour_pct": 30,
+    "weekly_pct": 40,
+    "resets_at": null,
+    "observed_at": "2026-11-21T15:57:00Z"
+  },
+  "deepseek": {
+    "status": "up",
+    "down_until": null,
+    "limit": null,
+    "five_hour_pct": null,
+    "weekly_pct": null,
+    "resets_at": null,
+    "observed_at": "2026-11-21T15:57:00Z"
+  }
+}

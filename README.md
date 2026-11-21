@@ -18,7 +18,7 @@
 
 **What this is & prerequisites:** These are portable Markdown Agent Skills plus zero-dependency Python 3.9+ helper scripts for benchmark tracking — not an MCP server, proxy, or background daemon. You can start with 1–2 authorized model pools and add more subscriptions or APIs later; any unconfigured lane falls back automatically to what you have.
 
-[Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
+[Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [Resolve lanes offline](examples/first-run.md#resolve-lanes-deterministically-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
 
 ### Quick install
 
@@ -70,6 +70,7 @@ flowchart LR
 | Make reviews independent | Give a fresh reviewer from another model family the artifact and acceptance checks. The coordinator sees both the result and its limits before accepting it. |
 | Resume from artifacts | The handoff records ownership, accepted decisions, remaining units and the next check. A new coordinator can pick up from the checkpoint when a quota window closes. |
 | Refresh without waiting for a release | The updater verifies model releases and measurements from their sources and refreshes the current workspace. The next routing decision can use that data immediately. |
+| Deterministic routing & safety guardrails | Rank authorized models offline with `resolve_lanes.py` from live measurements and quota state, while enforcing `BLOCKER`/`NIT` review circuit breakers (max 2 rounds), hung-lane timeout and compaction recovery, test integrity, and an external action gate (`git push`/publish forbidden for workers). |
 
 ### Why this instead of a framework or proxy?
 
@@ -149,7 +150,7 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 
 **Bu nedir ve gereksinimler:** Bu depo, bir MCP sunucusu, vekil (proxy) veya arka plan servisi değil; taşınabilir Markdown Agent Skill’leri ile benchmark takibi için sıfır bağımlılıklı Python 3.9+ yardımcı betiklerinden oluşur. 1–2 yetkili model havuzuyla başlayıp daha sonra yeni abonelikler veya API’ler ekleyebilirsin; yapılandırılmamış her hat otomatik olarak mevcut yedeğe yönlendirilir.
 
-[API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
+[API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Çevrimdışı hat seçimi](examples/first-run.md#resolve-lanes-deterministically-offline) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
 
 ### Hızlı kurulum
 
@@ -201,6 +202,7 @@ flowchart LR
 | Bağımsız inceleme | Başka bir model ailesinden yeni bir inceleyiciye çıktıyı ve kabul ölçütlerini verirsin. Koordinatör işi kabul etmeden önce sonucu ve doğrulamanın sınırlarını görür. |
 | Dosyalardan devam etme | Devir kaydı, sorumluları, alınan kararları, kalan işleri ve sıradaki kontrolü içerir. Kota penceresi dolduğunda yeni koordinatör kaldığı yerden devam edebilir. |
 | Yeni sürüm beklemeden güncelleme | Yenileme skill’i yeni çıkan modelleri ve ölçümlerini kaynaklarından doğrular. Bir sonraki yönlendirme kararı, çalışma alanındaki güncel veriyi kullanabilir. |
+| Deterministik yönlendirme ve güvenlik kuralları | Canlı ölçümler ve kota durumundan `resolve_lanes.py` ile yetkili modelleri çevrimdışı sıralar; `BLOCKER`/`NIT` inceleme devre kesicisini (en fazla 2 tur), zaman aşımı ve sıkıştırma kurtarmasını, test bütünlüğünü ve harici işlem kapısını (ajanlar için `git push`/yayınlama yasak) uygular. |
 
 ### Neden bir framework veya proxy yerine bu?
 

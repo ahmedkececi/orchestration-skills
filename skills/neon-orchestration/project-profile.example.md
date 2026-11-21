@@ -19,9 +19,11 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | Independent review | Fresh worker from a different model family than the author (e.g., isolated `gemini-4-neon` `high` reviews GPT/Claude edits; Claude Opus `high` or `gpt-6.2-astra` `medium` reviews Gemini/Neon edits). Same-family fallback allowed only with explicit `same-family review` label. |
 | Data policy | **Public/Internal**: Antigravity, Codex and Claude pools. **Restricted/PII**: Claude pool only (or local only). **Publishable only**: metered third-party APIs (e.g., DeepSeek). |
 | Workspace | Writable paths: `src/`, `tests/`, `docs/`. Read-only: `infra/prod/`, `.github/workflows/`. Branch convention: `feat/<topic>` or `fix/<topic>`. Local dev server allowed on `127.0.0.1` only. |
+| Restricted paths | Paths excluded from external/non-Claude runners (e.g., `.env*`, `secrets/`, `data/pii/`). Strip secrets from every brief regardless of destination. |
 | Verification | Lint: `ruff check .` · Focused tests: `pytest tests/unit` · Full suite: `pytest` · Build: `npm run build` |
 | Usage and spending | Check `.orchestration/provider-state.json` before delegating. **Weekly limits**: move at `85%`, stop at `90%`. **5-hour windows**: move at `90%`, stop at `95%`. Metered API cap: `$0` (subscriptions only; if enabling an API, name the env var e.g. `DEEPSEEK_API_KEY` and set a hard monthly cap). |
 | Decision gates | Maintainer approval required for DB schema migrations, auth/security changes, dependency major bumps, production deploys and force-pushes. |
+| External actions | Forbidden for workers (`git push`, package publish, external API mutations, live DB migrations, destructive deletes outside writable paths); coordinator + explicit operator approval only. |
 | Handoff | Checkpoint: `.orchestration/orchestration-checkpoint.md` · Ledger: `.orchestration/orchestration-ledger.md` · First check after transfer: `git status --short` + focused test command from checkpoint. |
 | Source control | Manager reviews diffs and decides when to commit; workers never run `git commit` or `git push`. Preserve unrelated working-tree changes. |
 

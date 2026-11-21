@@ -98,6 +98,7 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 | **C. Plan exhausted** | "You've hit your weekly limit"; "Model-specific usage limit reached"; weekly Antigravity cap depleted; DeepSeek balance depleted (HTTP 402) | Nothing returns without waiting days or paying. |
 | **D. Not a limit** | HTTP 400, 401, 403; context length exceeded; model not found; content refusal | The request is wrong. No other provider will fix it. |
 | **E. Lane's own failure** | The model stops on its own mistake, not on the work or a limit: a tool-permission denial it caused (e.g. agy: `ls` or a shell command typed into ReadFile, a read outside the workspace), an early exit with no output, a file-lock collision | The lane is unreliable for this unit right now. |
+| **F. Timeout / Hung lane** | The worker stalls on an interactive prompt, enters a runaway loop, or exceeds its bounded time/step budget (guide: 5–10 min for small/medium units, 15 min for heavy review/complex units) | The runner is stuck and will not recover on its own. |
 
 Read the message, not only the status code: Codex, Antigravity and Gemini
 state reset times and scope. When the class is unclear, treat it as A once;
@@ -128,7 +129,16 @@ if the same error returns after the backoff, treat it as B.
   reverted cleanly first — see Handoff rules). If the fallback continues from
   verified output artifacts written to files, read those files rather than
   restarting completed sub-items from zero. The quota thresholds still apply
-  to the fallback.
+  to the fallback. Reset per-lane Class E counters at the start of a new
+  session (or after a clean cooldown probe) so a lane is not permanently
+  blacklisted across days.
+- **F, timeout / hung lane.** Always launch CLI runners non-interactively
+  (`< /dev/null` and `CI=true`) with bounded budgets (5–10 min for small/medium
+  units, 15 min for heavy review/complex units). If a worker hangs or exceeds
+  its budget, terminate the process, revert only that unit's partial broken
+  unaccepted edits back to HEAD, tighten the brief/scope once, and retry on the
+  same lane. On a second hang, treat the failure as Class E and fail over along
+  the ladder.
 
 ### 3. Failover ladders
 
@@ -191,8 +201,12 @@ A fallback lane starts from files, never from another model's memory.
 - **Checkpoint file.** `.orchestration/orchestration-checkpoint.md` holds the
   goal, decisions made and why, the unit list with a status per
   unit (todo, running, done, verified), where each output lives, and open
-  questions. Write it before any fan-out and update it when a unit changes
-  state.
+  questions. Write it before any fan-out, update it lightly after each accepted
+  unit, and refresh it whenever a unit changes state.
+- **Compaction recovery.** After any context compaction or session resume,
+  re-read `.orchestration/orchestration-checkpoint.md`,
+  `.orchestration/provider-state.json`, and `git status --short` before
+  spawning any new delegate.
 - **Units are idempotent.** Each unit writes its own output file. A unit that
   was running when the limit hit is rerun whole on the new lane.
 - **Rewrite the brief for the new reader.** An Astra or Opus brief handed to
@@ -215,15 +229,23 @@ pool that is down instead of rediscovering it.
 
 ```json
 {
-  "claude":          {"status": "up", "down_until": null, "limit": null},
-  "claude-model-id": {"status": "up", "down_until": null, "limit": null},
-  "codex":           {"status": "up", "down_until": null, "limit": null},
-  "gemini":          {"status": "up", "down_until": null, "limit": null},
-  "deepseek":        {"status": "up", "down_until": null, "limit": null}
+  "claude":          {"status": "up", "down_until": null, "limit": null, "five_hour_pct": null, "weekly_pct": null, "resets_at": null, "observed_at": null},
+  "claude-model-id": {"status": "up", "down_until": null, "limit": null, "five_hour_pct": null, "weekly_pct": null, "resets_at": null, "observed_at": null},
+  "codex":           {"status": "up", "down_until": null, "limit": null, "five_hour_pct": null, "weekly_pct": null, "resets_at": null, "observed_at": null},
+  "gemini":          {"status": "up", "down_until": null, "limit": null, "five_hour_pct": null, "weekly_pct": null, "resets_at": null, "observed_at": null},
+  "deepseek":        {"status": "up", "down_until": null, "limit": null, "five_hour_pct": null, "weekly_pct": null, "resets_at": null, "observed_at": null}
 }
 ```
 
 - Check it before every spawn.
+- **Staleness / TTL (5 minutes).** Treat any entry whose `observed_at` is
+  `null` or older than **5 minutes** as `stale`. Never assume full headroom
+  from a stale reading; re-check live usage or route conservatively before
+  launching a fan-out.
+- **Single-writer invariant.** Only the coordinator writes `.orchestration/*`
+  state files (`provider-state.json`, `orchestration-checkpoint.md`,
+  `orchestration-ledger.md`). Workers write only to their scoped deliverable
+  or output files.
 - When `down_until` passes, send **one** small request as a probe. On
   success, mark the pool up and return new work to its normal lane. On
   failure, extend `down_until` and wait 15 minutes before probing again.

@@ -257,8 +257,14 @@ DeepSeek itself ranks below V4.1 Flash. Do not route to it.
 11. **The main loop does not execute.** It thinks, directs, reviews and keeps
     the management records ("The manager rule"). No task is small enough to
     do itself.
-12. **Review findings go back.** A defect found in review returns to a lane
-    with the evidence; the main loop never patches it.
+12. **Review findings go back (max 2 rounds).** Every `BLOCKER` defect found
+    in review returns to a lane with the evidence (the main loop never patches
+    it); `NIT` items do not trigger rework. After 2 failed review rounds,
+    escalate one tier or escalate to the operator.
+13. **External Action Gate.** Workers must never run git-irreversible external
+    side effects (`git push`, package publish, external API mutations, live DB
+    migrations, or destructive deletes outside writable paths); only the
+    coordinator executes them with explicit operator approval.
 
 ## Reference files (load on demand)
 
@@ -266,9 +272,9 @@ Read the relevant reference file in full before acting when any trigger below ap
 
 | Reference file | Mandatory trigger |
 |---|---|
-| [references/delegation-and-verification.md](references/delegation-and-verification.md) | Read before writing a worker brief, splitting parallel units, or running cross-family verification. |
-| [references/quota-and-failover.md](references/quota-and-failover.md) | Read when any pool nears thresholds (**85% weekly / 90% five-hour move; 90% weekly / 95% five-hour stop**), hits a rate/quota limit, fails mid-edit, or requires a handoff checkpoint. |
-| [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Read before invoking external runner CLIs (`codex exec`, configured Gemini runner, DeepSeek), reading benchmark snapshots, or recording `.orchestration/orchestration-ledger.md` entries. |
+| [references/delegation-and-verification.md](references/delegation-and-verification.md) | Read before writing a worker brief, splitting parallel units, or running cross-family verification (`BLOCKER`/`NIT`, review circuit breaker, test integrity). |
+| [references/quota-and-failover.md](references/quota-and-failover.md) | Read when any pool nears thresholds (**85% weekly / 90% five-hour move; 90% weekly / 95% five-hour stop**), hits a rate/quota limit, times out/hangs, fails mid-edit, requires a handoff checkpoint, or recovers after context compaction / session resume. |
+| [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Read before invoking external runner CLIs (`codex exec`, configured Gemini runner, DeepSeek), running `resolve_lanes.py` or reading benchmark snapshots, or recording `.orchestration/orchestration-ledger.md` entries. |
 
 Every worker brief on every lane must end with the mandatory 4-line return contract (`STATUS` / `RESULT` / `EVIDENCE` / `NOT DONE`).
 A report with no `EVIDENCE` is treated as `partial`; see [references/delegation-and-verification.md](references/delegation-and-verification.md) for the exact format and per-tier brief shapes.
