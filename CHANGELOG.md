@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-22
+
+### Added
+- Automated schema and multi-role resolution test (`test_example_project_profiles_authorize_valid_lanes`) in `tests/test_skills.py` validating all five `skills/*/project-profile.example.md` files against `resolve_lanes.py`, plus 25 additional regression tests across `tests/test_resolve_lanes*.py` and `tests/test_updater.py` (89 total unit tests).
+
+### Fixed
+- **Resolver comparable-group & cross-family review logic (`resolve_lanes.py`):** Replaced all-candidate source intersection with largest comparable subset selection so a single outlier source never wipes out matched live scores; prioritized cross-family comparable groups and prevented a single live same-family lane from outranking eligible cross-family reviewers; preserved direct `review` scores when `accuracy`+`reasoning` lack matched sources; kept excluded-lane live scores and historical review formulas consistent.
+- **Provider state, alias & parsing correctness (`resolve_lanes.py`):** Rejected colliding pool aliases in `provider-state.json` so `down` status cannot be silently dropped; allowed custom/registered providers in CLI `--author-family` and normalized `allowed_providers` in the Python API; preserved fresh pool headroom when a model-specific entry is an untouched all-null placeholder; fixed backtick/namespaced model parsing, malformed number continuations/signed ranges, token-boundary provider inference, case-insensitive `model`/`cohort`/`source` matching, `limit`/Markdown escaping, DEL (`0x7f`) runner rejection, and `OverflowError`/`RecursionError` handling.
+- **Updater, catalog & URL hardening (`refresh.py`, `catalogs.py`, `benchmarks.py`, `collection.md`):** Canonicalized built-in provider aliases (`codex`, `claude`, `gemini`, `chatgpt`, `agy`, `antigravity`) before `official_url()` verification; strictly validated stored `catalog_audit` payloads and rejected decoy `<!-- observations:start -->` markers (including spaced variants); enforced case-insensitive merging/rendering and `points`/`seconds` profile/latency units; hardened `valid_url()` against shorthand/octal/hex IPv4, CGNAT, 6to4/Teredo, non-ASCII/ideographic dots, `.internal`/`.home.arpa`, C1/bidi controls, trailing dots, and port `0`.
+
 ## [1.2.1] - 2026-11-21
 
 ### Added
