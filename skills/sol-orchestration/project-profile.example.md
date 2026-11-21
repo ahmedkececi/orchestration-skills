@@ -1,6 +1,6 @@
 # Project orchestration profile example (Sol in Codex)
 
-Copy this file to `.orchestration/project-profile.md` in your repository and replace the sample values with the lanes, paths and commands approved for your project. Keep only the pools you actually use — unconfigured lanes fall back automatically. Store secret values in your project's secret manager or environment variables, never in this file.
+Copy this file to `.orchestration/project-profile.md` in your repository and replace the sample values with the lanes, paths and commands approved for your project. Keep the pools you use and list their approved worker configurations below. Store secret values in your project's secret manager or environment variables, never in this file.
 
 Reference the saved profile from your repository instructions (`AGENTS.md` or `CLAUDE.md`):
 
@@ -28,3 +28,29 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | Source control | Manager reviews diffs and decides when to commit; workers never run `git commit` or `git push`. Preserve unrelated working-tree changes. |
 
 For any new lane, check the installed runner's `--help` and run one read-only verification task before assigning file edits or batches. A credential reference may name an environment variable (such as `DEEPSEEK_API_KEY`); keep its value out of this file.
+
+## Machine-readable worker authorization
+
+`resolve_lanes.py` reads this block from the project's saved profile. Replace
+the sample entries with workers you have explicitly approved. Use an exact
+catalog model ID and an effort verified in the selected runner. Set `pool` to
+the matching quota pool. `runner` describes the approved launcher and the
+resolver only reports it. List the permitted `roles` from `coding`,
+`reasoning`, `accuracy`, `knowledge`, and `review`. Set
+`"restricted_data": true` only if your project allows that worker to receive
+restricted data. Omitting it keeps restricted data out of that lane.
+
+Include only worker configurations suitable for delegation. Keep workspace
+access, data handling and billing rules in the profile above. A profile
+without this block produces an advisory ranking. An empty array explicitly
+authorizes zero workers.
+
+<!-- orchestration-lanes:v1 -->
+```json
+[
+  {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
+  {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "review"], "restricted_data": true},
+  {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding", "review"]},
+  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["coding"]}
+]
+```

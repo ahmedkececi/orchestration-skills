@@ -41,4 +41,8 @@ Add `--preview` when requested. Read the resulting workspace file or preview and
 
 For an explicit user-supplied measurement export, use the [import procedure](references/collection.md). To register a new provider for future scans, use [add-provider-orchestration-skills](../add-provider-orchestration-skills/).
 
-For deterministic lane ranking against workspace measurements and `.orchestration/provider-state.json`, run `python3 -B scripts/resolve_lanes.py --workspace /path/to/project --role coding` (see [scripts/resolve_lanes.py](scripts/resolve_lanes.py) for `--role`, `--author-family`, `--providers`, `--restricted-data`, and `--format json`).
+For deterministic lane ranking, run `python3 -B scripts/resolve_lanes.py --workspace /path/to/project --role coding` from the updater skill directory. The resolver uses workspace measurements, provider state and the authorization block in `.orchestration/project-profile.md` (or `--profile PATH`). A missing block gives an advisory ranking with no recommended lane. Use `--providers` to narrow the pool list, `--author-family` for independent review, `--restricted-data` for restricted inputs, and `--format json` for machine-readable output.
+
+Use `--cohort ID` to select a compatible live benchmark cohort. When multiple
+live cohorts are applicable and no cohort is selected, the resolver warns
+and compares the historical evidence. Estimated task times do not break ties.

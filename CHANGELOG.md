@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Require exact worker authorization from the project profile for resolver recommendations. Profile-less rankings remain advisory.
+- Keep live benchmark cohorts, units and comparable source evidence separate. Use matched measured timings to break ties.
+- Treat stale quota readings as unknown, keep expired outages probe-only, and match model-specific limits against canonical IDs.
+- Isolate manual installs in a fresh temporary directory and verify Claude subscription authentication in the worker's execution environment.
+
 ## [1.2.0] - 2026-11-21
 
 ### Added

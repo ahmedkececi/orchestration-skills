@@ -10,11 +10,14 @@ import re
 import statistics
 import sys
 
+from refresh import normalize
+
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 BUNDLED_MEASUREMENTS = SKILL_DIR / "references" / "model-measurements.md"
 WORKSPACE_MEASUREMENTS = Path(".orchestration/model-measurements.md")
 WORKSPACE_STATE = Path(".orchestration/provider-state.json")
+WORKSPACE_PROFILE = Path(".orchestration/project-profile.md")
 
 ROLES = ("coding", "reasoning", "accuracy", "knowledge", "review")
 AUTHOR_FAMILIES = ("claude", "openai", "google", "deepseek")
@@ -49,6 +52,21 @@ FAMILY_ALIASES = {
     "agy": "google",
     "antigravity": "google",
     "deepseek": "deepseek",
+}
+
+HISTORICAL_MODEL_IDS = {
+    "fable 5.2": "claude-fable-5-2",
+    "fable-5.2": "claude-fable-5-2",
+    "opus 5.5": "claude-opus-5-5",
+    "opus-5.5": "claude-opus-5-5",
+    "sonnet 5.5": "claude-sonnet-5-5",
+    "sonnet-5.5": "claude-sonnet-5-5",
+    "haiku 5.5": "claude-haiku-5-5",
+    "haiku-5.5": "claude-haiku-5-5",
+    "neon": "gemini-4-neon",
+    "hydrogen": "gemini-4-hydrogen",
+    "argon": "gemini-4-argon",
+    "deepseek-flash": "deepseek-v4.1-flash-1017",
 }
 
 PROFILE_METRIC_ALIASES = {
@@ -88,6 +106,11 @@ BACKTICK_EFFORT_RE = re.compile(r"^(.*?)\s*`([^`]+)`\s*$")
 PAREN_EFFORT_RE = re.compile(r"^(.*?)\s*\(([^)]+)\)\s*$")
 LEADING_NUMBER_RE = re.compile(r"^[~*\s]*([+-]?\d+(?:\.\d+)?)")
 TABLE_SEP_RE = re.compile(r"^\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$")
+PROFILE_MARKER = "<!-- orchestration-lanes:v1 -->"
+PROFILE_LANES_RE = re.compile(r"^[ \t]*```json[ \t]*\r?\n(.*?)\r?\n[ \t]*```[ \t]*(?:\r?\n|$)", re.DOTALL)
+LANE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}")
+POOL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,127}")
+REQUIRED_LANE_FIELDS = {"model", "effort", "pool", "runner", "roles"}
 
 
 def normalize_pool(raw):
@@ -110,6 +133,68 @@ def normalize_family(raw):
     return FAMILY_ALIASES.get(token, token)
 
 
+def canonical_model_id(model):
+    """Resolve shipped benchmark aliases without guessing at other model IDs."""
+    model = model.strip()
+    return HISTORICAL_MODEL_IDS.get(model.lower(), model)
+
+
+def normalize_state_key(raw):
+    """Normalize known pool aliases without cutting namespaced model IDs at '/'."""
+    key = canonical_model_id(raw).lower()
+    if " / " in key:
+        return normalize_pool(key)
+    return POOL_ALIASES.get(key, key)
+
+
+def lane_key(model, effort, pool):
+    return canonical_model_id(model), effort.lower(), pool
+
+
+def parse_authorized_lanes(profile):
+    """Read the explicit lane declarations from a project profile, if present."""
+    if PROFILE_MARKER not in profile:
+        return None
+    if profile.count(PROFILE_MARKER) != 1:
+        raise ValueError("Project profile requires exactly one orchestration-lanes:v1 marker.")
+    match = PROFILE_LANES_RE.match(profile.split(PROFILE_MARKER, 1)[1].lstrip())
+    if not match:
+        raise ValueError("Place a fenced JSON lane array immediately after the orchestration-lanes:v1 marker.")
+    try:
+        rows = json.loads(match.group(1))
+    except json.JSONDecodeError as err:
+        raise ValueError(f"Invalid authorized lane JSON in project profile: {err}") from err
+    if not isinstance(rows, list):
+        raise ValueError("Authorized lanes must be a JSON array in the project profile.")
+
+    lanes = {}
+    for index, row in enumerate(rows, 1):
+        if (
+            not isinstance(row, dict)
+            or not REQUIRED_LANE_FIELDS.issubset(row)
+            or row.keys() - REQUIRED_LANE_FIELDS - {"restricted_data"}
+        ):
+            raise ValueError(f"Authorized lane {index} requires model, effort, pool, runner and roles.")
+        for field in ("model", "effort", "pool"):
+            pattern = POOL_ID if field == "pool" else LANE_ID
+            if not isinstance(row[field], str) or not pattern.fullmatch(row[field]):
+                raise ValueError(f"Authorized lane {index} has an invalid {field} ID.")
+        runner = row["runner"]
+        if not isinstance(runner, str) or not runner.strip() or any(ord(char) < 32 for char in runner):
+            raise ValueError(f"Authorized lane {index} requires a runner name on one line.")
+        roles = row["roles"]
+        if not isinstance(roles, list) or not roles or not all(role in ROLES for role in roles):
+            raise ValueError(f"Authorized lane {index} requires a non-empty list of supported roles.")
+        restricted = row.get("restricted_data", False)
+        if type(restricted) is not bool:
+            raise ValueError(f"Authorized lane {index} requires a boolean restricted_data permission.")
+        key = lane_key(row["model"], row["effort"], normalize_pool(row["pool"]))
+        if key in lanes:
+            raise ValueError(f"Duplicate authorized lane for {row['model']} at {row['effort']} in {row['pool']}.")
+        lanes[key] = {**row, "runner": runner.strip(), "restricted_data": restricted}
+    return lanes
+
+
 def infer_provider_from_model(model_name):
     """Best-effort provider inference when a historical table omits the Provider column."""
     low = model_name.strip().lower()
@@ -126,11 +211,6 @@ def infer_provider_from_model(model_name):
     if "qwen" in low:
         return "alibaba"
     return "unknown"
-
-
-def slugify(text):
-    """Normalize a model identifier for cross-table matching."""
-    return re.sub(r"[^a-z0-9.]+", "-", text.strip().lower()).strip("-")
 
 
 def parse_iso_utc(raw, field_name="timestamp"):
@@ -281,7 +361,8 @@ def _table_candidates(headers, rows):
             "accuracy": parse_number(cells[col["accuracy"]]),
             "knowledge": parse_number(cells[knowledge_idx]) if knowledge_idx is not None else None,
         }
-        latency_s = parse_number(cells[latency_idx]) if latency_idx is not None else None
+        latency_cell = cells[latency_idx] if latency_idx is not None else ""
+        latency_s = parse_number(latency_cell)
         index_val = parse_number(cells[index_idx]) if index_idx is not None else None
 
         candidates.append(
@@ -295,6 +376,7 @@ def _table_candidates(headers, rows):
                 "review_override": None,
                 "index": index_val,
                 "latency_s": latency_s,
+                "latency_kind": "estimate" if "*" in latency_cell else "measured",
                 "source": "historical",
             }
         )
@@ -343,123 +425,222 @@ def parse_workspace_observations(markdown_text):
     if not isinstance(payload, dict):
         raise ValueError("Observations JSON block must be a JSON object.")
 
-    model_providers = {}
-    for row in payload.get("models", []):
-        if isinstance(row, dict) and isinstance(row.get("model"), str):
-            model_providers[row["model"]] = str(row.get("provider") or "")
+    payload.pop("catalog_audit", None)
+    try:
+        data = normalize(payload)
+    except (TypeError, OverflowError) as err:
+        raise ValueError(f"Invalid workspace observations: {err}") from err
+    model_providers = {row["model"]: row["provider"] for row in data["models"]}
+    variants = {(row["model"], row["effort"].lower()) for row in data["benchmark_checks"]}
 
-    variants = set()
-    for row in payload.get("benchmark_checks", []):
-        if isinstance(row, dict) and isinstance(row.get("model"), str):
-            effort = str(row.get("effort") or "unspecified").strip().lower()
-            variants.add((row["model"], effort))
-
-    grouped_values = defaultdict(lambda: defaultdict(list))
-    for row in payload.get("measurements", []):
-        if not isinstance(row, dict):
+    # Retain the exact cohort, unit, and dated source observations. An agent may
+    # append distinct valid benchmarks for one model without changing its scale.
+    observations = defaultdict(lambda: defaultdict(dict))
+    for row in data["measurements"]:
+        variant = row["model"], row["effort"].lower()
+        variants.add(variant)
+        metric = row["metric"].lower()
+        if metric in LATENCY_METRICS:
+            metric = "seconds-per-task"
+        elif metric in ESTIMATED_LATENCY_METRICS:
+            metric = "estimated-seconds-per-task"
+        elif metric in INDEX_METRICS:
+            metric = "index"
+        else:
+            metric = PROFILE_METRIC_ALIASES.get(metric, metric)
+        if metric not in (*PROFILE_METRIC_ALIASES.values(), "seconds-per-task", "estimated-seconds-per-task", "index"):
             continue
-        model = row.get("model")
-        metric = row.get("metric")
-        value = row.get("value")
-        if not isinstance(model, str) or not isinstance(metric, str):
-            continue
-        effort = str(row.get("effort") or "unspecified").strip().lower()
-        variants.add((model, effort))
-        if type(value) in (int, float) and math.isfinite(value):
-            grouped_values[(model, effort)][metric.strip().lower()].append(float(value))
+        sources = observations[variant][metric].setdefault((row["cohort"], row["unit"]), {})
+        prior = sources.get(row["source"])
+        if prior is None or row["date"] >= prior["date"]:
+            sources[row["source"]] = row
 
     represented_models = {model for model, _ in variants}
-    for model in model_providers:
-        if model not in represented_models:
-            variants.add((model, "unspecified"))
-
+    variants.update((model, "unspecified") for model in model_providers.keys() - represented_models)
     candidates = []
     for model, effort in sorted(variants):
         raw_provider = model_providers.get(model) or infer_provider_from_model(model)
-        pool = normalize_pool(raw_provider)
-        family = normalize_family(raw_provider)
-        metrics = grouped_values[(model, effort)]
-
-        profiles = {"coding": None, "reasoning": None, "accuracy": None, "knowledge": None}
-        review_override = None
-        latency_s = None
-        est_latency_s = None
-        index_val = None
-
-        for metric_name, vals in metrics.items():
-            if not vals:
-                continue
-            mean_val = statistics.fmean(vals)
-            if metric_name in PROFILE_METRIC_ALIASES:
-                canonical = PROFILE_METRIC_ALIASES[metric_name]
-                if canonical == "review":
-                    review_override = mean_val
-                else:
-                    profiles[canonical] = mean_val
-            elif metric_name in LATENCY_METRICS:
-                latency_s = mean_val
-            elif metric_name in ESTIMATED_LATENCY_METRICS:
-                est_latency_s = mean_val
-            elif metric_name in INDEX_METRICS:
-                index_val = mean_val
-
         candidates.append(
             {
                 "model": model,
                 "effort": effort,
-                "pool": pool,
-                "family": family,
+                "pool": normalize_pool(raw_provider),
+                "family": normalize_family(raw_provider),
                 "provider_label": raw_provider or "unknown",
-                "profiles": profiles,
-                "review_override": review_override,
-                "index": index_val,
-                "latency_s": latency_s if latency_s is not None else est_latency_s,
+                "profiles": dict.fromkeys(ROLES[:-1]),
+                "review_override": None,
+                "latency_s": None,
+                "index": None,
                 "source": "workspace",
+                "observations": observations[(model, effort)],
             }
         )
     return candidates
 
 
 def merge_candidates(historical, workspace):
-    """Merge historical and workspace candidates; workspace metrics override matching variants."""
-    merged = []
-    by_key = {}
-
-    for item in historical:
-        key = (slugify(item["model"]), item["effort"].lower())
-        entry = {
-            **item,
-            "profiles": dict(item["profiles"]),
-        }
-        by_key[key] = entry
-        merged.append(entry)
-
+    """Join matching variants while keeping historical and live evidence separate."""
+    merged = {lane_key(item["model"], item["effort"], item["pool"]): dict(item) for item in historical}
     for item in workspace:
-        key = (slugify(item["model"]), item["effort"].lower())
-        existing = by_key.get(key)
+        key = lane_key(item["model"], item["effort"], item["pool"])
+        existing = merged.get(key)
         if existing is None:
-            entry = {
-                **item,
-                "profiles": dict(item["profiles"]),
-            }
-            by_key[key] = entry
-            merged.append(entry)
+            merged[key] = dict(item)
+            continue
+        observations = existing.setdefault("observations", {})
+        for metric, groups in item["observations"].items():
+            for group, sources in groups.items():
+                existing_sources = observations.setdefault(metric, {}).setdefault(group, {})
+                for source, row in sources.items():
+                    previous = existing_sources.get(source)
+                    if previous is None or row["date"] > previous["date"]:
+                        existing_sources[source] = row
+    return list(merged.values())
+
+
+def _groups(candidate, metric, unit):
+    return {
+        cohort: values
+        for (cohort, observed_unit), values in candidate.get("observations", {}).get(metric, {}).items()
+        if observed_unit == unit
+    }
+
+
+def _role_cohorts(candidate, role):
+    if role != "review":
+        return _groups(candidate, role, "points").keys()
+    direct = _groups(candidate, "review", "points").keys()
+    accuracy = _groups(candidate, "accuracy", "points").keys()
+    reasoning = _groups(candidate, "reasoning", "points").keys()
+    return direct | (accuracy & reasoning)
+
+
+def _mean(sources):
+    return statistics.fmean(row["value"] for _, row in sorted(sources.items())) if sources else None
+
+
+def _matched_sources(evidence):
+    return set.intersection(*(set(rows) for rows in evidence)) if evidence else set()
+
+
+def _shared_role_evidence(candidates, cohort, role):
+    """Choose one common scoring rubric and intersect its per-metric source sets."""
+    metrics = (role,)
+    if role == "review" and any(
+        cohort in _groups(c, "accuracy", "points") and cohort in _groups(c, "reasoning", "points")
+        for c in candidates
+    ):
+        metrics = ("accuracy", "reasoning")
+
+    evidence = [
+        {metric: _groups(c, metric, "points").get(cohort, {}) for metric in (*metrics, "knowledge")}
+        for c in candidates
+    ]
+    represented = [row for row in evidence if all(row[metric] for metric in metrics)]
+    matched = {
+        metric: _matched_sources([row[metric] for row in represented])
+        for metric in (*metrics, "knowledge")
+    }
+    return metrics, evidence, matched
+
+
+def _workspace_projection(candidate, cohort):
+    """Render profiles from one cohort, and keep timing provenance for tie breaks."""
+    profiles = {
+        metric: _mean(_groups(candidate, metric, "points").get(cohort))
+        for metric in ROLES[:-1]
+    }
+    latency_kind = None
+    latency_cohort = None
+    latency = None
+    latency_sources = ()
+    for metric, kind in (("seconds-per-task", "measured"), ("estimated-seconds-per-task", "estimate")):
+        groups = _groups(candidate, metric, "seconds")
+        if len(groups) == 1:
+            latency_cohort, evidence = next(iter(groups.items()))
+            latency = _mean(evidence)
+            latency_sources = tuple(sorted(evidence))
+            latency_kind = kind
+            break
+        if groups:
+            break
+    return {
+        "profiles": profiles,
+        "review_override": None,
+        "latency_s": latency,
+        "latency_kind": latency_kind,
+        "latency_cohort": latency_cohort,
+        "latency_sources": latency_sources,
+        "index": _mean(_groups(candidate, "index", "points").get(cohort)),
+        "source": "workspace" if candidate.get("observations") else candidate["source"],
+    }
+
+
+def _score_candidates(eligible, role, requested_cohort, warnings):
+    """Project eligible lanes into one comparable benchmark domain."""
+    candidates = [item.pop("_candidate") for item in eligible]
+    cohorts = sorted(set().union(*(_role_cohorts(candidate, role) for candidate in candidates)))
+    cohort = requested_cohort or (cohorts[0] if len(cohorts) == 1 else None)
+    if requested_cohort is None and len(cohorts) > 1:
+        warnings.append(
+            f"Multiple live {role} cohorts ({', '.join(cohorts)}); using historical scores where available. "
+            "Pass --cohort to select one comparable live cohort."
+        )
+    if cohort is None:
+        return _score_candidates_from_history(eligible, candidates, role)
+
+    metrics, evidence, matched = _shared_role_evidence(candidates, cohort, role)
+    if not all(matched[metric] for metric in metrics):
+        warnings.append(f"No matched {role} observations in live cohort '{cohort}'.")
+        if requested_cohort is None:
+            return _score_candidates_from_history(eligible, candidates, role)
+
+    for item, candidate, row in zip(eligible, candidates, evidence):
+        projection = _workspace_projection(candidate, cohort)
+        if all(row[metric] for metric in metrics):
+            for metric in metrics:
+                common = {source: row[metric][source] for source in matched[metric]}
+                if metric == "review":
+                    projection["review_override"] = _mean(common)
+                else:
+                    projection["profiles"][metric] = _mean(common)
+            if metrics == ("accuracy", "reasoning"):
+                common = {source: row["knowledge"][source] for source in matched["knowledge"]}
+                projection["profiles"]["knowledge"] = _mean(common)
+            score = role_score(projection, role)
         else:
-            for prof_name, prof_val in item["profiles"].items():
-                if prof_val is not None:
-                    existing["profiles"][prof_name] = prof_val
-            if item["review_override"] is not None:
-                existing["review_override"] = item["review_override"]
-            if item["latency_s"] is not None:
-                existing["latency_s"] = item["latency_s"]
-            if item["index"] is not None:
-                existing["index"] = item["index"]
-            if item["pool"] != "unknown":
-                existing["pool"] = item["pool"]
-                existing["family"] = item["family"]
-                existing["provider_label"] = item["provider_label"]
-            existing["source"] = "workspace"
-    return merged
+            score = None
+        item.update(projection, score=score)
+    basis = "workspace" if any(item["score"] is not None for item in eligible) else "unavailable"
+    return basis, cohort
+
+
+def _score_candidates_from_history(eligible, candidates, role):
+    for item, candidate in zip(eligible, candidates):
+        item.update(
+            score=role_score(candidate, role),
+            latency_kind=candidate.get("latency_kind", "measured"),
+            latency_cohort=None,
+        )
+    return "historical" if any(item["score"] is not None for item in eligible) else "unavailable", None
+
+
+def _shared_latencies(eligible):
+    """Use timings only when the lanes tied on score all have matched measurements."""
+    tied = defaultdict(list)
+    for item in eligible:
+        tied[item["score"]].append(item)
+
+    for score, items in tied.items():
+        cohorts = {
+            (item["latency_cohort"], item.get("latency_sources", ()))
+            for item in items
+        }
+        comparable = score is not None and len(cohorts) == 1 and all(
+            item["latency_s"] is not None and item["latency_kind"] == "measured" for item in items
+        )
+        for item in items:
+            item["_comparable_latency"] = item["latency_s"] if comparable else float("inf")
 
 
 def _optional_pct(entry, field):
@@ -489,7 +670,7 @@ def parse_provider_state(raw_state, now, stale_minutes):
     for raw_key, entry in raw_state.items():
         if not isinstance(raw_key, str) or not isinstance(entry, dict):
             raise ValueError(f"Invalid provider-state entry for key {raw_key!r}.")
-        pool_key = normalize_pool(raw_key)
+        pool_key = normalize_state_key(raw_key)
         # Prefer explicit canonical pool key if both alias and canonical key appear.
         if pool_key not in normalized_entries or raw_key.strip().lower() == pool_key:
             normalized_entries[pool_key] = entry
@@ -510,8 +691,9 @@ def parse_provider_state(raw_state, now, stale_minutes):
         down_until_raw = entry.get("down_until")
         observed_at_raw = entry.get("observed_at")
 
-        # Evaluate staleness without crashing on missing or unparseable observed_at.
+        # Quota percentages are usable only for a current, pre-reset observation.
         stale = False
+        observed_dt = None
         observed_at_iso = None
         age_minutes = None
         if observed_at_raw is None or (isinstance(observed_at_raw, str) and not observed_at_raw.strip()):
@@ -523,7 +705,10 @@ def parse_provider_state(raw_state, now, stale_minutes):
                 observed_at_iso = format_iso_utc(observed_dt)
                 delta = now - observed_dt
                 age_minutes = round(delta.total_seconds() / 60.0, 1)
-                if delta > stale_delta:
+                if delta < timedelta(0):
+                    stale = True
+                    warnings.append(f"Pool '{pool}' state is stale (observed_at is in the future).")
+                elif delta > stale_delta:
                     stale = True
                     warnings.append(
                         f"Pool '{pool}' state is stale (observed {age_minutes:.1f} min ago; TTL {stale_minutes} min)."
@@ -532,61 +717,62 @@ def parse_provider_state(raw_state, now, stale_minutes):
                 stale = True
                 warnings.append(f"Pool '{pool}' state is stale ({err}).")
 
-        # Compute headroom when percentages are available.
-        remainders = []
-        if weekly_pct is not None:
-            remainders.append(max(0.0, 100.0 - weekly_pct))
-        if five_hour_pct is not None:
-            remainders.append(max(0.0, 100.0 - five_hour_pct))
-        headroom = round(min(remainders), 2) if remainders else None
+        if not stale and resets_at_raw is not None:
+            try:
+                resets_at = parse_iso_utc(resets_at_raw, f"{pool}.resets_at")
+            except ValueError as err:
+                warnings.append(f"Pool '{pool}' reset time ignored ({err}).")
+            else:
+                if observed_dt < resets_at <= now:
+                    # A single resets_at cannot identify which of two counters reset.
+                    stale = True
+                    warnings.append(f"Pool '{pool}' state is stale (quota reset after observed_at).")
+
+        windows = tuple(
+            (field, pct, move, stop)
+            for field, pct, move, stop in (
+                ("weekly_pct", weekly_pct, WEEKLY_MOVE_PCT, WEEKLY_STOP_PCT),
+                ("five_hour_pct", five_hour_pct, FIVE_HOUR_MOVE_PCT, FIVE_HOUR_STOP_PCT),
+            )
+            if not stale and pct is not None
+        )
+        headroom = round(min(100.0 - pct for _, pct, _, _ in windows), 2) if windows else None
 
         # Evaluate exclusion (down / stopped) and deprioritization (move threshold).
         excluded = False
         deprioritized = False
         probe_due = False
         reasons = []
-        effective_state = "up"
+        effective_state = "stale" if stale else "up"
 
         if status == "down":
+            excluded = True
+            effective_state = "down"
+            headroom = None
             if down_until_raw is None or (isinstance(down_until_raw, str) and not down_until_raw.strip()):
-                excluded = True
-                effective_state = "down"
                 reasons.append("down (no down_until)" + (f": {limit_note}" if limit_note else ""))
             else:
                 try:
                     down_until_dt = parse_iso_utc(down_until_raw, f"{pool}.down_until")
                     if down_until_dt > now:
-                        excluded = True
-                        effective_state = "down"
                         reasons.append(
                             f"down until {format_iso_utc(down_until_dt)}"
                             + (f" ({limit_note})" if limit_note else "")
                         )
                     else:
                         probe_due = True
+                        effective_state = "probe-only"
+                        reasons.append("Cooldown expired. Confirm recovery with one probe before routing.")
                 except ValueError:
-                    excluded = True
-                    effective_state = "down"
                     reasons.append(f"down (unparseable down_until: {down_until_raw!r})")
-
-        stop_reasons = []
-        if weekly_pct is not None and weekly_pct >= WEEKLY_STOP_PCT:
-            stop_reasons.append(f"weekly_pct={weekly_pct:g}% >= {WEEKLY_STOP_PCT:g}%")
-        if five_hour_pct is not None and five_hour_pct >= FIVE_HOUR_STOP_PCT:
-            stop_reasons.append(f"five_hour_pct={five_hour_pct:g}% >= {FIVE_HOUR_STOP_PCT:g}%")
-
-        if stop_reasons:
-            excluded = True
-            if effective_state != "down":
+        else:
+            stop_reasons = [f"{field}={pct:g}% >= {stop:g}%" for field, pct, _, stop in windows if pct >= stop]
+            move_reasons = [f"{field}={pct:g}% >= {move:g}%" for field, pct, move, _ in windows if pct >= move]
+            if stop_reasons:
+                excluded = True
                 effective_state = "stopped"
-            reasons.append("stopped (" + ", ".join(stop_reasons) + ")")
-        elif not excluded:
-            move_reasons = []
-            if weekly_pct is not None and weekly_pct >= WEEKLY_MOVE_PCT:
-                move_reasons.append(f"weekly_pct={weekly_pct:g}% >= {WEEKLY_MOVE_PCT:g}%")
-            if five_hour_pct is not None and five_hour_pct >= FIVE_HOUR_MOVE_PCT:
-                move_reasons.append(f"five_hour_pct={five_hour_pct:g}% >= {FIVE_HOUR_MOVE_PCT:g}%")
-            if move_reasons:
+                reasons.append("stopped (" + ", ".join(stop_reasons) + ")")
+            elif move_reasons:
                 deprioritized = True
                 effective_state = "deprioritized"
                 reasons.append("past move threshold (" + ", ".join(move_reasons) + ")")
@@ -646,9 +832,11 @@ def resolve_lanes(
     role="coding",
     author_family=None,
     allowed_providers=None,
+    authorized_lanes=None,
     restricted_data=False,
     state_loaded=False,
     state_warnings=None,
+    cohort=None,
 ):
     """Filter, score, classify (±3-pt equivalence), and deterministically rank lanes."""
     warnings = list(state_warnings or [])
@@ -662,31 +850,27 @@ def resolve_lanes(
             f"--author-family '{norm_author}' is ignored for role '{role}' (applies only to --role review)."
         )
 
-    slug_to_state = {}
-    for state_key, state_val in provider_states.items():
-        s_key = slugify(state_key)
-        if s_key and s_key not in slug_to_state:
-            slug_to_state[s_key] = state_val
+    if authorized_lanes is None:
+        warnings.append("No explicit authorized lanes found in the project profile; ranking is advisory.")
 
     for cand in candidates:
         pool = cand["pool"]
         family = cand["family"]
         score = role_score(cand, role)
+        key = lane_key(cand["model"], cand["effort"], pool)
+        lane = authorized_lanes.get(key) if authorized_lanes is not None else None
 
         exclusion_reasons = []
-        if restricted_data and pool != "claude":
-            exclusion_reasons.append("restricted-data (claude only)")
+        if authorized_lanes is not None and (lane is None or role not in lane["roles"]):
+            exclusion_reasons.append("model, effort and pool are not authorized for this role")
+        if restricted_data and (lane is None or not lane["restricted_data"]):
+            exclusion_reasons.append("lane is not authorized for restricted data")
         if allowed_set is not None and pool not in allowed_set:
             exclusion_reasons.append("not in --providers allowlist")
 
         pstate = provider_states.get(pool)
-        model_low = cand["model"].strip().lower()
-        model_slug = slugify(cand["model"])
-        mstate = None
-        if model_low != pool:
-            mstate = provider_states.get(model_low)
-        if mstate is None and model_slug != pool:
-            mstate = provider_states.get(model_slug) or slug_to_state.get(model_slug)
+        model_state_key = normalize_state_key(cand["model"])
+        mstate = provider_states.get(model_state_key) if model_state_key != pool else None
 
         if pstate is not None and pstate["excluded"]:
             exclusion_reasons.extend(pstate["reasons"])
@@ -732,11 +916,15 @@ def resolve_lanes(
             stale = stale or mstate["stale"]
             probe_due = probe_due or mstate["probe_due"]
 
+        if stale:
+            headroom = None
+
         same_family = bool(role == "review" and norm_author and family == norm_author)
 
         eligible.append(
             {
-                "model": cand["model"],
+                "model": lane["model"] if lane else cand["model"],
+                "runner": lane["runner"] if lane else None,
                 "effort": cand["effort"],
                 "pool": pool,
                 "family": family,
@@ -752,6 +940,7 @@ def resolve_lanes(
                 "probe_due": probe_due,
                 "same_family": same_family,
                 "state_reasons": state_reasons,
+                "_candidate": cand,
             }
         )
 
@@ -759,6 +948,9 @@ def resolve_lanes(
         untracked_pools = sorted({item["pool"] for item in eligible if item["pool_state"] == "untracked"})
         for pool in untracked_pools:
             warnings.append(f"Pool '{pool}' is absent from provider-state.json (treated as stale/unknown headroom).")
+
+    score_basis, score_cohort = _score_candidates(eligible, role, cohort, warnings)
+    _shared_latencies(eligible)
 
     # Compute top score for the ±3-point equivalence rubric.
     # For cross-family review, anchor equivalence to the best eligible cross-family candidate
@@ -809,7 +1001,7 @@ def resolve_lanes(
         # Known positive headroom is preferred over unknown (conservative neutral tie-break: 0.0).
         headroom_rank = item["headroom"] if item["headroom"] is not None else 0.0
         score_rank = item["score"] if item["score"] is not None else -1.0
-        latency_rank = item["latency_s"] if item["latency_s"] is not None else float("inf")
+        latency_rank = item["_comparable_latency"]
 
         if is_unmeasured:
             # Unmeasured candidates always trail measured ones, preserving cross-family and health ordering.
@@ -817,6 +1009,7 @@ def resolve_lanes(
                 2,
                 1 if is_same_family else 0,
                 1 if item["deprioritized"] else 0,
+                1 if item["stale"] else 0,
                 -headroom_rank,
                 0.0,
                 latency_rank,
@@ -831,6 +1024,7 @@ def resolve_lanes(
                 0 if not is_same_family else 1,
                 0,
                 1 if item["deprioritized"] else 0,
+                1 if item["stale"] else 0,
                 -headroom_rank,
                 -score_rank,
                 latency_rank,
@@ -844,6 +1038,7 @@ def resolve_lanes(
             1,
             -score_rank,
             1 if item["deprioritized"] else 0,
+            1 if item["stale"] else 0,
             -headroom_rank,
             latency_rank,
             item["model"].lower(),
@@ -853,6 +1048,7 @@ def resolve_lanes(
     eligible.sort(key=sort_key)
     for rank, item in enumerate(eligible, start=1):
         item["rank"] = rank
+        del item["_comparable_latency"]
 
     excluded.sort(
         key=lambda item: (
@@ -862,19 +1058,24 @@ def resolve_lanes(
         )
     )
 
+    top_lane = eligible[0] if eligible and score_basis != "unavailable" else None
     if not eligible:
         warnings.append(f"No eligible lanes available for role '{role}'.")
-    elif eligible[0]["same_family"]:
+    elif top_lane is None:
+        warnings.append(f"No eligible lane has a comparable score for '{role}'.")
+    elif top_lane["same_family"]:
         warnings.append(
             f"No cross-family reviewer available for author family '{norm_author}'; top lane is same-family."
         )
-    elif eligible[0]["score"] is None:
-        warnings.append(f"All eligible lanes are unmeasured for role '{role}'.")
+    if top_lane is not None and top_lane["stale"]:
+        warnings.append("Top lane has stale or untracked quota state. Confirm live usage before routing.")
 
     return {
         "top_score": top_score,
+        "score_basis": score_basis,
+        "score_cohort": score_cohort,
         "cross_family_anchored": cross_family_anchored,
-        "recommended": eligible[0] if eligible else None,
+        "recommended": top_lane if authorized_lanes is not None else None,
         "ranked": eligible,
         "excluded": excluded,
         "warnings": warnings,
@@ -907,6 +1108,12 @@ def render_markdown(report):
         f"- **Role:** `{report['role']}` ({report['scoring_method']})",
         f"- **Equivalence band:** within ±{report['equivalence_threshold_points']:g} pts of {anchor_label} `{_fmt_num(report['top_score'])}`",
     ]
+    if report["score_cohort"] is not None:
+        lines.append(f"- **Score cohort:** live `{report['score_cohort']}` (matched normalized points)")
+    elif report["score_basis"] == "historical":
+        lines.append("- **Score cohort:** historical snapshot")
+    else:
+        lines.append("- **Score cohort:** no comparable score available")
     if report["author_family"]:
         if report["role"] == "review":
             lines.append(
@@ -919,10 +1126,12 @@ def render_markdown(report):
                 f"(ignored for role `{report['role']}`; applies only to `--role review`)"
             )
     if report["restricted_data"]:
-        lines.append("- **Data scope:** `restricted` (`claude` pool only)")
+        lines.append("- **Data scope:** `restricted` (requires explicit per-lane authorization)")
     if report["allowed_providers"] is not None:
         allowed_csv = ", ".join(f"`{p}`" for p in report["allowed_providers"])
         lines.append(f"- **Allowed pools:** {allowed_csv}")
+    if report["profile_path"]:
+        lines.append(f"- **Project profile:** `{report['profile_path']}`")
 
     counts = report["candidate_counts"]
     lines.append(
@@ -949,15 +1158,18 @@ def render_markdown(report):
             f"pool `{rec['pool']}` · score `{_fmt_num(rec['score'])}` · "
             f"headroom `{headroom_str}`{flags_str}"
         )
+        lines.append(f"- **Authorized runner:** {rec['runner']}")
+    elif report["advisory"]:
+        lines.append("- **Recommended lane:** none (advisory only)")
     else:
-        lines.append("- **Recommended lane:** none (no eligible lanes)")
+        lines.append("- **Recommended lane:** none")
 
     if report["warnings"]:
         lines.extend(["", "## Warnings", ""])
         for warning in report["warnings"]:
             lines.append(f"- {warning}")
 
-    lines.extend(["", "## Ranked eligible lanes", ""])
+    lines.extend(["", "## Advisory candidates" if report["advisory"] else "## Ranked eligible lanes", ""])
     if report["ranked"]:
         lines.extend(
             [
@@ -968,13 +1180,16 @@ def render_markdown(report):
         for row in report["ranked"]:
             headroom_cell = f"{_fmt_num(row['headroom'])}%" if row["headroom"] is not None else "unknown"
             flags_cell = ", ".join(row["flags"]) if row["flags"] else "-"
+            latency = _fmt_num(row["latency_s"])
+            if row["latency_s"] is not None and row["latency_kind"] == "estimate":
+                latency += " (estimate)"
             lines.append(
                 f"| {row['rank']} | `{row['model']}` | `{row['effort']}` | `{row['pool']}` | `{row['family']}` | "
                 f"{_fmt_num(row['score'])} | {_fmt_delta(row['delta'])} | {row['tier']} | {row['pool_state']} | "
-                f"{headroom_cell} | {_fmt_num(row['latency_s'])} | {flags_cell} | {row['source']} |"
+                f"{headroom_cell} | {latency} | {flags_cell} | {row['source']} |"
             )
     else:
-        lines.append("_No eligible lanes._")
+        lines.append("_No ranked lanes._")
 
     if report["excluded"]:
         lines.extend(
@@ -1055,6 +1270,12 @@ def build_parser():
         help="Provider state JSON file (default: <workspace>/.orchestration/provider-state.json if present).",
     )
     parser.add_argument(
+        "--profile",
+        type=Path,
+        default=None,
+        help="Project profile with explicit authorized lanes (default: <workspace>/.orchestration/project-profile.md).",
+    )
+    parser.add_argument(
         "--role",
         choices=ROLES,
         default="coding",
@@ -1063,6 +1284,11 @@ def build_parser():
             "'review' uses 0.5*accuracy + 0.3*reasoning + 0.2*knowledge "
             "(or 0.6*accuracy + 0.4*reasoning without knowledge)."
         ),
+    )
+    parser.add_argument(
+        "--cohort",
+        metavar="ID",
+        help="Use only this live scoring cohort (default: the sole eligible live cohort, or historical evidence).",
     )
     parser.add_argument(
         "--author-family",
@@ -1076,12 +1302,12 @@ def build_parser():
         type=_parse_providers_arg,
         default=None,
         metavar="CSV",
-        help="Comma-separated allowlist of providers/pools (e.g. claude,openai,google,deepseek).",
+        help="Additional comma-separated provider/pool filter (e.g. claude,openai,google).",
     )
     parser.add_argument(
         "--restricted-data",
         action="store_true",
-        help="Restrict eligible lanes to the 'claude' pool only.",
+        help="Restrict eligible lanes to those explicitly authorized for restricted data in the project profile.",
     )
     parser.add_argument(
         "--now",
@@ -1110,18 +1336,25 @@ def resolve_from_paths(
     workspace=Path("."),
     measurements_path=None,
     state_path=None,
+    profile_path=None,
     role="coding",
     author_family=None,
     allowed_providers=None,
     restricted_data=False,
     now=None,
     stale_minutes=DEFAULT_STALE_MINUTES,
+    cohort=None,
 ):
     """Load files from disk and return the structured lane resolution report dict."""
     _validate_stale_minutes(stale_minutes)
     ws = Path(workspace)
     if not ws.exists() or not ws.is_dir():
         raise ValueError(f"Workspace directory does not exist: {ws}")
+
+    p_path = Path(profile_path) if profile_path is not None else ws / WORKSPACE_PROFILE
+    if profile_path is not None and not p_path.is_file():
+        raise ValueError(f"Project profile does not exist: {p_path}")
+    authorized_lanes = parse_authorized_lanes(p_path.read_text(encoding="utf-8")) if p_path.is_file() else None
 
     if measurements_path is not None:
         m_path = Path(measurements_path)
@@ -1159,7 +1392,7 @@ def resolve_from_paths(
         state_loaded = True
     else:
         state_warnings.append(
-            "No provider-state.json found; assuming all pools are up with unknown headroom."
+            "No provider-state.json found. Availability is unverified and quota headroom is unknown."
         )
 
     meas_text = m_path.read_text(encoding="utf-8")
@@ -1173,9 +1406,11 @@ def resolve_from_paths(
         role=role,
         author_family=author_family,
         allowed_providers=allowed_providers,
+        authorized_lanes=authorized_lanes,
         restricted_data=restricted_data,
         state_loaded=state_loaded,
         state_warnings=state_warnings,
+        cohort=cohort,
     )
 
     return {
@@ -1183,6 +1418,8 @@ def resolve_from_paths(
         "scoring_method": scoring_description(role),
         "equivalence_threshold_points": EQUIVALENCE_POINTS,
         "top_score": result["top_score"],
+        "score_basis": result["score_basis"],
+        "score_cohort": result["score_cohort"],
         "cross_family_anchored": result["cross_family_anchored"],
         "author_family": normalize_family(author_family) if author_family else None,
         "restricted_data": bool(restricted_data),
@@ -1191,6 +1428,8 @@ def resolve_from_paths(
         "stale_minutes": stale_minutes,
         "measurements_path": str(m_path),
         "state_path": str(resolved_state_path) if resolved_state_path is not None else None,
+        "profile_path": str(p_path) if p_path.is_file() else None,
+        "advisory": authorized_lanes is None,
         "candidate_counts": {
             "historical": len(historical),
             "workspace": len(workspace_obs),
@@ -1220,12 +1459,14 @@ def main(argv=None):
             workspace=args.workspace,
             measurements_path=args.measurements,
             state_path=args.state,
+            profile_path=args.profile,
             role=args.role,
             author_family=args.author_family,
             allowed_providers=args.providers,
             restricted_data=args.restricted_data,
             now=eval_now,
             stale_minutes=args.stale_minutes,
+            cohort=args.cohort,
         )
     except (ValueError, OSError) as err:
         parser.exit(1, f"Lane resolution failed: {err}\n")

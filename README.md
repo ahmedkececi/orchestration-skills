@@ -22,7 +22,7 @@
 
 ### Quick install
 
-From your project, choose the command for your client. This copies just the coordinator and the measurement updater into the project. Add the optional provider skill to the same install by appending `--skill add-provider-orchestration-skills`.
+From your project, choose the command for your client. The Codex and Claude Code commands each copy both coordinator options and the measurement updater. Choose one coordinator when starting a session. To install a single coordinator, omit the other coordinator's `--skill` flag. Add the optional provider skill by appending `--skill add-provider-orchestration-skills`.
 
 ```sh
 # Codex
@@ -38,10 +38,15 @@ For Antigravity, another coordinator, or an install without Node.js, clone once 
 
 ```sh
 # Manual / Antigravity (replace neon-orchestration or target directory as needed)
-git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git /tmp/uos
-mkdir -p .agents/skills
-cp -R /tmp/uos/skills/neon-orchestration /tmp/uos/skills/update-orchestration-skills .agents/skills/
-rm -rf /tmp/uos
+(
+  set -eu
+  install_dir=$(mktemp -d "${TMPDIR:-/tmp}/ultimate-orchestration-skills.XXXXXXXX")
+  trap 'rm -rf -- "$install_dir"' 0
+  git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git "$install_dir/repo"
+  mkdir -p .agents/skills
+  cp -R "$install_dir/repo/skills/neon-orchestration" \
+    "$install_dir/repo/skills/update-orchestration-skills" .agents/skills/
+)
 ```
 
 Each coordinator preset uses progressive disclosure (`SKILL.md` plus on-demand `references/` files to save context tokens), so keep the full folder including `references/` when copying.
@@ -92,7 +97,7 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Everyday Claude Code coordinator, or failover when Mythos/Fable allowance is spent | `.claude/skills/` |
 
 1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep both folder names unchanged.
-2. Copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from your repository instructions (`CLAUDE.md` or `AGENTS.md`). List authorized runners, data scopes, budget, writable paths and verification commands, and confirm model IDs and effort levels in your client.
+2. Copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from your repository instructions (`CLAUDE.md` or `AGENTS.md`). List authorized runners, data scopes, budget, writable paths and verification commands. Edit the profile's machine-readable lane block to match the model IDs, effort levels, pools and roles you approve in your client.
 3. Invoke the coordinator using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). Start with a bounded deliverable, one eligible worker and a verifiable acceptance check.
 
 ### Refresh model data on demand
@@ -134,7 +139,7 @@ Add the ephemeral local state files to your repository's `.gitignore`:
 
 **FAQ**
 
-- **Do I need all four model providers?** No. Start with 1–2 authorized pools in `.orchestration/project-profile.md`; any unconfigured lane is treated as unavailable and routed to your configured fallback.
+- **Do I need all four model providers?** Start with 1–2 pools and record the permitted model, effort, pool and roles for each worker in `.orchestration/project-profile.md`. Without the authorization block, the offline resolver shows an advisory ranking and leaves its recommendation empty.
 - **Can I use metered API keys instead of subscriptions?** Yes. The default thresholds (weekly 85% move / 90% stop; 5-hour 90% move / 95% stop) are tuned for rolling subscription pools, and you can record explicit API spending caps in `.orchestration/project-profile.md`.
 - **Why didn't my client detect the skill?** Verify the folder name was kept intact (`sol-orchestration`, `opus-orchestration`, etc.) inside `.claude/skills/` (Claude Code) or `.agents/skills/` (Codex / Antigravity), then start a fresh session.
 
@@ -154,7 +159,7 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 
 ### Hızlı kurulum
 
-Proje dizininde istemcine uygun komutu seç. Bu komut yalnızca seçili koordinatörü ve ölçüm güncelleyicisini projeye kopyalar. İsteğe bağlı sağlayıcı skill’ini aynı kuruluma eklemek için komutun sonuna `--skill add-provider-orchestration-skills` ekle.
+Proje dizininde istemcine uygun komutu seç. Codex ve Claude Code komutları ikişer koordinatör seçeneğini ve ölçüm güncelleyicisini projeye kopyalar. Oturum başında bir koordinatör seç. Tek bir koordinatör kurmak için diğer koordinatörün `--skill` seçeneğini kaldır. Sağlayıcı ekleme skill’ini de kurmak için komutun sonuna `--skill add-provider-orchestration-skills` ekle.
 
 ```sh
 # Codex
@@ -170,10 +175,15 @@ Antigravity, farklı bir koordinatör veya Node.js olmadan kurulum için depoyu 
 
 ```sh
 # Elle kurulum / Antigravity (neon-orchestration veya hedef dizini ihtiyacına göre değiştir)
-git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git /tmp/uos
-mkdir -p .agents/skills
-cp -R /tmp/uos/skills/neon-orchestration /tmp/uos/skills/update-orchestration-skills .agents/skills/
-rm -rf /tmp/uos
+(
+  set -eu
+  install_dir=$(mktemp -d "${TMPDIR:-/tmp}/ultimate-orchestration-skills.XXXXXXXX")
+  trap 'rm -rf -- "$install_dir"' 0
+  git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git "$install_dir/repo"
+  mkdir -p .agents/skills
+  cp -R "$install_dir/repo/skills/neon-orchestration" \
+    "$install_dir/repo/skills/update-orchestration-skills" .agents/skills/
+)
 ```
 
 Her koordinatör profili aşamalı yükleme (`SKILL.md` ve bağlam token’larından tasarruf etmek için gerektiğinde yüklenen `references/` dosyaları) kullanır; bu nedenle kopyalarken `references/` dahil klasörün tamamını koru.
@@ -224,7 +234,7 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Günlük Claude Code koordinatörü veya Mythos/Fable kotası dolduğunda devralma seçeneği | `.claude/skills/` |
 
 1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Her iki klasör adını da değiştirme.
-2. Koordinatör klasöründeki `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyala ve depo talimatlarından (`CLAUDE.md` veya `AGENTS.md`) bu dosyaya referans ver. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt; model kimliklerini ve efor seviyelerini istemcinde doğrula.
+2. Koordinatör klasöründeki `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyala ve depo talimatlarından (`CLAUDE.md` veya `AGENTS.md`) bu dosyaya referans ver. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt. Profildeki JSON bloğunu istemcinde doğruladığın ve onayladığın model kimlikleri, efor seviyeleri, havuzlar ve rollerle doldur.
 3. Koordinatörü yukarıdaki **Komut** sütunundaki adla çağır (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Kapsamı belli, tek bir uygun ajana verilebilen ve ölçülebilir kabul kriteri olan bir işle başla.
 
 ### Model verilerini istediğin anda yenile
@@ -266,7 +276,7 @@ Geçici yerel durum dosyalarını deponun `.gitignore` dosyasına ekle:
 
 **SSS**
 
-- **Dört model sağlayıcısının hepsine ihtiyacım var mı?** Hayır. `.orchestration/project-profile.md` içinde 1–2 yetkili havuzla başlayabilirsin; yapılandırılmamış hatlar kullanılamaz kabul edilir ve tanımlı yedeğe yönlendirilir.
+- **Dört model sağlayıcısının hepsine ihtiyacım var mı?** 1–2 havuzla başlayabilir, her işçi için izin verdiğin model, efor, havuz ve rolleri `.orchestration/project-profile.md` dosyasına yazabilirsin. Yetki bloğu eksikse çevrimdışı yönlendirici bilgi amaçlı bir sıralama gösterir ve öneri alanını boş bırakır.
 - **Abonelik yerine ücretli API anahtarları kullanabilir miyim?** Evet. Varsayılan eşikler (haftalık %85 taşıma / %90 durdurma; 5 saatlik %90 taşıma / %95 durdurma) yenilenen abonelik havuzlarına göre ayarlanmıştır; `.orchestration/project-profile.md` içine açık API harcama sınırları da yazabilirsin.
 - **İstemcim skill’i neden görmüyor?** Klasör adının değiştirilmediğini (`sol-orchestration`, `opus-orchestration` vb.) ve Claude Code için `.claude/skills/`, Codex / Antigravity için `.agents/skills/` altında bulunduğunu doğrula, ardından yeni bir oturum başlat.
 

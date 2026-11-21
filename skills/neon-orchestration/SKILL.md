@@ -139,10 +139,8 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
    - **The configured Gemini CLI** remains the headless option when a task
      needs CLI isolation, limited tool permissions, or a separate worktree.
    - **Claude lanes (`Opus` `medium`/`high`, `Sonnet` `high`, `Haiku` `high`):**
-     Run directly as first-class delegates via headless Claude Code CLI
-     (`env -u ANTHROPIC_API_KEY claude -p --model <opus|sonnet|haiku> --effort <medium|high> ... < /dev/null`)
-     on the Claude subscription — completely independent of both Gemini and
-     Codex pools! **Antigravity's built-in Claude models (`claude-opus-5-5-*`,
+     Run headless Claude Code CLI (`claude -p`) after the [subscription preflight](references/cli-lanes-and-ledger.md#claude-code-subscription-preflight).
+     Use an authorized fallback when the subscription cannot be confirmed. **Antigravity's built-in Claude models (`claude-opus-5-5-*`,
      `claude-sonnet-5-5-*`) are NOT a fallback lane** (reserved for configured short jobs).
 4. **Cross-family review and second opinion invert around Google.**
    - **GPT- or Claude-authored work** → a fresh, isolated **`gemini-4-neon`
@@ -255,7 +253,7 @@ and apply the final high-stakes check separately.
 |---|---|---|---|
 | Architecture, specs, hard judgment, briefs, direction, review, final synthesis (no execution) | **Main loop** (Orchestrator (Neon) / `gemini-4-neon` `high`) | itself (`Plan` + `Execute` phases together if Orchestrator) | n/a |
 | Advice on the hardest calls, or cross-family second opinion on Neon's call | **gpt-6.2-astra** `medium` (primary cross-family peer; plus Mythos/Fable `medium` advisor when available) | `codex exec -m gpt-6.2-astra -c model_reasoning_effort=medium -s read-only -o <file> "…" < /dev/null` | One peer question: problem, evidence, options, where unsure |
-| Real PG/HTTP pipelines requiring network/ports, migrations, multi-file architectural refactors, restricted data, localized UI/prompt quality, open-ended architectural debugging | **Opus** `medium` (`claude -p`; escalate to **Opus** `high` for higher requirements or on two failures) — independent Claude pool, no local-port sandbox block | `env -u ANTHROPIC_API_KEY claude -p --model opus --effort <medium\|high> --permission-mode acceptEdits --no-session-persistence "…" < /dev/null` | Goal, context, constraints and acceptance criteria (fairly loose) |
+| Real PG/HTTP pipelines requiring network/ports, migrations, multi-file architectural refactors, restricted data, localized UI/prompt quality, open-ended architectural debugging | **Opus** `medium` (`claude -p`; escalate to **Opus** `high` for higher requirements or on two failures) — independent Claude pool, no local-port sandbox block | `CI=true claude -p --model opus --effort <medium\|high> --permission-mode acceptEdits --no-session-persistence "…" < /dev/null` | Goal, context, constraints and acceptance criteria (fairly loose) |
 | Execution with a clear spec: precision coding, test suites, math/SymPy/algorithm scripts, fixed-scope refactors (and parallel units beside Opus) | **gpt-6.2-sol** (`high` by default, `xhigh` for higher requirements, reasoning- or science-heavy sensitive work and escalation); balance large batches with **Opus** `medium` by headroom | `codex exec --skip-git-repo-check -m gpt-6.2-sol -c model_reasoning_effort=<high\|xhigh> -s workspace-write -o <file> "…" < /dev/null` | Detailed and step by step, nothing left implicit |
 | Simple-medium: scoped edits, pattern clones, lookups, templated work, network/package installs | **gpt-6.2-sol** `high`, or **Sonnet** `high` (`claude -p`) for restricted data, required network/package installs, or Codex overflow/outages | `codex exec -m gpt-6.2-sol` (`high`) or `claude -p --model sonnet --effort high` | Named files, steps, output shape and boundaries |
 | Video, audio, long PDFs, screenshot sets turned into structured text or visual checks | **gemini-4-hydrogen** `high` (video/audio backup only: **gemini-4-neon** `high`) | Native Swarm (`model:"gemini-4-hydrogen-high"`, `workspace:"inherit"`) or configured Gemini runner with Hydrogen at `high` effort | Bounded: what to extract/inspect, output schema or checklist, timestamp/page/filename on every item |

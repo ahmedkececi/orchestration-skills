@@ -144,9 +144,8 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
 5. **Delegation mechanics from Codex CLI (`codex exec` + `claude -p` +
    the configured Gemini runner).**
    - **Claude lanes (`Opus` `medium`/`high`, `Sonnet` `high`, `Haiku` `high`)**
-     run directly via headless Claude Code CLI (`claude -p`) on
-     the user's Claude subscription (`env -u ANTHROPIC_API_KEY` so no API key
-     billing occurs; check `claude auth status`). Never use
+     run via headless Claude Code CLI (`claude -p`) after the [subscription preflight](references/cli-lanes-and-ledger.md#claude-code-subscription-preflight).
+     Use an authorized fallback when the subscription cannot be confirmed. Never use
      `--dangerously-skip-permissions`. Note: **agy's built-in Claude credits
      are NOT a fallback lane** (reserved for configured short jobs) — use native `claude -p` instead.
    - **GPT lanes (`Sol` `high`/`xhigh`, `Terra` `medium`, `Luna` `high`)** run
@@ -246,13 +245,13 @@ and apply the final high-stakes check separately.
 |---|---|---|---|
 | Architecture, specs, hard judgment, briefs, direction, review, final synthesis (no execution) | **Main loop** (`gpt-6.2-sol` `xhigh`) | itself (`codex -m gpt-6.2-sol -c model_reasoning_effort=xhigh`) | n/a |
 | Second opinion, high-stakes document/PDF judgment, cross-family peer review on Sol `xhigh`'s call | **gemini-4-neon** `high` (accuracy/PDF/knowledge peer) or **Opus** `high` / **Mythos/Fable** `medium` (architecture, security, localized product peer) | Neon via the configured runner with Neon at `high`; Opus via `claude -p --model opus --effort high` | One peer question: problem, evidence, options, where unsure |
-| Execution with a clear spec: implementation from a written design, migrations, test suites, refactors with fixed scope | **Opus** `medium` by default (`high` for higher requirements/escalation) to preserve Codex quota; **gpt-6.2-sol** (`high`/`xhigh`) as parallel overflow or Claude-outage fallback | `env -u ANTHROPIC_API_KEY claude -p --model opus --effort <medium\|high>` (or `codex exec -m gpt-6.2-sol` when offloading from Claude) | Goal, spec, constraints and acceptance criteria (step-by-step when routed to Sol) |
-| Real PG/HTTP requiring local ports or network access, restricted data that needs Opus, localized UI or prompt quality, open-ended architectural debugging | **Opus** `medium` (`claude -p`); escalate to **Opus** `high` on two failures | `env -u ANTHROPIC_API_KEY claude -p --model opus --effort medium` (`high` on escalation) | Goal, context, constraints and acceptance criteria (fairly loose) |
-| Simple-medium: scoped edits, pattern clones, lookups, templated work, straightforward reading and summarizing, network/package installs | **Sonnet** `high` (`claude -p`) to preserve Codex quota; **gpt-6.2-sol** `high` as parallel overflow or when Claude is full/down | `env -u ANTHROPIC_API_KEY claude -p --model sonnet --effort high`, or `codex exec -m gpt-6.2-sol` (`high`) | Named files, steps, output shape and boundaries |
+| Execution with a clear spec: implementation from a written design, migrations, test suites, refactors with fixed scope | **Opus** `medium` by default (`high` for higher requirements/escalation) to preserve Codex quota; **gpt-6.2-sol** (`high`/`xhigh`) as parallel overflow or Claude-outage fallback | `CI=true claude -p --model opus --effort <medium\|high>` (or `codex exec -m gpt-6.2-sol` when offloading from Claude) | Goal, spec, constraints and acceptance criteria (step-by-step when routed to Sol) |
+| Real PG/HTTP requiring local ports or network access, restricted data that needs Opus, localized UI or prompt quality, open-ended architectural debugging | **Opus** `medium` (`claude -p`); escalate to **Opus** `high` on two failures | `CI=true claude -p --model opus --effort medium` (`high` on escalation) | Goal, context, constraints and acceptance criteria (fairly loose) |
+| Simple-medium: scoped edits, pattern clones, lookups, templated work, straightforward reading and summarizing, network/package installs | **Sonnet** `high` (`claude -p`) to preserve Codex quota; **gpt-6.2-sol** `high` as parallel overflow or when Claude is full/down | `CI=true claude -p --model sonnet --effort high`, or `codex exec -m gpt-6.2-sol` (`high`) | Named files, steps, output shape and boundaries |
 | Video, audio, long PDFs, screenshot sets turned into structured text or visual checks | **gemini-4-hydrogen** `high` (video/audio backup only: **gemini-4-neon** `high`) | configured Gemini runner with Hydrogen at `high` effort | Bounded: what to extract/inspect, output schema or checklist, timestamp/page/filename on every item |
 | Wide reading and search-grounded lookups that return a conclusion with sources | **gemini-4-hydrogen** `high` | same (the configured Gemini runner) | The question, the scope, a stop condition, URLs or file paths required |
 | Very large bulk jobs, long-prompt bulk, bulk overflow from Haiku or luna | **deepseek-flash** (publishable material only) | OpenAI- or Anthropic-compatible client using the configured DeepSeek endpoint | Exact rules, output schema, shared material first, per-item part last |
-| Independent check from a different model family | GPT or Claude wrote it → **gemini-4-neon** `high` (if Neon unavailable for GPT work → **Opus** `high`). Google wrote it → **Opus** `high` (Sol `xhigh`'s own check is Management review; only if Opus is unavailable, fresh Neon `high` labeled **same-family**) | Neon via the configured runner with Neon at `high` and scoped review tools; Opus via `env -u ANTHROPIC_API_KEY claude -p --model opus --effort high` (read-only tools) | The artifact, file list and acceptance criteria. Omit the author's reasoning |
+| Independent check from a different model family | GPT or Claude wrote it → **gemini-4-neon** `high` (if Neon unavailable for GPT work → **Opus** `high`). Google wrote it → **Opus** `high` (Sol `xhigh`'s own check is Management review; only if Opus is unavailable, fresh Neon `high` labeled **same-family**) | Neon via the configured runner with Neon at `high` and scoped review tools; Opus via `CI=true claude -p --model opus --effort high` (read-only tools) | The artifact, file list and acceptance criteria. Omit the author's reasoning |
 | Second eye on a scoped question | **gemini-4-neon** `medium` (or **Opus** `medium` for GPT-authored work when Neon is unavailable) | the configured runner with Neon at `medium` or `claude -p --model opus --effort medium` (read-only) | Name the files, the question and the evidence to check |
 | Bulk cleanup: normalizing, deduplicating, classifying, extracting | **terra (qualified sample) / Haiku** (small and medium) / **luna** (large). Sample the first Terra job on a new runner; if clean, use Terra first for unrestricted small/medium jobs. Use **Haiku** `high` (`claude-haiku-5-5`) before qualification, for restricted data, or when Codex is down | `codex exec -m gpt-6.1-terra` (`medium`), `claude -p --model haiku --effort high`, or `codex exec -m gpt-6-luna` (`high`) | Exact rules with examples, small batches and spot checks |
 
@@ -315,9 +314,9 @@ itself ranks below V4.1 Flash. Do not route to it.
    restart the higher tier from zero, and never loop a third time at the same
    tier with the same brief.
 9. **Never buy your way past a limit.** Usage credits, plan upgrades and paid
-   API keys for Claude, OpenAI or Google are operator decisions. Always strip
-   `ANTHROPIC_API_KEY` when invoking `claude -p` so it runs strictly on the
-   Claude subscription. Use the DeepSeek lane within the project profile's approved budget. Tell
+   API keys for Claude, OpenAI or Google are operator decisions. Follow the
+   [subscription preflight](references/cli-lanes-and-ledger.md#claude-code-subscription-preflight) before launching a Claude subscription lane.
+   Use the DeepSeek lane within the project profile's approved budget. Tell
    the operator before an unusually large job or a paid transition.
 10. **One writer per file.** Parallel agents get disjoint file sets or separate
     `git worktree` checkouts.

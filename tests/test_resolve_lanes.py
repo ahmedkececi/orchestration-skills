@@ -72,6 +72,21 @@ def fresh_state(now_iso="2026-11-21T15:57:00Z", **overrides):
     return base
 
 
+def authorized_lane(model, effort, pool, *, roles=("coding",), restricted_data=False):
+    return {
+        "model": model,
+        "effort": effort,
+        "pool": pool,
+        "runner": f"{pool} runner",
+        "roles": list(roles),
+        "restricted_data": restricted_data,
+    }
+
+
+def profile_text(*lanes):
+    return "# Project profile\n\n<!-- orchestration-lanes:v1 -->\n\n```json\n" + json.dumps(lanes) + "\n```\n"
+
+
 class NormalizationAndParsingTests(unittest.TestCase):
     def test_provider_and_family_alias_normalization(self):
         self.assertEqual(resolve_lanes.normalize_pool("Anthropic / Claude"), "claude")
@@ -172,10 +187,12 @@ class NormalizationAndParsingTests(unittest.TestCase):
         by_key = {(c["model"], c["effort"]): c for c in merged}
         self.assertIn(("claude-opus-6", "high"), by_key)
         self.assertEqual(by_key[("claude-opus-6", "high")]["pool"], "claude")
-        self.assertEqual(by_key[("claude-opus-6", "high")]["profiles"]["coding"], 98.0)
+        self.assertEqual(by_key[("gpt-6.2-astra", "high")]["profiles"]["coding"], 95.0)
+        report = resolve_lanes.resolve_lanes(merged, {}, cohort="v1")
+        by_key = {(c["model"], c["effort"]): c for c in report["ranked"]}
+        self.assertEqual(by_key[("claude-opus-6", "high")]["score"], 98.0)
         self.assertEqual(by_key[("claude-opus-6", "high")]["latency_s"], 310.0)
-        # Matching historical variant updated in place from workspace observations.
-        self.assertEqual(by_key[("gpt-6.2-astra", "high")]["profiles"]["coding"], 99.0)
+        self.assertEqual(by_key[("gpt-6.2-astra", "high")]["score"], 99.0)
         self.assertEqual(by_key[("gpt-6.2-astra", "high")]["source"], "workspace")
 
 
@@ -195,10 +212,10 @@ class ProviderStateEvaluationTests(unittest.TestCase):
         self.assertEqual(states["claude"]["effective_state"], "down")
         self.assertTrue(states["gemini"]["excluded"])
         self.assertEqual(states["gemini"]["effective_state"], "down")
-        # Cooldown expired: no longer excluded, marked probe_due.
-        self.assertFalse(states["codex"]["excluded"])
+        # Cooldown expired: block normal work while allowing a recovery probe.
+        self.assertTrue(states["codex"]["excluded"])
         self.assertTrue(states["codex"]["probe_due"])
-        self.assertEqual(states["codex"]["effective_state"], "up")
+        self.assertEqual(states["codex"]["effective_state"], "probe-only")
 
     def test_quota_move_and_stop_thresholds_and_headroom(self):
         raw = {
@@ -344,16 +361,22 @@ class EquivalenceAndRankingTests(unittest.TestCase):
             "codex": fresh_state(weekly_pct=20, five_hour_pct=20),
         }
         states, _ = resolve_lanes.parse_provider_state(raw_state, self.now, 45)
+        lanes = resolve_lanes.parse_authorized_lanes(profile_text(
+            authorized_lane("claude-fable-5-2", "medium", "claude", restricted_data=True),
+            authorized_lane("claude-opus-5-5", "high", "claude", restricted_data=True),
+            authorized_lane("gpt-6.2-astra", "high", "codex"),
+        ))
         res = resolve_lanes.resolve_lanes(
-            candidates, states, role="coding", restricted_data=True, state_loaded=True
+            candidates, states, role="coding", authorized_lanes=lanes, restricted_data=True, state_loaded=True
         )
-        self.assertEqual([r["model"] for r in res["ranked"]], ["Opus 5.5"])
+        self.assertEqual([r["model"] for r in res["ranked"]], ["claude-opus-5-5"])
         excluded_models = {r["model"] for r in res["excluded"]}
         self.assertEqual(excluded_models, {"Fable 5.2", "gpt-6.2-astra"})
 
         # Empty intersection (--restricted-data + --providers openai) returns empty ranked cleanly.
         empty = resolve_lanes.resolve_lanes(
-            candidates, states, role="coding", allowed_providers=["codex"], restricted_data=True, state_loaded=True
+            candidates, states, role="coding", allowed_providers=["codex"], authorized_lanes=lanes,
+            restricted_data=True, state_loaded=True
         )
         self.assertEqual(empty["ranked"], [])
         self.assertIsNone(empty["recommended"])
@@ -377,6 +400,35 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         self.assertEqual([r["model"] for r in res["ranked"]], ["Sonnet 5.5", "Opus 5.5"])
         self.assertIn("deprioritized", res["ranked"][1]["flags"])
 
+    def test_catalog_model_id_blocks_the_same_bundled_display_name(self):
+        candidates = [
+            make_candidate("Opus 5.5", effort="high", coding=81),
+            make_candidate("Opus 5.5", effort="medium", coding=76),
+            make_candidate("Sonnet 5.5", coding=73),
+        ]
+        states, _ = resolve_lanes.parse_provider_state(
+            {"claude-opus-5-5": fresh_state(status="down", down_until="2026-11-21T18:00:00Z")},
+            self.now,
+            5,
+        )
+        res = resolve_lanes.resolve_lanes(candidates, states, state_loaded=True)
+        self.assertEqual([r["model"] for r in res["ranked"]], ["Sonnet 5.5"])
+        self.assertEqual([r["model"] for r in res["excluded"]], ["Opus 5.5", "Opus 5.5"])
+
+    def test_model_outage_for_namespaced_id_does_not_apply_to_sibling_id(self):
+        candidates = [
+            make_candidate("example/alpha", pool="example", family="example", coding=90),
+            make_candidate("example/beta", pool="example", family="example", coding=85),
+        ]
+        states, _ = resolve_lanes.parse_provider_state(
+            {"example/alpha": fresh_state(status="down", down_until="2026-11-21T18:00:00Z")},
+            self.now,
+            5,
+        )
+        res = resolve_lanes.resolve_lanes(candidates, states, state_loaded=True)
+        self.assertEqual([r["model"] for r in res["ranked"]], ["example/beta"])
+        self.assertEqual([r["model"] for r in res["excluded"]], ["example/alpha"])
+
     def test_author_family_ignored_with_warning_on_non_review_role(self):
         report = resolve_lanes.resolve_from_paths(
             workspace=REPO_ROOT,
@@ -396,6 +448,16 @@ class EquivalenceAndRankingTests(unittest.TestCase):
 
 
 class CliIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.profile = Path(directory.name) / "project-profile.md"
+        self.profile.write_text(profile_text(
+            authorized_lane("gemini-4-neon", "xhigh", "gemini", roles=("coding", "review")),
+            authorized_lane("gemini-4-neon", "medium", "gemini", roles=("review",)),
+            authorized_lane("gpt-6.2-astra", "high", "codex", roles=("coding", "review")),
+        ), encoding="utf-8")
+
     def test_cli_example_provider_state_coding_and_review_json_and_markdown(self):
         coding = run_script(
             "resolve_lanes.py",
@@ -405,6 +467,8 @@ class CliIntegrationTests(unittest.TestCase):
             "coding",
             "--state",
             str(EXAMPLE_STATE),
+            "--profile",
+            str(self.profile),
             "--now",
             "2026-11-21T16:00:00Z",
             "--format",
@@ -429,6 +493,8 @@ class CliIntegrationTests(unittest.TestCase):
             "openai",
             "--state",
             str(EXAMPLE_STATE),
+            "--profile",
+            str(self.profile),
             "--now",
             "2026-11-21T16:00:00Z",
             "--format",
@@ -449,6 +515,8 @@ class CliIntegrationTests(unittest.TestCase):
             "coding",
             "--state",
             str(EXAMPLE_STATE),
+            "--profile",
+            str(self.profile),
             "--now",
             "2026-11-21T18:00:00Z",
             "--stale-minutes",
@@ -512,6 +580,9 @@ class CliIntegrationTests(unittest.TestCase):
                 "deepseek": fresh_state(five_hour_pct=None, weekly_pct=None),
             }
             (ws / ".orchestration" / "provider-state.json").write_text(json.dumps(state), encoding="utf-8")
+            (ws / ".orchestration" / "project-profile.md").write_text(profile_text(
+                authorized_lane("claude-opus-6-preview", "high", "claude"),
+            ), encoding="utf-8")
 
             # Omit --measurements and --state to test automatic <workspace>/.orchestration/ discovery.
             res = run_script(
@@ -557,6 +628,46 @@ class CliIntegrationTests(unittest.TestCase):
             ws_models = {r["model"]: r for r in report["ranked"] if r["source"] == "workspace"}
             self.assertEqual(set(ws_models), {"demo-primary", "demo-backup"})
             self.assertEqual(ws_models["demo-primary"]["tier"], "unmeasured")
+
+    def test_cli_provider_filter_is_advisory_without_explicit_lanes(self):
+        with tempfile.TemporaryDirectory() as td:
+            proc = run_script(
+                "resolve_lanes.py", "--workspace", td, "--role", "coding",
+                "--providers", "claude,codex", "--format", "json",
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = json.loads(proc.stdout)
+        self.assertTrue(report["advisory"])
+        self.assertIsNone(report["recommended"])
+        self.assertTrue(report["ranked"])
+        self.assertTrue(all(row["pool"] in ("codex", "claude") for row in report["ranked"]))
+
+    def test_cli_reports_exact_authorized_variant_and_filters_roles(self):
+        self.profile.write_text(profile_text(
+            authorized_lane("gpt-6.2-sol", "high", "codex", roles=("coding",)),
+            authorized_lane("claude-opus-5-5", "medium", "claude", roles=("review",)),
+        ), encoding="utf-8")
+        for role, expected in (("coding", ("gpt-6.2-sol", "high", "codex runner")),
+                               ("review", ("claude-opus-5-5", "medium", "claude runner"))):
+            with self.subTest(role=role):
+                proc = run_script(
+                    "resolve_lanes.py", "--workspace", str(REPO_ROOT), "--profile", str(self.profile),
+                    "--role", role, "--providers", "claude,codex", "--format", "json",
+                )
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                report = json.loads(proc.stdout)
+                self.assertFalse(report["advisory"])
+                self.assertEqual(len(report["ranked"]), 1)
+                rec = report["recommended"]
+                self.assertEqual((rec["model"], rec["effort"], rec["runner"]), expected)
+
+    def test_cli_rejects_invalid_profile_permissions(self):
+        lane = authorized_lane("gpt-6.2-sol", "high", "codex")
+        lane["restricted_data"] = "false"
+        self.profile.write_text(profile_text(lane), encoding="utf-8")
+        proc = run_script("resolve_lanes.py", "--profile", str(self.profile))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("boolean restricted_data", proc.stderr)
 
     def test_cli_error_exit_codes(self):
         bad_now = run_script("resolve_lanes.py", "--workspace", str(REPO_ROOT), "--now", "invalid")

@@ -10,14 +10,34 @@ to assign work, `read_board` / `swarm_wait` to collect results, and `swarm{actio
 to close finished workers before posting an `@`-free `[done]` closeout. Do not
 spawn writers with `inherit` when modifying overlapping files.
 
-**Claude Code CLI (`claude -p`).** Claude delegate lanes (`Opus` `medium` /
-`high`, `Sonnet` `high`, `Haiku` `high` — CLI aliases `opus`, `sonnet`, `haiku`
-mapping to catalog IDs `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`)
-run via `claude -p` on the Claude subscription (`env -u ANTHROPIC_API_KEY`,
-check `claude auth status`, never `--dangerously-skip-permissions`): `--model opus --effort
-<medium|high> --permission-mode acceptEdits --no-session-persistence "…"
-< /dev/null` (or `--tools Read,Glob,Grep --permission-mode dontAsk` for
-read-only reviews).
+### Claude Code subscription preflight
+
+A headless Claude lane is available only after you verify that the worker will
+use the intended active Claude subscription. Run
+`CI=true claude auth status --text` in the worker’s directory with the same
+executable, environment, and settings profile. Check the effective provider,
+account, and sign-in method. Use the client's `/status` in that environment if
+you need more detail. See [Claude Code authentication precedence](https://code.claude.com/docs/en/authentication#authentication-precedence).
+
+Removing `ANTHROPIC_API_KEY` alone cannot establish subscription billing.
+Bearer tokens (`ANTHROPIC_AUTH_TOKEN`), `apiKeyHelper`, custom endpoints
+(`ANTHROPIC_BASE_URL`), and managed gateway or cloud settings can change the
+effective provider or credentials. Keep credential values out of briefs and
+reports. If you cannot confirm the subscription, leave this lane unavailable
+and use an authorized fallback. Follow the operator’s managed settings and
+billing policy. Keep workers non-interactive and retain normal permissions.
+Claude CLI aliases such as `opus`, `sonnet` and `haiku` must resolve to the
+model approved in the profile. Never use `--dangerously-skip-permissions`.
+
+Headless invocation examples after the preflight. Use the exact model and
+effort accepted by the worker’s configured Claude client.
+
+- Read-only review (`Opus` `high`):
+  `CI=true claude -p --model opus --effort high --tools Read,Glob,Grep --permission-mode dontAsk --no-session-persistence "<prompt>" < /dev/null`
+- Scoped execution (`Opus` `medium`):
+  `CI=true claude -p --model opus --effort medium --permission-mode acceptEdits --no-session-persistence "<prompt>" < /dev/null`
+
+### Codex and other runners
 
 **Codex (GPT).** GPT lanes run through `codex exec`:
 `codex exec --skip-git-repo-check -m <model> -c model_reasoning_effort=<medium|high|xhigh> -s <read-only|workspace-write> -o <report_file> "<prompt>" < /dev/null`
@@ -48,13 +68,14 @@ The [bundled model measurements](../../update-orchestration-skills/references/mo
 
 Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-orchestration-skills` in Codex, to refresh the workspace data. Install the [refresh skill](../../update-orchestration-skills/) alongside this preset. A refresh changes the measurement evidence available to routing; the project profile still governs authorization, pool access and model IDs. Use each model's exact measured variant and effort, and compare results only on matching task profiles and compatible source cohorts. Missing measurements remain unknown.
 
-To rank authorized lanes deterministically from live `.orchestration/model-measurements.md` (falling back to the bundled snapshot) and `.orchestration/provider-state.json`, run:
-
-```sh
-python3 -B <updater-skill-dir>/scripts/resolve_lanes.py --workspace . --role <coding|reasoning|accuracy|knowledge|review>
-```
-
-Pass `--author-family <claude|openai|google|deepseek>` on `--role review` to prioritize cross-family reviewers, and pass `--restricted-data` whenever the unit touches restricted data so only Claude lanes are returned.
+To rank lanes, run `resolve_lanes.py` from the installed updater skill with
+`--workspace . --role` and the relevant task role. Its default authorization
+source is the JSON block in [the project's profile](../project-profile.example.md#machine-readable-worker-authorization).
+Pass `--profile PATH` to inspect another profile. Without an authorization
+block the output is advisory and has no recommended lane. `--providers`
+narrows the pool list. Add `--author-family` for review and `--restricted-data`
+when the unit touches restricted data. The project still controls what each
+worker can access and which tools it can use.
 
 ## Routing ledger
 

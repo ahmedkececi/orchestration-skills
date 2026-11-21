@@ -27,21 +27,34 @@ This is a local import using sample data. The live refresh skill also supports c
 
 ## Resolve lanes deterministically offline
 
-Use `resolve_lanes.py` to rank authorized lanes directly from `.orchestration/model-measurements.md` (falling back to the bundled historical snapshot) and a live or fixture `provider-state.json`:
+Use `resolve_lanes.py` with the Astra sample profile to rank permitted workers
+against the bundled benchmark snapshot and a fixed quota reading. The
+`--now` value makes the fixture's age reproducible.
 
 ```sh
 python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
-  --workspace . --role coding --state examples/provider-state.json
+  --workspace . --profile skills/astra-orchestration/project-profile.example.md \
+  --role coding --state examples/provider-state.json --now 2026-11-21T16:00:00Z
 
 python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
-  --workspace . --role review --author-family openai --state examples/provider-state.json
+  --workspace . --profile skills/astra-orchestration/project-profile.example.md \
+  --role review --author-family openai \
+  --state examples/provider-state.json --now 2026-11-21T16:00:00Z
 ```
 
 What the output demonstrates:
 
-- **Coding (`--role coding`):** In `examples/provider-state.json`, Codex sits past the 85% weekly move threshold (`weekly_pct`), so Codex lanes are automatically deprioritized behind healthy equivalent pools rather than draining the near-full weekly cap.
-- **Cross-family review (`--role review --author-family openai`):** Non-OpenAI model families are ranked ahead for independent review, while OpenAI/Codex candidates are flagged `same-family` so reviews never silently fall back to same-family self-checking.
-- Pass `--restricted-data` to restrict candidates to Claude lanes, `--providers` to match your project profile allowlist, or `--format json` for structured output.
+- **Coding:** Astra manages this example project. The profile's authorization
+  block allows the specified Opus and Sol efforts as workers. The fixture
+  shows Codex above the 85% weekly move threshold.
+- **Cross-family review:** Opus is authorized for review outside the
+  author's OpenAI family. The authorized Sol reviewer is flagged
+  `same-family`.
+- In a real project, save the authorization block in
+  `.orchestration/project-profile.md` and omit `--profile`. Use
+  `--restricted-data` to require a lane approved for that data and
+  `--providers` to narrow the pool list. Without an authorization block
+  the ranking is advisory and the recommendation is empty.
 
 ## Follow a quota handoff
 
