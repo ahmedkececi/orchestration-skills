@@ -27,11 +27,11 @@ From your project, choose the command for your client. This copies just the coor
 ```sh
 # Codex
 npx skills add ahmedkececi/ultimate-orchestration-skills --agent codex --copy \
-  --skill sol-orchestration --skill update-orchestration-skills
+  --skill sol-orchestration --skill astra-orchestration --skill update-orchestration-skills
 
 # Claude Code
 npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --copy \
-  --skill opus-orchestration --skill update-orchestration-skills
+  --skill opus-orchestration --skill fable-orchestration --skill update-orchestration-skills
 ```
 
 For Antigravity, another coordinator, or an install without Node.js, clone once and copy the folders into your project (keep the original folder names):
