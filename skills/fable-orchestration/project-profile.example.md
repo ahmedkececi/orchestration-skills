@@ -5,9 +5,10 @@ Use this as a copyable starting point for the project profile that your reposito
 | Setting | Example or decision to fill in |
 | --- | --- |
 | Project instruction files | Applicable repository instructions and any project-specific contribution guide |
-| Manager | Fable at medium effort, if available |
+| Manager | the selected Mythos/Fable model and a supported effort |
 | Authorized workers | Provider, account or pool label, exact model ID, effort, runner, available tools and allowed input classes |
-| Default execution | Codex Sol at high, then Claude Sonnet at high, subject to the approved workers |
+| Default execution | Use Sol high for bounded execution and raise to xhigh for difficult units. Use Sonnet high for work restricted to the Claude pool and Opus medium for open-ended debugging, design-sensitive work or local integration when that worker has the necessary access. |
+| Measurement data | `.orchestration/model-measurements.md` or the bundled historical snapshot. Record required task profiles, quality floors and any authorized per-lane overrides. |
 | Independent review | An authorized fresh worker from a different model family, with a same-family fallback policy if appropriate |
 | Data policy | Which providers can see public, internal or restricted data and which classes must remain local |
 | Workspace | Writeable paths, worktree or branch conventions, allowed network access and rules for starting local services |
