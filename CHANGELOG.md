@@ -6,12 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Fixed
+## [1.2.1] - 2026-11-21
 
-- Require exact worker authorization from the project profile for resolver recommendations. Profile-less rankings remain advisory.
-- Keep live benchmark cohorts, units and comparable source evidence separate. Use matched measured timings to break ties.
-- Treat stale quota readings as unknown, keep expired outages probe-only, and match model-specific limits against canonical IDs.
-- Isolate manual installs in a fresh temporary directory and verify Claude subscription authentication in the worker's execution environment.
+### Added
+- Machine-readable `<!-- orchestration-lanes:v1 -->` worker authorization JSON blocks (`model`, `effort`, `pool`, `runner`, `roles`, and optional `restricted_data`) across all five `skills/*/project-profile.example.md` files, plus unmatched authorized-lane warnings when a configured worker has no entry in the active measurement snapshot.
+- `--cohort ID` flag and cohort/source-intersection comparable scoring in `resolve_lanes.py`, plus new benchmark and quota unit test suites (`tests/test_resolve_lanes_benchmarks.py`, `tests/test_resolve_lanes_quota.py`).
+
+### Changed
+- Updated `README.md` (English and Turkish) default `npx skills add` quick-install commands to install both client coordinator options (`sol-orchestration` + `astra-orchestration` for Codex; `opus-orchestration` + `fable-orchestration` for Claude Code) alongside `update-orchestration-skills`.
+
+### Fixed
+- Require exact worker authorization from the project profile (`<!-- orchestration-lanes:v1 -->`) for resolver recommendations while keeping profile-less rankings advisory, and align example profile roles so `gpt-6.2-sol` (`xhigh`) is reserved for `reasoning` and routine `coding` compares `gpt-6.2-sol` (`high`) against `claude-opus-5-5` (`high`) within the ±3-point equivalence band.
+- Keep live benchmark cohorts, units, and comparable source evidence separate, and apply measured-only latency tie-breaking only when all primary sort keys are tied.
+- Treat stale quota readings as unknown, clear expired reset windows, keep expired `down_until` outages probe-only (`degraded`), and match model-specific limits against canonical IDs.
+- Isolate manual installs in a fresh `mktemp -d` temporary directory and require a Claude Code subscription preflight (`CI=true claude auth status --text`) in the worker's execution environment before launching headless Claude subscription lanes.
 
 ## [1.2.0] - 2026-11-21
 

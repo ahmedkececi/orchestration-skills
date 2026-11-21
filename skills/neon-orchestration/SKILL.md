@@ -332,7 +332,9 @@ itself ranks below V4.1 Flash. Do not route to it.
    restart the higher tier from zero, and never loop a third time at the same
    tier with the same brief.
 9. **Never buy your way past a limit.** Usage credits, plan upgrades and paid
-   API keys for Claude, OpenAI or Google are operator decisions. Use the DeepSeek lane within the project profile's approved budget. Tell
+   API keys for Claude, OpenAI or Google are operator decisions. Follow the
+   [subscription preflight](references/cli-lanes-and-ledger.md#claude-code-subscription-preflight) before launching a Claude subscription lane.
+   Use the DeepSeek lane within the project profile's approved budget. Tell
    the operator before an unusually large job or a paid transition.
 10. **One writer per file.** Parallel agents get disjoint file sets or separate
     worktrees / `workspace:"share"` / `"branch"`.

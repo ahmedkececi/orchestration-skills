@@ -48,10 +48,10 @@ authorizes zero workers.
 <!-- orchestration-lanes:v1 -->
 ```json
 [
-  {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding"]},
-  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["coding"]},
+  {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding", "review"]},
+  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["reasoning"]},
   {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
-  {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "review"], "restricted_data": true},
+  {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "reasoning", "review"], "restricted_data": true},
   {"model": "claude-sonnet-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
   {"model": "gemini-4-hydrogen", "effort": "high", "pool": "gemini", "runner": "Native Swarm", "roles": ["knowledge", "accuracy"]}
 ]

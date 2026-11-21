@@ -73,9 +73,10 @@ To rank lanes, run `resolve_lanes.py` from the installed updater skill with
 source is the JSON block in [the project's profile](../project-profile.example.md#machine-readable-worker-authorization).
 Pass `--profile PATH` to inspect another profile. Without an authorization
 block the output is advisory and has no recommended lane. `--providers`
-narrows the pool list. Add `--author-family` for review and `--restricted-data`
-when the unit touches restricted data. The project still controls what each
-worker can access and which tools it can use.
+narrows the pool list, and `--cohort ID` selects a compatible live benchmark
+cohort when multiple live cohorts exist. Add `--author-family` for review and
+`--restricted-data` when the unit touches restricted data. The project still
+controls what each worker can access and which tools it can use.
 
 ## Routing ledger
 

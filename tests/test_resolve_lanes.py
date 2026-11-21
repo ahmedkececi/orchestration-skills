@@ -446,6 +446,55 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         self.assertIn("ignored for role `coding`; applies only to `--role review`", md)
         self.assertNotIn("cross-family lanes prioritized first", md)
 
+    def test_shared_latencies_ignores_estimated_latency_in_different_headroom_or_deprioritized_bucket(self):
+        candidates = [
+            make_candidate("a-slow", pool="gemini", family="google", coding=94, latency_s=900),
+            make_candidate("z-fast", pool="gemini", family="google", coding=94, latency_s=400),
+            {
+                **make_candidate("other-bucket-est", pool="codex", family="openai", coding=94, latency_s=150),
+                "latency_kind": "estimate",
+            },
+        ]
+        raw_state = {
+            "gemini": fresh_state(weekly_pct=30, five_hour_pct=20),  # healthy, headroom 70
+            "codex": fresh_state(weekly_pct=87, five_hour_pct=20),   # deprioritized, headroom 13
+        }
+        states, _ = resolve_lanes.parse_provider_state(raw_state, self.now, 45)
+        res = resolve_lanes.resolve_lanes(candidates, states, role="coding", state_loaded=True)
+        self.assertEqual(
+            [row["model"] for row in res["ranked"]],
+            ["z-fast", "a-slow", "other-bucket-est"],
+        )
+
+    def test_render_markdown_unavailable_score_basis_with_named_cohort(self):
+        report = resolve_lanes.resolve_from_paths(
+            workspace=REPO_ROOT,
+            state_path=EXAMPLE_STATE,
+            role="coding",
+            cohort="missing-cohort",
+            now=self.now,
+        )
+        self.assertEqual(report["score_basis"], "unavailable")
+        self.assertEqual(report["score_cohort"], "missing-cohort")
+        md = resolve_lanes.render_markdown(report)
+        self.assertIn("- **Score cohort:** no comparable score available for `missing-cohort`", md)
+        self.assertNotIn("live `missing-cohort`", md)
+
+    def test_warns_when_authorized_lane_is_absent_from_measurements(self):
+        candidates = [
+            make_candidate("gpt-6.2-sol", effort="high", pool="codex", family="openai", coding=87),
+        ]
+        lanes = resolve_lanes.parse_authorized_lanes(profile_text(
+            authorized_lane("gpt-6.2-sol", "high", "codex", roles=("coding",)),
+            authorized_lane("claude-mythos-6", "high", "claude", roles=("coding",)),
+        ))
+        res = resolve_lanes.resolve_lanes(candidates, {}, role="coding", authorized_lanes=lanes)
+        self.assertEqual(res["recommended"]["model"], "gpt-6.2-sol")
+        self.assertIn(
+            "Authorized lane 'claude-mythos-6' (high) in pool 'claude' has no measurements in model-measurements.md.",
+            res["warnings"],
+        )
+
 
 class CliIntegrationTests(unittest.TestCase):
     def setUp(self):

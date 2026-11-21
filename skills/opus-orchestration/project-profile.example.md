@@ -16,7 +16,7 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | Authorized workers | 1) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed.<br>2) **Claude pool (`claude-sub`)**: `Claude Sonnet 5.5` (`high`) and `Claude Opus 5.5` (`medium`, confirm exact IDs in client) via `claude -p` or Claude Agent tool, read/write code, restricted data allowed. *(Add Gemini/Antigravity or DeepSeek lanes here if authorized.)* |
 | Default execution | Codex `gpt-6.2-sol` (`high` via `codex exec`) first to preserve Claude headroom, then Claude Sonnet (`high`) or Opus (`medium`) for restricted data and fallback |
 | Measurement data | `.orchestration/model-measurements.md` (refresh via `/update-orchestration-skills`). Override: require verified coding scores on the same cohort before swapping primary implementation lane. |
-| Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` or `gpt-6.2-astra` reviews Claude edits; Claude Opus/Sonnet reviews Codex edits). Same-family fallback allowed only with explicit `same-family review` label. |
+| Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` reviews Claude edits; Claude Opus/Sonnet reviews Codex edits). Same-family fallback allowed only with explicit `same-family review` label. |
 | Data policy | **Public/Internal**: Claude and Codex pools. **Restricted/PII**: Claude pool only (or local only). **Publishable only**: metered third-party APIs (e.g., DeepSeek). |
 | Workspace | Writable paths: `src/`, `tests/`, `docs/`. Read-only: `infra/prod/`, `.github/workflows/`. Branch convention: `feat/<topic>` or `fix/<topic>`. Local dev server allowed on `127.0.0.1` only. |
 | Restricted paths | Paths excluded from external/non-Claude runners (e.g., `.env*`, `secrets/`, `data/pii/`). Strip secrets from every brief regardless of destination. |
@@ -49,8 +49,8 @@ authorizes zero workers.
 ```json
 [
   {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding", "review"]},
-  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["coding"]},
+  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["reasoning"]},
   {"model": "claude-sonnet-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "review"], "restricted_data": true},
-  {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding", "review"], "restricted_data": true}
+  {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding", "reasoning", "review"], "restricted_data": true}
 ]
 ```

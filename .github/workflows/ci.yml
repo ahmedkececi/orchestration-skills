@@ -34,6 +34,8 @@ jobs:
             skills/update-orchestration-skills/scripts/refresh.py \
             skills/update-orchestration-skills/scripts/resolve_lanes.py \
             tests/test_resolve_lanes.py \
+            tests/test_resolve_lanes_benchmarks.py \
+            tests/test_resolve_lanes_quota.py \
             tests/test_skills.py \
             tests/test_updater.py
 
@@ -62,4 +64,8 @@ jobs:
       - name: Smoke test deterministic lane resolver
         run: |
           python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
-            --workspace . --role coding --state examples/provider-state.json > /dev/null
+            --workspace . --profile skills/astra-orchestration/project-profile.example.md \
+            --role coding --state examples/provider-state.json --now 2026-11-21T16:00:00Z > /dev/null
+          python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+            --workspace . --profile skills/astra-orchestration/project-profile.example.md \
+            --role review --author-family openai --state examples/provider-state.json --now 2026-11-21T16:00:00Z > /dev/null

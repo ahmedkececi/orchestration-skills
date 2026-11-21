@@ -21,6 +21,14 @@ billing policy. Keep workers non-interactive and retain normal permissions.
 Claude CLI aliases such as `opus`, `sonnet` and `haiku` must resolve to the
 model approved in the profile. Never use `--dangerously-skip-permissions`.
 
+Headless invocation examples after the preflight. Use the exact model and
+effort accepted by the worker’s configured Claude client.
+
+- Read-only review (`Opus` `high`):
+  `CI=true claude -p --model opus --effort high --tools Read,Glob,Grep --permission-mode dontAsk --no-session-persistence "<prompt>" < /dev/null`
+- Scoped execution (`Opus` `medium`):
+  `CI=true claude -p --model opus --effort medium --permission-mode acceptEdits --no-session-persistence "<prompt>" < /dev/null`
+
 ### Codex and other runners
 
 **Codex (GPT).** GPT lanes run through `codex exec` with explicit model, effort, and sandbox settings. Execution lanes run on
@@ -59,9 +67,10 @@ To rank lanes, run `resolve_lanes.py` from the installed updater skill with
 source is the JSON block in [the project's profile](../project-profile.example.md#machine-readable-worker-authorization).
 Pass `--profile PATH` to inspect another profile. Without an authorization
 block the output is advisory and has no recommended lane. `--providers`
-narrows the pool list. Add `--author-family` for review and `--restricted-data`
-when the unit touches restricted data. The project still controls what each
-worker can access and which tools it can use.
+narrows the pool list, and `--cohort ID` selects a compatible live benchmark
+cohort when multiple live cohorts exist. Add `--author-family` for review and
+`--restricted-data` when the unit touches restricted data. The project still
+controls what each worker can access and which tools it can use.
 
 ## Routing ledger
 

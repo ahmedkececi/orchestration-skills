@@ -113,6 +113,36 @@ class BenchmarkProvenanceTests(unittest.TestCase):
             ("owner-model", 90.0), ("owner/model", 85.0),
         ])
 
+    def test_timing_tie_break_isolated_per_pre_latency_bucket_and_unavailable_cohort_markdown(self):
+        models = workspace_candidates(
+            observation("claude-a-slow", 85),
+            observation("claude-z-fast", 85),
+            observation("gpt-other-bucket", 85),
+            observation("claude-a-slow", 40, metric="seconds-per-task", cohort="lat", unit="seconds"),
+            observation("claude-z-fast", 15, metric="seconds-per-task", cohort="lat", unit="seconds"),
+            observation("gpt-other-bucket", 10, metric="estimated-seconds-per-task", cohort="lat", unit="seconds"),
+        )
+        now = resolve_lanes.parse_iso_utc("2026-11-21T16:00:00Z")
+        states, _ = resolve_lanes.parse_provider_state(
+            {
+                "claude": {"weekly_pct": 20, "observed_at": "2026-11-21T15:59:00Z"},
+                "codex": {"weekly_pct": 88, "observed_at": "2026-11-21T15:59:00Z"},
+            },
+            now,
+            5,
+        )
+        lanes = resolve_lanes.parse_authorized_lanes(profile_text(*(
+            authorized_lane(resolve_lanes.canonical_model_id(c["model"]), c["effort"], c["pool"], roles=("coding",))
+            for c in models
+        )))
+        report = resolve_lanes.resolve_lanes(
+            models, states, role="coding", authorized_lanes=lanes, state_loaded=True
+        )
+        self.assertEqual(
+            [c["model"] for c in report["ranked"]],
+            ["claude-z-fast", "claude-a-slow", "gpt-other-bucket"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

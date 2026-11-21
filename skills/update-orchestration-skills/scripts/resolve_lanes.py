@@ -626,12 +626,19 @@ def _score_candidates_from_history(eligible, candidates, role):
 
 
 def _shared_latencies(eligible):
-    """Use timings only when the lanes tied on score all have matched measurements."""
+    """Use timings only when the lanes tied on pre-latency sort keys all have matched measurements."""
     tied = defaultdict(list)
     for item in eligible:
-        tied[item["score"]].append(item)
+        key = (
+            item.get("same_family", False),
+            item.get("deprioritized", False),
+            item.get("stale", False),
+            item.get("headroom"),
+            item["score"],
+        )
+        tied[key].append(item)
 
-    for score, items in tied.items():
+    for (*_, score), items in tied.items():
         cohorts = {
             (item["latency_cohort"], item.get("latency_sources", ()))
             for item in items
@@ -852,6 +859,7 @@ def resolve_lanes(
 
     if authorized_lanes is None:
         warnings.append("No explicit authorized lanes found in the project profile; ranking is advisory.")
+    matched_authorized_keys = set()
 
     for cand in candidates:
         pool = cand["pool"]
@@ -859,6 +867,8 @@ def resolve_lanes(
         score = role_score(cand, role)
         key = lane_key(cand["model"], cand["effort"], pool)
         lane = authorized_lanes.get(key) if authorized_lanes is not None else None
+        if lane is not None:
+            matched_authorized_keys.add(key)
 
         exclusion_reasons = []
         if authorized_lanes is not None and (lane is None or role not in lane["roles"]):
@@ -943,6 +953,14 @@ def resolve_lanes(
                 "_candidate": cand,
             }
         )
+
+    if authorized_lanes is not None:
+        for key, lane in authorized_lanes.items():
+            if key not in matched_authorized_keys:
+                warnings.append(
+                    f"Authorized lane '{lane['model']}' ({lane['effort']}) in pool '{lane['pool']}' "
+                    "has no measurements in model-measurements.md."
+                )
 
     if state_loaded:
         untracked_pools = sorted({item["pool"] for item in eligible if item["pool_state"] == "untracked"})
@@ -1108,10 +1126,12 @@ def render_markdown(report):
         f"- **Role:** `{report['role']}` ({report['scoring_method']})",
         f"- **Equivalence band:** within ±{report['equivalence_threshold_points']:g} pts of {anchor_label} `{_fmt_num(report['top_score'])}`",
     ]
-    if report["score_cohort"] is not None:
+    if report["score_basis"] == "workspace" and report["score_cohort"] is not None:
         lines.append(f"- **Score cohort:** live `{report['score_cohort']}` (matched normalized points)")
     elif report["score_basis"] == "historical":
         lines.append("- **Score cohort:** historical snapshot")
+    elif report["score_cohort"] is not None:
+        lines.append(f"- **Score cohort:** no comparable score available for `{report['score_cohort']}`")
     else:
         lines.append("- **Score cohort:** no comparable score available")
     if report["author_family"]:

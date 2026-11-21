@@ -16,7 +16,7 @@
 - **Subscription quota balancing & handoffs:** Balances rolling 5-hour and weekly windows across Claude, ChatGPT/Codex, Gemini/Antigravity and optional DeepSeek API, resuming from `.orchestration/` checkpoints when a window closes.
 - **Independent cross-family review:** Verifies deliverables with a fresh reviewer from another model family — without exposing the author's reasoning — and adds an extra verification step whenever a fallback drops a tier.
 
-**What this is & prerequisites:** These are portable Markdown Agent Skills plus zero-dependency Python 3.9+ helper scripts for benchmark tracking — not an MCP server, proxy, or background daemon. You can start with 1–2 authorized model pools and add more subscriptions or APIs later; any unconfigured lane falls back automatically to what you have.
+**What this is & prerequisites:** These are portable Markdown Agent Skills plus zero-dependency Python 3.9+ helper scripts for benchmark tracking — not an MCP server, proxy, or background daemon. You can start with 1–2 authorized model pools and add more subscriptions or APIs later; record your authorized lanes in `.orchestration/project-profile.md`, and any unconfigured lane is skipped in favor of your authorized pools.
 
 [Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [Resolve lanes offline](examples/first-run.md#resolve-lanes-deterministically-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
 
@@ -96,7 +96,7 @@ flowchart LR
 | [Mythos/Fable](skills/fable-orchestration/) | `/fable-orchestration` | Claude Code (`Mythos` or `Fable`) | Frontier Claude coordinator with scarce allowance; offloads routine execution to Codex and Sonnet | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Everyday Claude Code coordinator, or failover when Mythos/Fable allowance is spent | `.claude/skills/` |
 
-1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep both folder names unchanged.
+1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep all skill folder names unchanged.
 2. Copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from your repository instructions (`CLAUDE.md` or `AGENTS.md`). List authorized runners, data scopes, budget, writable paths and verification commands. Edit the profile's machine-readable lane block to match the model IDs, effort levels, pools and roles you approve in your client.
 3. Invoke the coordinator using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). Start with a bounded deliverable, one eligible worker and a verifiable acceptance check.
 
@@ -153,7 +153,7 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 - **Abonelik kota dengeleme ve devir:** Claude, ChatGPT/Codex, Gemini/Antigravity ve isteğe bağlı DeepSeek API havuzlarındaki 5 saatlik ve haftalık pencereleri dengeler; pencere dolduğunda `.orchestration/` devir kayıtlarıyla kesintisiz devam eder.
 - **Farklı model ailesinden bağımsız doğrulama:** Çıktıyı yazarın gerekçesini göstermeden başka bir model ailesinden yeni bir inceleyiciye doğrulattırır; yedek modelde kademe düşerse otomatik ek doğrulama adımı uygular.
 
-**Bu nedir ve gereksinimler:** Bu depo, bir MCP sunucusu, vekil (proxy) veya arka plan servisi değil; taşınabilir Markdown Agent Skill’leri ile benchmark takibi için sıfır bağımlılıklı Python 3.9+ yardımcı betiklerinden oluşur. 1–2 yetkili model havuzuyla başlayıp daha sonra yeni abonelikler veya API’ler ekleyebilirsin; yapılandırılmamış her hat otomatik olarak mevcut yedeğe yönlendirilir.
+**Bu nedir ve gereksinimler:** Bu depo, bir MCP sunucusu, vekil (proxy) veya arka plan servisi değil; taşınabilir Markdown Agent Skill’leri ile benchmark takibi için sıfır bağımlılıklı Python 3.9+ yardımcı betiklerinden oluşur. 1–2 yetkili model havuzuyla başlayıp daha sonra yeni abonelikler veya API’ler ekleyebilirsin; yetkili hatlarını `.orchestration/project-profile.md` dosyasına kaydettiğinde yapılandırılmamış her hat atlanarak yetkili havuzların kullanılır.
 
 [API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Çevrimdışı hat seçimi](examples/first-run.md#resolve-lanes-deterministically-offline) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
 
@@ -233,7 +233,7 @@ flowchart LR
 | [Mythos/Fable](skills/fable-orchestration/) | `/fable-orchestration` | Claude Code (`Mythos` veya `Fable`) | Kısıtlı kotalı en üst düzey Claude koordinatörü; rutin uygulamayı Codex ve Sonnet’e devreder | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Günlük Claude Code koordinatörü veya Mythos/Fable kotası dolduğunda devralma seçeneği | `.claude/skills/` |
 
-1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Her iki klasör adını da değiştirme.
+1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Tüm skill klasör adlarını olduğu gibi koru.
 2. Koordinatör klasöründeki `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyala ve depo talimatlarından (`CLAUDE.md` veya `AGENTS.md`) bu dosyaya referans ver. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt. Profildeki JSON bloğunu istemcinde doğruladığın ve onayladığın model kimlikleri, efor seviyeleri, havuzlar ve rollerle doldur.
 3. Koordinatörü yukarıdaki **Komut** sütunundaki adla çağır (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Kapsamı belli, tek bir uygun ajana verilebilen ve ölçülebilir kabul kriteri olan bir işle başla.
 

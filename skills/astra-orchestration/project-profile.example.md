@@ -13,7 +13,7 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | --- | --- |
 | Project instruction files | `AGENTS.md`, `CONTRIBUTING.md` |
 | Manager | `gpt-6.2-astra` at `medium` effort via Codex (`codex -m gpt-6.2-astra -c model_reasoning_effort=medium`) |
-| Authorized workers | 1) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`, confirm exact ID in client) via `claude -p`, read/write code, restricted data allowed.<br>2) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed. *(Add Gemini/Antigravity or DeepSeek lanes here if authorized.)* |
+| Authorized workers | 1) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`) and `Claude Sonnet 5.5` (`high`, confirm exact IDs in client) via `claude -p`, read/write code, restricted data allowed.<br>2) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed. *(Add Gemini/Antigravity or DeepSeek lanes here if authorized.)* |
 | Default execution | Claude Opus (`medium` via `claude -p`) first to preserve Codex headroom, then Codex `gpt-6.2-sol` (`high` via `codex exec`) as overflow/fallback |
 | Measurement data | `.orchestration/model-measurements.md` (refresh via `$update-orchestration-skills`). Override: require verified coding scores on the same cohort before swapping primary implementation lane. |
 | Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` reviews Claude edits; Claude Opus `high` reviews Codex edits). Same-family fallback allowed only with explicit `same-family review` label. |
@@ -49,8 +49,9 @@ authorizes zero workers.
 ```json
 [
   {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
-  {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "review"], "restricted_data": true},
+  {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "reasoning", "review"], "restricted_data": true},
+  {"model": "claude-sonnet-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
   {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding", "review"]},
-  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["coding"]}
+  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["reasoning"]}
 ]
 ```

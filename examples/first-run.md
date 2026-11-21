@@ -45,8 +45,13 @@ python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
 What the output demonstrates:
 
 - **Coding:** Astra manages this example project. The profile's authorization
-  block allows the specified Opus and Sol efforts as workers. The fixture
-  shows Codex above the 85% weekly move threshold.
+  block allows the specified Opus, Sonnet and Sol efforts as workers (with
+  `gpt-6.2-sol` `xhigh` reserved for `--role reasoning`). For `--role coding`,
+  `gpt-6.2-sol` (`high`, score `82`) and `claude-opus-5-5` (`high`, score `81`)
+  are within the ±3-point equivalence band (`equivalent`), and because Codex is
+  at `87%` weekly usage (above the `85%` move threshold -> `deprioritized`),
+  `resolve_lanes.py` recommends healthy `claude-opus-5-5 (high)` (`42%`
+  headroom) first.
 - **Cross-family review:** Opus is authorized for review outside the
   author's OpenAI family. The authorized Sol reviewer is flagged
   `same-family`.
@@ -91,4 +96,4 @@ Use the [workflow templates](../skills/sol-orchestration/workflow-templates.md) 
 
 Yukarıdaki [çevrimdışı komutu](#preview-model-data-offline) Git ve Python 3.9+ ile çalıştırabilirsin. `awk` filtresi yalnızca canlı çalışma alanı tablolarını gösterir; boru (`|`) kısmını kaldırırsan üstte tarihsel arşiv, altta JSON gözlemleriyle birlikte tam çıktıyı görebilirsin. Doğrulanmamış testler `-` görünür; değerler gösterim amaçlıdır.
 
-[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz haftalık taşıma eşiğine (%85) ulaşınca kalan iş yetkili ikinci havuza aktarılır. [Çevrimdışı hat çözümleme](#resolve-lanes-deterministically-offline) bölümündeki `resolve_lanes.py` komutları bu eşik ve çapraz aile inceleme sıralamasını örnek `provider-state.json` üzerinde doğrudan gösterir. `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.
+[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz haftalık taşıma eşiğine (%85) ulaşınca kalan iş yetkili ikinci havuza aktarılır. [Çevrimdışı hat çözümleme](#resolve-lanes-deterministically-offline) bölümündeki `resolve_lanes.py` komutları bu eşik ve çapraz aile inceleme sıralamasını örnek `provider-state.json` üzerinde doğrudan gösterir: `--role coding` için `gpt-6.2-sol` (`high`, skor `82`) ile `claude-opus-5-5` (`high`, skor `81`) ±3 puanlık eşdeğerlik bandında (`equivalent`) yer alır ve Codex haftalık `%87` kullanımla (`%85` taşıma eşiğinin üzerinde -> `deprioritized`) olduğu için `resolve_lanes.py` ilk sırada sağlıklı `claude-opus-5-5 (high)` (`%42` kalan kota) hattını önerir. `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.
