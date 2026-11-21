@@ -10,6 +10,25 @@ to assign work, `read_board` / `swarm_wait` to collect results, and `swarm{actio
 to close finished workers before posting an `@`-free `[done]` closeout. Do not
 spawn writers with `inherit` when modifying overlapping files.
 
+### CLI installation and login
+
+Before authorizing worker pools on a fresh setup, check which CLIs are installed and signed in, ask the operator which pools they want to enable, install missing wanted CLIs **only with explicit operator approval**, and pause for interactive sign-in in the operator's terminal before re-verifying auth:
+
+- **Claude Code (`claude`)**
+  - Detect & check auth: `command -v claude` and `CI=true claude auth status --text`
+  - Install (with approval): `npm install -g @anthropic-ai/claude-code`
+  - Sign in (user terminal): run `claude` then `/login` (or `claude auth login`)
+- **Codex (`codex`)**
+  - Detect & check auth: `command -v codex` and `codex login status`
+  - Install (with approval): `npm install -g @openai/codex`
+  - Sign in (user terminal): `codex login` (or `codex login --device-auth` over SSH)
+- **Antigravity (`agy`)**
+  - Detect & check CLI: `command -v agy` and `agy --help` (plus active Antigravity session)
+  - Install (with approval): macOS/Linux `curl -fsSL https://antigravity.google/cli/install.sh | bash` · Windows PowerShell `irm https://antigravity.google/cli/install.ps1 | iex`
+  - Sign in (user terminal): `agy auth login` or launch `agy` (`agy auth login --no-browser` over SSH)
+
+Never ask the operator to paste API keys, OAuth tokens, or passwords into chat. Only authorize verified, signed-in, operator-approved lanes in `.orchestration/project-profile.md`.
+
 ### Claude Code subscription preflight
 
 A headless Claude lane is available only after you verify that the worker will

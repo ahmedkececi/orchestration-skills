@@ -97,7 +97,7 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Everyday Claude Code coordinator, or failover when Mythos/Fable allowance is spent | `.claude/skills/` |
 
 1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep all skill folder names unchanged.
-2. Start a chat in your project root using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). On a fresh repository where `.orchestration/` does not exist yet, the coordinator automatically asks you to confirm your authorized pools/runners, writable paths, and test commands, then creates `.orchestration/project-profile.md` (including its `<!-- orchestration-lanes:v1 -->` block) and `.orchestration/provider-state.json` before starting your task. *(If you prefer manual setup first, copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from `CLAUDE.md` or `AGENTS.md`.)*
+2. Start a chat in your project root using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). On a fresh repository where `.orchestration/` does not exist yet, the coordinator automatically checks which worker CLIs (`claude`, `codex`, `agy`) are installed and signed in, asks which pools you want to enable, helps you install (with your approval) and sign in to any missing or signed-out CLI you want to use, and then creates `.orchestration/project-profile.md` (with its `<!-- orchestration-lanes:v1 -->` block) and `.orchestration/provider-state.json` before starting your task. *(If you prefer manual setup first, copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from `CLAUDE.md` or `AGENTS.md`.)*
 
 #### What to type in chat
 
@@ -105,17 +105,41 @@ Right after installing, open chat in your project folder and paste the command f
 
 ```text
 # Claude Code — first run or start a task
-/opus-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
+/opus-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
 
 # Codex — first run or start a task
-$sol-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
+$sol-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
 
 # Antigravity — first run or start a task
-/neon-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
+/neon-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
 
 # Any client — resume after a quota handoff (swap command for your client)
 $sol-orchestration Read .orchestration/orchestration-checkpoint.md and .orchestration/provider-state.json, run git status --short, and continue the remaining units.
 ```
+
+<details>
+<summary>CLI install &amp; sign-in quick reference (optional — your coordinator also checks these on first run)</summary>
+
+```sh
+# 1. Check installed binaries & sign-in status
+command -v claude codex agy
+CI=true claude auth status --text
+codex login status
+agy --help
+
+# 2. Install only the CLIs you plan to use
+npm install -g @anthropic-ai/claude-code                             # Claude Code
+npm install -g @openai/codex                                         # Codex
+curl -fsSL https://antigravity.google/cli/install.sh | bash          # Antigravity (macOS/Linux)
+# Windows PowerShell: irm https://antigravity.google/cli/install.ps1 | iex
+
+# 3. Sign in interactively in your terminal (never paste tokens into chat)
+claude             # then run /login (or: claude auth login)
+codex login        # or: codex login --device-auth
+agy auth login     # or launch: agy (use --no-browser over SSH)
+```
+
+</details>
 
 See more ready-to-paste examples (including setup-only preflight and Turkish prompts) in [examples/first-run.md](examples/first-run.md#what-to-type-in-chat).
 
@@ -253,7 +277,7 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Günlük Claude Code koordinatörü veya Mythos/Fable kotası dolduğunda devralma seçeneği | `.claude/skills/` |
 
 1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Tüm skill klasör adlarını olduğu gibi koru.
-2. Proje dizininde istemcini aç ve yukarıdaki **Komut** sütunundaki adla sohbeti başlat (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Çalışma alanında `.orchestration/` henüz yoksa koordinatör durmak yerine senden yetkili havuzları/CLI’ları, yazılabilir yolları ve test komutlarını onaylamanı ister; `.orchestration/project-profile.md` (JSON yetki bloğuyla) ve `.orchestration/provider-state.json` dosyalarını kendisi oluşturup görevine başlar. *(İstersen önceden elle de `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyalayıp `CLAUDE.md` veya `AGENTS.md` içinden referans verebilirsin.)*
+2. Proje dizininde istemcini aç ve yukarıdaki **Komut** sütunundaki adla sohbeti başlat (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Çalışma alanında `.orchestration/` henüz yoksa koordinatör durmak yerine önce hangi çalışan CLI’ların (`claude`, `codex`, `agy`) kurulu ve oturum açık olduğunu kontrol eder, hangi havuzları kullanmak istediğini sorar, eksik veya oturumu kapalı olanlar için (onayınla) kurulum ve oturum açma adımlarında seni yönlendirir; ardından `.orchestration/project-profile.md` (JSON yetki bloğuyla) ve `.orchestration/provider-state.json` dosyalarını oluşturup görevine başlar. *(İstersen önceden elle de `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyalayıp `CLAUDE.md` veya `AGENTS.md` içinden referans verebilirsin.)*
 
 #### Chate ne yazarak başlarsın?
 
@@ -261,17 +285,41 @@ Kurulumdan hemen sonra elle dosya kopyalamaya gerek kalmadan şu mesajlardan bir
 
 ```text
 # Claude Code — ilk kurulum veya göreve başla
-/opus-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+/opus-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
 # Codex — ilk kurulum veya göreve başla
-$sol-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+$sol-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
 # Antigravity — ilk kurulum veya göreve başla
-/neon-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+/neon-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
 # Kota devri sonrası başka istemciden devam et (komutu istemcine göre değiştir)
 $sol-orchestration .orchestration/orchestration-checkpoint.md ve .orchestration/provider-state.json dosyalarını oku, git status --short çalıştır ve kalan iş birimlerinden devam et.
 ```
+
+<details>
+<summary>CLI kurulum ve oturum açma hızlı başvuru (isteğe bağlı — koordinatör ilk çalıştırmada bunları da kontrol eder)</summary>
+
+```sh
+# 1. Kurulu CLI'ları ve oturum durumunu kontrol et
+command -v claude codex agy
+CI=true claude auth status --text
+codex login status
+agy --help
+
+# 2. Yalnızca kullanmak istediğin CLI'ları kur
+npm install -g @anthropic-ai/claude-code                             # Claude Code
+npm install -g @openai/codex                                         # Codex
+curl -fsSL https://antigravity.google/cli/install.sh | bash          # Antigravity (macOS/Linux)
+# Windows PowerShell: irm https://antigravity.google/cli/install.ps1 | iex
+
+# 3. Kendi terminalinde etkileşimli oturum aç (sohbete asla anahtar/token yapıştırma)
+claude             # ardından /login yaz (veya: claude auth login)
+codex login        # veya: codex login --device-auth
+agy auth login     # veya başlat: agy (SSH üzerinde --no-browser kullan)
+```
+
+</details>
 
 Yalnızca kurulum ön kontrolü ve ek örnek komutlar için [examples/first-run.md](examples/first-run.md#chate-ne-yazarak-başlarsın) dosyasına bakabilirsin.
 
