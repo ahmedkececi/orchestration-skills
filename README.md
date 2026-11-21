@@ -1,5 +1,10 @@
 # Ultimate Orchestration Skills
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Clients](https://img.shields.io/badge/Clients-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-6366f1)](#choose-a-coordinator)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776ab)](#refresh-model-data-on-demand)
+[![GitHub Stars](https://img.shields.io/github/stars/ahmedkececi/ultimate-orchestration-skills?style=social)](https://github.com/ahmedkececi/ultimate-orchestration-skills)
+
 [English](#english) · [Türkçe](#türkçe) · [Offline demo](examples/first-run.md) · [Contributing](CONTRIBUTING.md)
 
 ## English
@@ -23,6 +28,19 @@ npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --c
 ```
 
 For Antigravity, another coordinator, or an install without Node.js, use the manual instructions below. [Skills CLI options](https://github.com/vercel-labs/skills#usage)
+
+### How it works
+
+```mermaid
+flowchart LR
+    C["Coordinator\n(Opus / Sol / Astra / Neon / Fable)"] --> R{"Route by task,\npermissions & quota"}
+    R -->|"Capacity available"| W["Authorized Worker"]
+    R -->|"Quota window closes"| H["Write Checkpoint\n(.orchestration/)"]
+    H --> C2["New Coordinator\nresumes from artifact"]
+    W --> REV["Independent Reviewer\n(other model family)"]
+    REV -->|"Passes checks"| OK["Accept & Merge"]
+    REV -->|"Finds issues"| R
+```
 
 ### What makes it different
 
@@ -74,6 +92,19 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 ### Hızlı kurulum
 
 Proje dizininde yukarıdaki [kurulum bölümünden](#quick-install) Codex veya Claude Code komutunu seç. Komut seçili koordinatörü ve ölçüm güncelleyicisini projeye kopyalar. Antigravity, farklı bir koordinatör veya Node.js olmadan kurulum için aşağıdaki adımları kullan.
+
+### Nasıl çalışır?
+
+```mermaid
+flowchart LR
+    C["Koordinatör\n(Opus / Sol / Astra / Neon / Fable)"] --> R{"Görev, yetki ve\nkota kontrolü"}
+    R -->|"Kota müsait"| W["Yetkili Ajan"]
+    R -->|"Kota doldu"| H["Devir Kaydı Yaz\n(.orchestration/)"]
+    H --> C2["Yeni Koordinatör\nkaldığı yerden devam eder"]
+    W --> REV["Bağımsız İnceleyici\n(farklı model ailesi)"]
+    REV -->|"Kontroller geçti"| OK["Kabul Et"]
+    REV -->|"Eksik bulundu"| R
+```
 
 ### Neyi farklı yapıyor?
 
