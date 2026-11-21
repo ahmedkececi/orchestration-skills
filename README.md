@@ -10,7 +10,11 @@
 
 ## English
 
-**Keep your agents working when a model hits its quota.** Add quota-aware routing, independent review and restartable handoffs to Claude Code, Codex or Antigravity. The presets guide your coordinator using the model runners and permissions you configure.
+**Keep your agents working when a model hits its quota.** Add capability-based routing, quota balancing, independent review and restartable handoffs to Claude Code, Codex or Antigravity. The presets guide your coordinator using the model runners and permissions you configure.
+
+- **Right model for each unit:** Routes every task to the most capable and efficient model across four separate benchmark profiles (coding, reasoning, factual accuracy, knowledge/PDF work) using ±3-point equivalence, latency, input type and permissions.
+- **Subscription quota balancing & handoffs:** Balances rolling 5-hour and weekly windows across Claude, ChatGPT/Codex, Gemini/Antigravity and optional DeepSeek API, resuming from `.orchestration/` checkpoints when a window closes.
+- **Independent cross-family review:** Verifies deliverables with a fresh reviewer from another model family — without exposing the author's reasoning — and adds an extra verification step whenever a fallback drops a tier.
 
 **What this is & prerequisites:** These are portable Markdown Agent Skills plus zero-dependency Python 3.9+ helper scripts for benchmark tracking — not an MCP server, proxy, or background daemon. You can start with 1–2 authorized model pools and add more subscriptions or APIs later; any unconfigured lane falls back automatically to what you have.
 
@@ -66,6 +70,15 @@ flowchart LR
 | Make reviews independent | Give a fresh reviewer from another model family the artifact and acceptance checks. The coordinator sees both the result and its limits before accepting it. |
 | Resume from artifacts | The handoff records ownership, accepted decisions, remaining units and the next check. A new coordinator can pick up from the checkpoint when a quota window closes. |
 | Refresh without waiting for a release | The updater verifies model releases and measurements from their sources and refreshes the current workspace. The next routing decision can use that data immediately. |
+
+### Why this instead of a framework or proxy?
+
+| Approach | Built for | Trade-off compared to Ultimate Orchestration Skills |
+| --- | --- | --- |
+| **Agent frameworks** (`LangGraph`, `CrewAI`) | Building custom multi-agent backend apps | Requires SDKs, orchestration code, state storage and API keys instead of working inside your existing Claude Code, Codex or Antigravity CLI sessions. |
+| **API routers / proxies** (`OpenRouter`, `LiteLLM`) | Pay-per-token API routing and failover | Optimizes token price behind an external proxy rather than rolling 5-hour/weekly subscription allowances, cross-family code review or client-to-client checkpoint handoffs. |
+| **Single-client subagents** (default `Claude Code` / `Codex`) | Parallel work within one provider pool | Shares one quota pool and usually reviews with the same model family; stalls when that pool hits its cap. |
+| **Ultimate Orchestration Skills** | Daily engineering across existing subscriptions | Zero infrastructure, zero proxy, routes each unit to the strongest efficient model across pools, verifies cross-family, hands off across clients via files and refreshes benchmarks live. |
 
 ### Choose a coordinator
 
@@ -128,7 +141,11 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 
 ## Türkçe
 
-**Bir modelin kotası dolduğunda iş devam etsin.** Claude Code, Codex veya Antigravity’de kota durumuna göre görev dağıt, bağımsız inceleme yap ve yarım kalan işi dosyalardan devret. Hazır profiller, projene tanımladığın model çalıştırıcılarını ve yetkileri kullanır.
+**Bir modelin kotası dolduğunda iş devam etsin.** Claude Code, Codex veya Antigravity’de işe göre en verimli modele yönlendirme, kota dengeleme, bağımsız inceleme ve dosyadan devir ekle. Hazır profiller, projene tanımladığın model çalıştırıcılarını ve yetkileri kullanır.
+
+- **Doğru işe en yetenekli ve verimli model:** Her iş birimini dört ayrı ölçüm profiline (kodlama, muhakeme, olgusal doğruluk, bilgi/PDF işi), ±3 puan eşdeğerlik kuralına, süreye, girdi türüne ve yetkilere göre en uygun modele yönlendirir.
+- **Abonelik kota dengeleme ve devir:** Claude, ChatGPT/Codex, Gemini/Antigravity ve isteğe bağlı DeepSeek API havuzlarındaki 5 saatlik ve haftalık pencereleri dengeler; pencere dolduğunda `.orchestration/` devir kayıtlarıyla kesintisiz devam eder.
+- **Farklı model ailesinden bağımsız doğrulama:** Çıktıyı yazarın gerekçesini göstermeden başka bir model ailesinden yeni bir inceleyiciye doğrulattırır; yedek modelde kademe düşerse otomatik ek doğrulama adımı uygular.
 
 **Bu nedir ve gereksinimler:** Bu depo, bir MCP sunucusu, vekil (proxy) veya arka plan servisi değil; taşınabilir Markdown Agent Skill’leri ile benchmark takibi için sıfır bağımlılıklı Python 3.9+ yardımcı betiklerinden oluşur. 1–2 yetkili model havuzuyla başlayıp daha sonra yeni abonelikler veya API’ler ekleyebilirsin; yapılandırılmamış her hat otomatik olarak mevcut yedeğe yönlendirilir.
 
@@ -184,6 +201,15 @@ flowchart LR
 | Bağımsız inceleme | Başka bir model ailesinden yeni bir inceleyiciye çıktıyı ve kabul ölçütlerini verirsin. Koordinatör işi kabul etmeden önce sonucu ve doğrulamanın sınırlarını görür. |
 | Dosyalardan devam etme | Devir kaydı, sorumluları, alınan kararları, kalan işleri ve sıradaki kontrolü içerir. Kota penceresi dolduğunda yeni koordinatör kaldığı yerden devam edebilir. |
 | Yeni sürüm beklemeden güncelleme | Yenileme skill’i yeni çıkan modelleri ve ölçümlerini kaynaklarından doğrular. Bir sonraki yönlendirme kararı, çalışma alanındaki güncel veriyi kullanabilir. |
+
+### Neden bir framework veya proxy yerine bu?
+
+| Yaklaşım | Ne için tasarlandı | Ultimate Orchestration Skills’e göre farkı |
+| --- | --- | --- |
+| **Ajan framework’leri** (`LangGraph`, `CrewAI`) | Özel çoklu ajan arka uç uygulamaları yazmak | Mevcut Claude Code, Codex veya Antigravity oturumlarınla doğrudan çalışmak yerine SDK, orkestrasyon kodu, durum veritabanı ve API anahtarı gerektirir. |
+| **API yönlendirici / proxy’ler** (`OpenRouter`, `LiteLLM`) | Token başına ücretli API yönlendirme ve yedekleme | Dönen 5 saatlik/haftalık abonelik kotaları, çapraz aile kod incelemesi veya istemciler arası dosya devri yerine harici bir proxy arkasında token maliyetini optimize eder. |
+| **Tek istemcili alt ajanlar** (varsayılan `Claude Code` / `Codex`) | Tek sağlayıcı havuzu içinde paralel çalışma | Tek kota havuzunu paylaşır ve genelde aynı model ailesiyle inceleme yapar; o havuz dolduğunda akış durur. |
+| **Ultimate Orchestration Skills** | Mevcut aboneliklerle günlük mühendislik akışı | Sıfır altyapı, sıfır proxy; her birimi havuzlar arasında en yetenekli ve verimli modele yönlendirir, farklı aileyle doğrular, dosyadan başka istemciye devreder ve benchmark’ları canlı günceller. |
 
 ### Koordinatör seç
 
