@@ -1,0 +1,62 @@
+{
+  "models": [
+    {
+      "model": "demo-primary",
+      "provider": "demo-pool-a",
+      "released": null,
+      "url": "https://example.com/"
+    },
+    {
+      "model": "demo-backup",
+      "provider": "demo-pool-b",
+      "released": null,
+      "url": "https://example.com/"
+    }
+  ],
+  "measurements": [
+    {
+      "model": "demo-primary",
+      "effort": "medium",
+      "metric": "frontiercode-aa-2.0",
+      "cohort": "demo-fixture",
+      "unit": "percent",
+      "source": "demo-fixture",
+      "date": "2026-11-21",
+      "value": 72,
+      "url": "https://example.com/"
+    },
+    {
+      "model": "demo-primary",
+      "effort": "medium",
+      "metric": "terminal-bench-4.0",
+      "cohort": "demo-fixture",
+      "unit": "percent",
+      "source": "demo-fixture",
+      "date": "2026-11-21",
+      "value": 61,
+      "url": "https://example.com/"
+    },
+    {
+      "model": "demo-backup",
+      "effort": "medium",
+      "metric": "frontiercode-aa-2.0",
+      "cohort": "demo-fixture",
+      "unit": "percent",
+      "source": "demo-fixture",
+      "date": "2026-11-21",
+      "value": 75,
+      "url": "https://example.com/"
+    },
+    {
+      "model": "demo-backup",
+      "effort": "medium",
+      "metric": "terminal-bench-4.0",
+      "cohort": "demo-fixture",
+      "unit": "percent",
+      "source": "demo-fixture",
+      "date": "2026-11-21",
+      "value": 63,
+      "url": "https://example.com/"
+    }
+  ]
+}

@@ -1,10 +1,28 @@
 # Ultimate Orchestration Skills
 
-[English](#english) · [Türkçe](#türkçe)
+[English](#english) · [Türkçe](#türkçe) · [Offline demo](examples/first-run.md) · [Contributing](CONTRIBUTING.md)
 
 ## English
 
-**Keep the work moving when a model hits its limit.** Ultimate Orchestration Skills gives a coordinator in Claude Code, Codex or Antigravity a way to brief workers, check their results and transfer unfinished work across authorized model pools.
+**Keep your agents working when a model hits its quota.** Add quota-aware routing, independent review and restartable handoffs to Claude Code, Codex or Antigravity. The presets guide your coordinator using the model runners and permissions you configure.
+
+[Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
+
+### Quick install
+
+From your project, choose the command for your client. This copies just the coordinator and the measurement updater into the project. The optional provider skill can be added to the same install by appending `--skill add-provider-orchestration-skills`.
+
+```sh
+# Codex
+npx skills add ahmedkececi/ultimate-orchestration-skills --agent codex --copy \
+  --skill sol-orchestration --skill update-orchestration-skills
+
+# Claude Code
+npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --copy \
+  --skill opus-orchestration --skill update-orchestration-skills
+```
+
+For Antigravity, another coordinator, or an install without Node.js, use the manual instructions below. [Skills CLI options](https://github.com/vercel-labs/skills#usage)
 
 ### What makes it different
 
@@ -26,7 +44,7 @@
 | [Mythos/Fable](skills/fable-orchestration/) | Either Mythos or Fable in Claude Code | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | Opus in Claude Code | `.claude/skills/` |
 
-1. Copy the chosen skill folder and the [update skill folder](skills/update-orchestration-skills/) into the project's location above. Keep both folder names.
+1. For manual installation, copy the chosen skill folder and the [update skill folder](skills/update-orchestration-skills/) into the project's location above. Keep both folder names.
 2. Fill in the project profile example from the coordinator folder. List authorized runners, data scopes, budget, writable paths and verification commands. Confirm model IDs and effort levels in your client.
 3. Invoke the coordinator skill by folder name, using `/<name>` in Claude Code or Antigravity and `$<name>` in Codex. Start with a bounded deliverable, one eligible worker and a verifiable acceptance check.
 
@@ -45,11 +63,17 @@ The [historical snapshot](skills/update-orchestration-skills/references/model-me
 
 Install [add-provider-orchestration-skills](skills/add-provider-orchestration-skills/) alongside the updater. Run `/add-provider-orchestration-skills PROVIDER` in Claude Code or Antigravity, or `$add-provider-orchestration-skills PROVIDER` in Codex. The agent checks the provider's public catalog and how to call its models. It asks which models you want, then looks up the full benchmark suite for your choices. The provider's sources and setup details go in `.orchestration/provider-catalogs.json`. Future catalog checks include that provider. The project profile still controls which runners can receive work.
 
-Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://developers.openai.com/blog/eval-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
+Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
 
 ## Türkçe
 
-**Bir model kotasına ulaştığında iş akışı devam etsin.** Ultimate Orchestration Skills, Claude Code, Codex veya Antigravity’deki koordinatörün görevi alt ajanlara vermesini, sonuçları doğrulamasını ve yarım kalan işi yetkilendirilmiş başka model havuzlarına devretmesini sağlar.
+**Bir modelin kotası dolduğunda iş devam etsin.** Claude Code, Codex veya Antigravity’de kota durumuna göre görev dağıt, bağımsız inceleme yap ve yarım kalan işi dosyalardan devret. Hazır profiller, projene tanımladığın model çalıştırıcılarını ve yetkileri kullanır.
+
+[API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
+
+### Hızlı kurulum
+
+Proje dizininde yukarıdaki [kurulum bölümünden](#quick-install) Codex veya Claude Code komutunu seç. Komut seçili koordinatörü ve ölçüm güncelleyicisini projeye kopyalar. Antigravity, farklı bir koordinatör veya Node.js olmadan kurulum için aşağıdaki adımları kullan.
 
 ### Neyi farklı yapıyor?
 
@@ -71,7 +95,7 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 | [Mythos/Fable](skills/fable-orchestration/) | Claude Code’da Mythos veya Fable | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | Claude Code’da Opus | `.claude/skills/` |
 
-1. Seçtiğin skill klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) tablodaki proje dizinine kopyala. Klasör adlarını koru.
+1. Elle kurulumda, seçtiğin skill klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) tablodaki proje dizinine kopyala. Klasör adlarını koru.
 2. Koordinatör klasöründeki örnek proje profilini doldur. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt. Model kimliklerini ve efor seviyelerini istemcinde doğrula.
 3. Koordinatör skill’ini klasör adıyla çağır. Claude Code ve Antigravity’de `/<ad>`, Codex’te `$<ad>` kullan. Kapsamı belli, tek bir uygun ajana verilebilen ve ölçülebilir kabul kriteri olan bir işle başla.
 
@@ -90,7 +114,7 @@ Güncelleme, her model ve efor seviyesi için arşivdeki testlerin tamamını ar
 
 [add-provider-orchestration-skills](skills/add-provider-orchestration-skills/) klasörünü güncelleyicinin yanına kur. Claude Code veya Antigravity’de `/add-provider-orchestration-skills SAĞLAYICI`, Codex’te `$add-provider-orchestration-skills SAĞLAYICI` yaz. Ajan resmî kataloğu ve modellerin nasıl çağrıldığını araştırır. Hangilerini eklemek istediğini sorar, ardından seçtiklerin için benchmark listesinin tamamını kontrol eder. Sağlayıcının kaynaklarını ve kurulum bilgilerini `.orchestration/provider-catalogs.json` dosyasına kaydeder. Sonraki katalog taramaları bu sağlayıcıyı da içerir. Hangi çalıştırıcılara görev verilebileceğini proje profili belirler.
 
-İstemci belgeleri [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://developers.openai.com/blog/eval-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
+İstemci belgeleri [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
 
 ## License · Lisans
 
