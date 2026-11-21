@@ -1,20 +1,32 @@
 ---
 name: add-provider-orchestration-skills
-description: Research a named model provider's official catalog and usage documentation and register it for local orchestration model discovery.
+description: List a provider's documented models, ask which to add, and register the provider and selected model benchmarks in the user's project.
 ---
 
 # Add an orchestration provider
 
-Invoke `/add-provider-orchestration-skills PROVIDER` in Claude Code or Antigravity, or `$add-provider-orchestration-skills PROVIDER` in Codex. A provider named in the user's next message is also valid. Ask which provider if none was supplied or the name is ambiguous.
+Invoke `/add-provider-orchestration-skills PROVIDER` in Claude Code or Antigravity, or `$add-provider-orchestration-skills PROVIDER` in Codex. A provider named in the user's next message is also valid. Ask which provider if none was supplied or the name is ambiguous. Install the [update skill](../update-orchestration-skills/) alongside this skill.
 
-1. Find the provider's official documentation using live search. Open its current model catalog, dated release history, and usage guide. Verify an exact model ID and how a user would call it through a documented API endpoint, CLI or managed client. Check authentication, available effort or input modes, and any account or billing prerequisites. Keep provider docs separate from third-party evaluation results.
-2. Follow the [provider registration format](../update-orchestration-skills/references/catalog-workflow.md#register-a-provider). Record documentation links and authentication method, using an environment variable **name** if applicable. Use the desired coverage start date, or the bundled snapshot date from the catalog plan when the user leaves it open. If a required official source cannot be verified, explain the missing piece before registering.
-3. Use the helper in the adjacent [update skill](../update-orchestration-skills/) to register the provider locally. Then run `catalogs.py plan` and verify that the provider appears with the new source URLs and intended date.
+## Show the choices
 
-```sh
-python3 -B ../update-orchestration-skills/scripts/catalogs.py register --workspace /path/to/project --input provider.json
-```
+1. Use live search to open the provider's official model catalog, dated release history, and usage guide. Identify the API, CLI or managed client that serves the models. Check model availability, supported effort and inputs, authentication, billing, and any account restrictions. Give source links and flag incomplete coverage.
+2. Show a numbered list of models the provider documents as available on the relevant surface, with exact model IDs and any access conditions. If the catalog is large, group by family and include a link to the full official list. Ask **which models the user wants to add**, accepting one, several or explicit all. Any model chosen from the linked list must still be verified. A model scoped explicitly by the user already counts as a choice.
+3. End the step and wait for an explicit response. Keep the provider draft and model list in the session. Do not register the provider, write measurements, or start benchmark lookups until the selection is made. A request to register only the provider skips benchmark collection. Cancellation leaves the project as it was.
 
-Report the official source links, one documented model ID, access method, call entry point and setup prerequisites. Registration adds a discovery source to `.orchestration/provider-catalogs.json`. The project profile governs whether its models can actually receive work. Store credential references only, and leave account changes, dependency installs, paid calls and runner authorization to the corresponding user instruction.
+## Add the selection
 
-If the user also requests a named model for this provider, run the updater's single-model procedure for that model after registration. Future unnamed updates include the provider's public catalog and release history.
+1. Fill the [provider registration format](../update-orchestration-skills/references/catalog-workflow.md#register-a-provider) with the checked documentation, a supported call entry point and a credential variable name where applicable. Use the requested coverage start date or the bundled snapshot date. Stop if a required official source could not be verified.
+2. For each selected model, apply the updater's [full benchmark checklist](../update-orchestration-skills/references/collection.md#full-benchmark-checklist). Collect official model records and the checks for every documented effort into one observation file. The updater shows missing verified scores as `-`. Pass one `--model` flag for each selected canonical ID. Validate with `--preview` before registering the provider.
+
+   ```sh
+   python3 -B ../update-orchestration-skills/scripts/refresh.py --workspace /path/to/project \
+     --provider-entry provider.json --model EXACT_ID --input observations.json --preview
+   ```
+
+3. For a requested preview, show the proposed provider record and benchmark matrix. Otherwise register the provider if it is new, verify it appears in `catalogs.py plan`, then rerun the checked refresh command without `--preview` to write the selected models. For a provider-only request, run registration without the refresh step.
+
+   ```sh
+   python3 -B ../update-orchestration-skills/scripts/catalogs.py register --workspace /path/to/project --input provider.json
+   ```
+
+Report the models added, score gaps, provider documentation and setup prerequisites. Registration stores the discovery source in `.orchestration/provider-catalogs.json`. The updater stores model measurements in `.orchestration/model-measurements.md`. The project profile still governs runner authorization, credentials, private data and budget.

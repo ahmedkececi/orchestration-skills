@@ -9,7 +9,10 @@ import re
 import statistics
 
 from benchmarks import matrix, normalize_check, require_coverage
-from catalogs import official_url, read_json, registry, safe_output, valid_date, valid_url, verify_scan, workspace_path, write_atomic
+from catalogs import (
+    official_url, read_json, registry, safe_output, valid_date, valid_url,
+    validate_provider, verify_scan, workspace_path, write_atomic,
+)
 
 
 SKILL = Path(__file__).resolve().parents[1]
@@ -171,6 +174,9 @@ def read_previous(path):
 def render_audit(audit):
     status = "complete against registered sources" if audit["complete"] else "incomplete"
     lines = ["", "### Latest catalog check", "", f'{audit["checked_on"]} · Coverage {status}.']
+    if "selected_models" in audit:
+        choices = ", ".join(f"`{model}`" for model in audit["selected_models"]) or "none"
+        lines.append(f"Selected for this refresh: {choices}.")
     if audit["missing_providers"]:
         lines.append("Unchecked providers: " + ", ".join(audit["missing_providers"]) + ".")
     lines.append("")
@@ -190,23 +196,61 @@ def render_audit(audit):
     return lines
 
 
+def catalog_selection(args, providers, incoming):
+    if incoming["models"]:
+        raise ValueError("In catalog mode, model records come from the verified report.")
+    result = verify_scan(read_json(args.catalog_report), providers)
+    discovered = {row["model"]: row for row in result["models"]}
+    selected = unique_choices(args.select)
+    if discovered and not selected:
+        raise ValueError("No model selected. Show the verified model list and wait for the user's choice.")
+    if selected - discovered.keys():
+        raise ValueError("Selections are not in the verified catalog report: " + ", ".join(sorted(selected - discovered.keys())))
+    incoming["models"] = [row for model, row in discovered.items() if model in selected]
+    audit = result["audit"]
+    audit["selected_models"] = sorted(selected)
+    return audit
+
+
+def unique_choices(values):
+    choices = set(values or ())
+    if values and len(choices) != len(values):
+        raise ValueError("The same model ID was selected more than once.")
+    return choices
+
+
+def validate_named_selection(args, providers, incoming):
+    chosen = unique_choices(args.model)
+    supplied = {row["model"] for row in incoming["models"]}
+    if len(incoming["models"]) != len(chosen) or chosen != supplied:
+        raise ValueError("Supply one documented release record for every selected exact model ID, and no extra model records.")
+
+    entry = None
+    if args.provider_entry:
+        draft = validate_provider(read_json(args.provider_entry))
+        entry = providers.get(draft["id"])
+        if entry is None and not args.preview:
+            raise ValueError("Register the chosen provider before writing its measurements.")
+        entry = entry or draft
+    elif len(chosen) != 1:
+        raise ValueError("A named refresh accepts one model. Use a provider entry for multiple models from that provider.")
+
+    for model in incoming["models"]:
+        if entry is not None and entry["id"] != model["provider"]:
+            raise ValueError(f"{model['model']} is not in the chosen provider scope.")
+        provider = entry or providers.get(model["provider"])
+        if provider and not official_url(model["url"], provider):
+            raise ValueError(f"{model['model']} needs a release or model page from its provider.")
+
+
 def scoped_input(args, workspace, incoming):
     if not (args.catalog_report or args.model):
         return None
     providers, _ = registry(workspace)
     if args.catalog_report:
-        if incoming["models"]:
-            raise ValueError("In catalog mode, model records come from the verified report.")
-        result = verify_scan(read_json(args.catalog_report), providers)
-        incoming["models"] = result["models"]
-        audit = result["audit"]
+        audit = catalog_selection(args, providers, incoming)
     else:
-        if len(incoming["models"]) != 1 or incoming["models"][0]["model"] != args.model:
-            raise ValueError("A named refresh requires one documented release record for the exact requested model ID.")
-        model = incoming["models"][0]
-        provider = providers.get(model["provider"])
-        if provider and not official_url(model["url"], provider):
-            raise ValueError("The named model needs a release or model page from its provider.")
+        validate_named_selection(args, providers, incoming)
         audit = None
     eligible = {row["model"] for row in incoming["models"]}
     if any(row["model"] not in eligible for row in incoming["measurements"]):
@@ -220,10 +264,18 @@ def main():
     parser.add_argument("--workspace", type=Path, required=True, help="Explicit project root.")
     parser.add_argument("--input", help="Observation JSON file or - for stdin.")
     scope = parser.add_mutually_exclusive_group()
-    scope.add_argument("--model", help="Import only this exact verified model ID.")
-    scope.add_argument("--catalog-report", help="Import newer models from this catalog report.")
+    scope.add_argument("--model", action="append", help="Import this exact model ID. Repeat with --provider-entry.")
+    scope.add_argument("--catalog-report", help="Import chosen models from this verified catalog report.")
+    parser.add_argument("--select", action="append", help="Exact model ID chosen from --catalog-report. Repeat for each choice.")
+    parser.add_argument("--provider-entry", help="Provider registration JSON for a provider-scoped --model import.")
     parser.add_argument("--preview", action="store_true", help="Print the merged document without writing.")
     args = parser.parse_args()
+    if args.select and not args.catalog_report:
+        parser.error("--select requires --catalog-report.")
+    if args.provider_entry and not args.model:
+        parser.error("--provider-entry requires one or more --model choices.")
+    if args.provider_entry and args.provider_entry == (args.input or "-"):
+        parser.error("Use separate inputs for the provider entry and the observations.")
     try:
         workspace = workspace_path(args.workspace)
         output = safe_output(workspace, DESTINATION)

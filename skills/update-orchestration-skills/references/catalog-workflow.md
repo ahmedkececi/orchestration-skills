@@ -30,7 +30,7 @@ When an apparent alias from one source resolves to a canonical release listed el
 python3 -B scripts/catalogs.py verify --workspace /path/to/project --input scan.json
 ```
 
-The helper checks each registered provider, source, reference version and observed ID. It returns only verified models with dates strictly after their reference date and reports incomplete coverage separately. Read this output before looking up benchmark scores. In catalog mode, pass `benchmark_checks` and any found `measurements` to the refresh helper for the returned model IDs. Model rows come from the verified report. Omit `--input` only when the report has no new models. The program checks structure, date order and source coverage against the submitted evidence. Live lookups and confirmation of what each source says are the agent's responsibility.
+The helper checks each registered provider, source, reference version and observed ID. It returns only verified models with dates strictly after their reference date and reports incomplete coverage separately. Show these models to the user and wait for a selection. After selection, collect `benchmark_checks` and any found `measurements` for the selected IDs only. Pass each chosen ID as a separate `--select` argument with `--catalog-report`. Model rows come from the verified report. The helper rejects an empty selection when the report contains candidates, IDs outside the verified list, and observations for unselected models. The program checks structure, date order and source coverage against the submitted evidence. Live lookups and confirmation of what each source says are the agent's responsibility.
 
 ## Register a provider
 

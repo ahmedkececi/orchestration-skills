@@ -30,7 +30,8 @@ For speed use `seconds-per-task` and a cohort that identifies the task mix, meas
 ## Scope and check an update
 
 - For a named update, include one exact `models` record and use `--model EXACT_ID`. The helper rejects observations for other IDs, even if a source page lists related variants.
-- For catalog mode, consult the [catalog workflow](catalog-workflow.md). The verified report supplies the model list. Import benchmark checks and observations only for the returned IDs. Report any unverified efforts or tests.
+- For catalog mode, consult the [catalog workflow](catalog-workflow.md). Present the verified list and wait for the user's choices. Add one `--select` argument per chosen ID. Import benchmark checks and observations only for those choices.
+- For a provider registration with selected models, use `--provider-entry provider.json` and repeat `--model EXACT_ID` for every chosen ID. Preview before registering. Writing the result requires the provider to be registered in the workspace. Report any unverified efforts or tests.
 - For a deliberate offline or custom import, leave out both scope flags and submit the user-approved observations directly. This does not mark catalog coverage as checked.
 
 

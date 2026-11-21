@@ -1,6 +1,6 @@
 ---
 name: update-orchestration-skills
-description: Discover models released after the orchestration presets' reference versions, or refresh a single named model. Use for verified model releases, benchmark updates and local measurement imports.
+description: List models released after the orchestration presets' reference versions and refresh the models the user chooses. Use for verified releases, benchmark updates and local measurement imports.
 ---
 
 # Refresh orchestration model data
@@ -17,13 +17,14 @@ python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --in
 
 ## Without a model name
 
-1. Run `python3 -B scripts/catalogs.py plan --workspace /path/to/project`. It lists the official sources, reference versions from the orchestration presets, and any workspace providers added by the companion skill.
-2. Read both the provider catalog and release history for each provider. Follow applicable pagination, tabs and dated links. Verify reference-model dates and newer release IDs from the official sources. Record the IDs observed in each source. Mark missing pages or unclear dates rather than claiming full coverage.
-3. Run `catalogs.py verify` with the report format in the [catalog workflow](references/catalog-workflow.md). Run the complete benchmark checklist below only for the newer model IDs returned by the verifier.
-4. Save the releases, benchmark rows and catalog audit. Omit `--input` only when the verifier returned no newer models.
+1. Run `python3 -B scripts/catalogs.py plan --workspace /path/to/project`. It lists official sources, reference versions and any providers added to the workspace.
+2. Read each provider's model catalog and release history. Verify the reference dates and newer model IDs using the [catalog workflow](references/catalog-workflow.md), then run `catalogs.py verify`. Cover relevant pages and dates and identify any gaps.
+3. Show the verified newer models as a numbered list with provider, exact model ID, release date and source. Report any incomplete coverage. If the list is empty, report that and stop. Ask **which models the user wants to add**. Accept one, several or explicit all. Stop and wait for their answer before any benchmark lookup or workspace write. Keep the verified report for the next step.
+4. Use the checklist below only for the chosen IDs. If the selection is unclear, clarify it. On cancellation, finish without importing. Pass one `--select` flag per chosen model. An explicit choice of all means passing each verified ID from the displayed list.
 
 ```sh
-python3 -B scripts/refresh.py --workspace /path/to/project --catalog-report scan.json --input observations.json
+python3 -B scripts/refresh.py --workspace /path/to/project --catalog-report scan.json \
+  --select EXACT_ID --input observations.json
 ```
 
 ## Check the complete benchmark suite
