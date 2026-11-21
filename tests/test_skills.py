@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import sys
 import unicodedata
 import unittest
 from urllib.parse import unquote
@@ -9,6 +10,11 @@ from urllib.parse import unquote
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = REPO_ROOT / "skills"
+SCRIPTS_DIR = SKILLS_DIR / "update-orchestration-skills" / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+import resolve_lanes  # noqa: E402
 
 EXPECTED_SKILLS = (
     "add-provider-orchestration-skills",
@@ -368,6 +374,44 @@ class SkillIntegrityTests(unittest.TestCase):
                         pattern.search(combined_text),
                         f"{preset} is missing v1.2.0 invariant {label!r}",
                     )
+
+    def test_example_project_profiles_authorize_valid_lanes(self):
+        state_path = REPO_ROOT / "examples" / "provider-state.json"
+        now = resolve_lanes.parse_iso_utc("2026-11-21T16:00:00Z")
+        role_checks = (
+            ("coding", None),
+            ("reasoning", None),
+            ("review", "claude"),
+            ("review", "openai"),
+        )
+        for preset in COORDINATOR_PRESETS:
+            profile_path = SKILLS_DIR / preset / "project-profile.example.md"
+            with self.subTest(preset=preset, check="schema"):
+                self.assertTrue(profile_path.is_file(), f"Missing {profile_path}")
+                lanes = resolve_lanes.parse_authorized_lanes(
+                    profile_path.read_text(encoding="utf-8")
+                )
+                self.assertIsInstance(lanes, dict)
+                self.assertTrue(lanes, f"{preset}/project-profile.example.md must authorize at least one lane")
+
+            for role, author_family in role_checks:
+                with self.subTest(preset=preset, role=role, author_family=author_family):
+                    report = resolve_lanes.resolve_from_paths(
+                        workspace=REPO_ROOT,
+                        profile_path=profile_path,
+                        state_path=state_path,
+                        role=role,
+                        author_family=author_family,
+                        now=now,
+                    )
+                    self.assertFalse(report["advisory"])
+                    self.assertEqual(report["warnings"], [], f"Unexpected warnings for {preset}/{role}: {report['warnings']}")
+                    self.assertIsNotNone(report["recommended"], f"No recommended lane for {preset}/{role}")
+                    if role == "review" and author_family is not None:
+                        self.assertFalse(
+                            report["recommended"]["same_family"],
+                            f"{preset} review for author={author_family} should prefer a cross-family reviewer",
+                        )
 
 
 if __name__ == "__main__":

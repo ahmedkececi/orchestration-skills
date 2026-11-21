@@ -718,6 +718,14 @@ class CliIntegrationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("boolean restricted_data", proc.stderr)
 
+    def test_cli_rejects_del_control_char_in_runner(self):
+        lane = authorized_lane("gpt-6.2-sol", "high", "codex")
+        lane["runner"] = "codex\x7fexec"
+        self.profile.write_text(profile_text(lane), encoding="utf-8")
+        proc = run_script("resolve_lanes.py", "--profile", str(self.profile))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("runner name on one line", proc.stderr)
+
     def test_cli_error_exit_codes(self):
         bad_now = run_script("resolve_lanes.py", "--workspace", str(REPO_ROOT), "--now", "invalid")
         self.assertEqual(bad_now.returncode, 2)

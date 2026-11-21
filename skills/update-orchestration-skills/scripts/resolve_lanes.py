@@ -180,7 +180,7 @@ def parse_authorized_lanes(profile):
             if not isinstance(row[field], str) or not pattern.fullmatch(row[field]):
                 raise ValueError(f"Authorized lane {index} has an invalid {field} ID.")
         runner = row["runner"]
-        if not isinstance(runner, str) or not runner.strip() or any(ord(char) < 32 for char in runner):
+        if not isinstance(runner, str) or not runner.strip() or any(ord(char) < 32 or ord(char) == 127 for char in runner):
             raise ValueError(f"Authorized lane {index} requires a runner name on one line.")
         roles = row["roles"]
         if not isinstance(roles, list) or not roles or not all(role in ROLES for role in roles):
