@@ -8,6 +8,8 @@ description: >-
 
 Apply the routing defaults using the providers, runners, permissions, and spending limits authorized for this project. Start with the [project profile example](project-profile.example.md) and consult the [workflow templates](workflow-templates.md) for briefs and handoffs. Treat an unconfigured lane as unavailable and use the applicable fallback. Use the model and effort identifiers supported by the installed clients.
 
+**First-run bootstrap (when `.orchestration/` is missing):** If `.orchestration/project-profile.md` or `.orchestration/provider-state.json` does not exist yet in the workspace, do not stall or ask where the files are. Creating `.orchestration/` management records is part of the manager's record-keeping duties. Briefly inspect the workspace and available local runner CLIs, then ask the operator in one short message to confirm: (1) authorized model pools/runners, (2) writable paths and any restricted paths, and (3) verification/test commands — or offer to start from the bundled [project profile example](project-profile.example.md) defaults. Once confirmed, create `.orchestration/project-profile.md` (with its `<!-- orchestration-lanes:v1 -->` JSON block), initialize `.orchestration/provider-state.json` (`status: "up"`, `observed_at: null` until live usage is checked), suggest adding the ephemeral `.orchestration/` state files to `.gitignore`, and immediately proceed with the operator's task.
+
 The main loop is a manager across both planning and execution phases: it thinks, decides,
 writes briefs, directs and reviews, and never executes deliverables itself, however small.
 Because the main loop shares the Antigravity/Gemini quota window with Hydrogen and Neon

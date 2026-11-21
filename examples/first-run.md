@@ -94,17 +94,17 @@ Use the [workflow templates](../skills/sol-orchestration/workflow-templates.md) 
 
 ## What to type in chat
 
-After installing a coordinator skill and saving `.orchestration/project-profile.md`, open your client in the project root and send one of these starter prompts:
+After installing a coordinator skill, open your client in the project root and send one of these starter prompts — if `.orchestration/` does not exist yet, the coordinator bootstraps it after confirming your authorized pools, writable paths and test commands:
 
-1. **Preflight check (before your first task):**
+1. **First-time setup only (before your first task):**
    ```text
-   /opus-orchestration Read .orchestration/project-profile.md, check my authorized lanes and .orchestration/provider-state.json, report any missing setup, and wait for my first task.
+   /opus-orchestration Initialize .orchestration/project-profile.md and .orchestration/provider-state.json for this repo from your example profile — ask me to confirm my authorized pools/runners, writable paths, and test commands first, then wait for my first task.
    ```
    *(In Codex use `$sol-orchestration` or `$astra-orchestration`; in Antigravity use `/neon-orchestration`; in Claude Code you can also use `/fable-orchestration`.)*
 
-2. **Start a real task:**
+2. **Start a real task right away (works on both fresh and configured repos):**
    ```text
-   /opus-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate updating UTC timestamp rendering in src/pages/ with unit tests in tests/. Verify with `npm test` and run an independent cross-family review before accepting.
+   /opus-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate updating UTC timestamp rendering in src/pages/ with unit tests in tests/. Verify with `npm test` and run an independent cross-family review before accepting.
    ```
 
 3. **Resume in another client after a quota handoff:**
@@ -123,17 +123,17 @@ After installing a coordinator skill and saving `.orchestration/project-profile.
 
 ### Chate ne yazarak başlarsın?
 
-Koordinatör skill’ini kurup `.orchestration/project-profile.md` dosyasını hazırladıktan sonra istemcini proje dizininde açıp şu mesajlardan biriyle başlayabilirsin:
+Koordinatör skill’ini kurduktan sonra istemcini proje dizininde açıp şu mesajlardan biriyle doğrudan başlayabilirsin — `.orchestration/` klasörü henüz yoksa koordinatör senden yetkili havuzları, yazılabilir yolları ve test komutlarını onaylamanı isteyip dosyaları kendisi oluşturur:
 
-1. **İlk kurulum kontrolü (görev vermeden önce):**
+1. **Yalnızca ilk kurulum (görev vermeden önce):**
    ```text
-   /opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku, yetkili hatlarımı ve eksik bir kurulum olup olmadığını kontrol edip ilk görevimi bekle.
+   /opus-orchestration Bu repo için örnek profilinden .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını kur — önce hangi model havuzlarını/CLI'ları, yazılabilir yolları ve test komutlarını yetkilendireceğimi sor, sonra ilk görevimi bekle.
    ```
    *(Codex’te `$sol-orchestration` veya `$astra-orchestration`, Antigravity’de `/neon-orchestration`, Claude Code’da istersen `/fable-orchestration` kullan.)*
 
-2. **Gerçek bir görevi başlatma:**
+2. **Doğrudan gerçek bir göreve başla (hem yeni hem kurulu repoda çalışır):**
    ```text
-   /opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/pages/ altında UTC zaman damgası düzenlemesini ve tests/ testlerini planlayıp yetkili ajana delege et. `npm test` ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+   /opus-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından src/pages/ altında UTC zaman damgası düzenlemesini ve tests/ testlerini planlayıp yetkili ajana delege et. `npm test` ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
    ```
 
 3. **Kota devri sonrası başka istemciden devam etme:**

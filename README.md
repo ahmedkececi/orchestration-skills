@@ -97,28 +97,27 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Everyday Claude Code coordinator, or failover when Mythos/Fable allowance is spent | `.claude/skills/` |
 
 1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep all skill folder names unchanged.
-2. Copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from your repository instructions (`CLAUDE.md` or `AGENTS.md`). List authorized runners, data scopes, budget, writable paths and verification commands. Edit the profile's machine-readable lane block to match the model IDs, effort levels, pools and roles you approve in your client.
-3. Invoke the coordinator in chat using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex).
+2. Start a chat in your project root using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). On a fresh repository where `.orchestration/` does not exist yet, the coordinator automatically asks you to confirm your authorized pools/runners, writable paths, and test commands, then creates `.orchestration/project-profile.md` (including its `<!-- orchestration-lanes:v1 -->` block) and `.orchestration/provider-state.json` before starting your task. *(If you prefer manual setup first, copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from `CLAUDE.md` or `AGENTS.md`.)*
 
 #### What to type in chat
 
-Start a session by invoking the coordinator skill together with a bounded task and a verifiable acceptance check (or ask it to load your profile first):
+Right after installing, open chat in your project folder and paste the command for your client — no manual file copying required:
 
 ```text
-# Claude Code — start a task
-/opus-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+# Claude Code — first run or start a task
+/opus-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
 
-# Codex — start a task
-$sol-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+# Codex — first run or start a task
+$sol-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
 
-# Antigravity — start a task
-/neon-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+# Antigravity — first run or start a task
+/neon-orchestration Set up .orchestration/ if missing (ask me to confirm my authorized pools, writable paths, and test command), then plan and delegate <your task> with an independent cross-family review before accepting.
 
 # Any client — resume after a quota handoff (swap command for your client)
 $sol-orchestration Read .orchestration/orchestration-checkpoint.md and .orchestration/provider-state.json, run git status --short, and continue the remaining units.
 ```
 
-See more ready-to-paste examples (including profile preflight and Turkish prompts) in [examples/first-run.md](examples/first-run.md#what-to-type-in-chat).
+See more ready-to-paste examples (including setup-only preflight and Turkish prompts) in [examples/first-run.md](examples/first-run.md#what-to-type-in-chat).
 
 ### Refresh model data on demand
 
@@ -254,28 +253,27 @@ flowchart LR
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Günlük Claude Code koordinatörü veya Mythos/Fable kotası dolduğunda devralma seçeneği | `.claude/skills/` |
 
 1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Tüm skill klasör adlarını olduğu gibi koru.
-2. Koordinatör klasöründeki `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyala ve depo talimatlarından (`CLAUDE.md` veya `AGENTS.md`) bu dosyaya referans ver. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt. Profildeki JSON bloğunu istemcinde doğruladığın ve onayladığın model kimlikleri, efor seviyeleri, havuzlar ve rollerle doldur.
-3. Koordinatörü sohbette yukarıdaki **Komut** sütunundaki adla çağır (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`).
+2. Proje dizininde istemcini aç ve yukarıdaki **Komut** sütunundaki adla sohbeti başlat (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Çalışma alanında `.orchestration/` henüz yoksa koordinatör durmak yerine senden yetkili havuzları/CLI’ları, yazılabilir yolları ve test komutlarını onaylamanı ister; `.orchestration/project-profile.md` (JSON yetki bloğuyla) ve `.orchestration/provider-state.json` dosyalarını kendisi oluşturup görevine başlar. *(İstersen önceden elle de `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyalayıp `CLAUDE.md` veya `AGENTS.md` içinden referans verebilirsin.)*
 
 #### Chate ne yazarak başlarsın?
 
-Kurulumdan sonra sohbeti koordinatör komutu + kapsamı net bir görev + doğrulanabilir bir kontrolle başlat:
+Kurulumdan hemen sonra elle dosya kopyalamaya gerek kalmadan şu mesajlardan biriyle başlayabilirsin:
 
 ```text
-# Claude Code — göreve başla
-/opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Claude Code — ilk kurulum veya göreve başla
+/opus-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
-# Codex — göreve başla
-$sol-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Codex — ilk kurulum veya göreve başla
+$sol-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
-# Antigravity — göreve başla
-/neon-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Antigravity — ilk kurulum veya göreve başla
+/neon-orchestration .orchestration/ henüz yoksa kur (önce yetkili havuzlarımı, yazılabilir yolları ve test komutumu onaylat), ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
 
 # Kota devri sonrası başka istemciden devam et (komutu istemcine göre değiştir)
 $sol-orchestration .orchestration/orchestration-checkpoint.md ve .orchestration/provider-state.json dosyalarını oku, git status --short çalıştır ve kalan iş birimlerinden devam et.
 ```
 
-Profil ön kontrolü ve ek örnek komutlar için [examples/first-run.md](examples/first-run.md#chate-ne-yazarak-başlarsın) dosyasına bakabilirsin.
+Yalnızca kurulum ön kontrolü ve ek örnek komutlar için [examples/first-run.md](examples/first-run.md#chate-ne-yazarak-başlarsın) dosyasına bakabilirsin.
 
 ### Model verilerini istediğin anda yenile
 

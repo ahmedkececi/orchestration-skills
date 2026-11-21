@@ -67,6 +67,7 @@ V120_INVARIANT_PATTERNS = (
     ("Test Integrity", re.compile(r"test\s+integrity", re.IGNORECASE)),
     ("External Action", re.compile(r"external\s+action", re.IGNORECASE)),
     ("git push", re.compile(r"git\s+push", re.IGNORECASE)),
+    ("First-run bootstrap", re.compile(r"first-run\s+bootstrap", re.IGNORECASE)),
     ("resolve_lanes.py", re.compile(r"resolve_lanes\.py")),
     ("scope_drift", re.compile(r"scope_drift")),
     ("first_pass_ok", re.compile(r"first_pass_ok")),
