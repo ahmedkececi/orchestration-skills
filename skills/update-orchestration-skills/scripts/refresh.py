@@ -5,12 +5,11 @@ from collections import defaultdict
 import json
 import math
 from pathlib import Path
-import re
 import statistics
 
-from benchmarks import matrix, normalize_check, require_coverage
+from benchmarks import matrix, normalize_check, require_coverage, validate_metric_unit
 from catalogs import (
-    official_url, read_json, registry, safe_output, valid_date, valid_url,
+    IDENTIFIER, official_url, read_json, registry, safe_output, valid_date, valid_url,
     validate_provider, verify_scan, workspace_path, write_atomic,
 )
 
@@ -21,7 +20,6 @@ DESTINATION = Path(".orchestration/model-measurements.md")
 DELIMITER = "\n<!-- workspace-measurements:v1 -->\n"
 STATE_START = "\n<!-- observations:start -->\n```json\n"
 STATE_END = "\n```\n<!-- observations:end -->"
-IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}")
 UNITS = {"points", "percent", "elo", "seconds", "usd", "tokens"}
 KEYS = {
     "models": ("model",),
@@ -45,6 +43,7 @@ def normalize(payload):
                 raise ValueError("Duplicate benchmark check for the same model and effort.")
             continue
         entries = []
+        seen_keys = set()
         for row in rows:
             if not isinstance(row, dict):
                 raise ValueError(f"Each {group} row must be an object.")
@@ -57,17 +56,24 @@ def normalize(payload):
                 raise ValueError(f"Invalid identifier in {group}: {row.get('model')!r}.")
             if not valid_url(row["url"]):
                 raise ValueError("Each row requires an HTTPS source URL without credentials.")
+            key = tuple(row[field] for field in key_fields)
+            if key in seen_keys:
+                raise ValueError(f"Duplicate {group} entry for {row['model']!r}.")
+            seen_keys.add(key)
             if group == "models":
                 if row["released"] is not None and not valid_date(row["released"]):
                     raise ValueError("released must be an ISO date or null.")
             else:
                 if not valid_date(row["date"]) or row["unit"] not in UNITS:
                     raise ValueError("Each measurement needs an ISO date and a supported unit.")
+                validate_metric_unit(row["metric"], row["unit"])
                 value = row["value"]
                 if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
                     raise ValueError("Measurements must be finite, nonnegative numbers.")
                 if row["unit"] == "percent" and value > 100:
                     raise ValueError("A percentage must be between 0 and 100.")
+                if isinstance(value, float) and value == 0.0:
+                    row = {**row, "value": 0.0}
             entries.append(row)
         data[group] = entries
     return data
@@ -123,34 +129,35 @@ def render(baseline, data, audit):
         key = tuple(row[k] for k in ("model", "effort", "metric", "cohort", "unit"))
         grouped[key].append(row)
     lines.extend(matrix(data, grouped))
-    lines += [
-        "",
-        "### Scores and profile averages",
-        "",
-        "| Model | Effort | Metric | Cohort | Unit | Mean | n | Range | Latest |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |",
-    ]
-    for (model, effort, metric, cohort, unit), rows in sorted(grouped.items()):
-        values = [row["value"] for row in rows]
-        latest = max(row["date"] for row in rows)
-        lines.append(
-            f"| `{model}` | {effort} | {metric} | {cohort} | {unit} | "
-            f"{display(statistics.fmean(values))} | {len(values)} | "
-            f"{display(min(values))}–{display(max(values))} | {latest} |"
-        )
-    lines += [
-        "",
-        "### Source observations",
-        "",
-        "| Model | Effort | Metric | Cohort | Value | Unit | Date | Source |",
-        "| --- | --- | --- | --- | ---: | --- | --- | --- |",
-    ]
-    for row in data["measurements"]:
-        lines.append(
-            f'| `{row["model"]}` | {row["effort"]} | {row["metric"]} | {row["cohort"]} | '
-            f'{display(row["value"])} | {row["unit"]} | {row["date"]} | '
-            f'{row["source"]} {source_link(row)} |'
-        )
+    if data["measurements"]:
+        lines += [
+            "",
+            "### Scores and profile averages",
+            "",
+            "| Model | Effort | Metric | Cohort | Unit | Mean | n | Range | Latest |",
+            "| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |",
+        ]
+        for (model, effort, metric, cohort, unit), rows in sorted(grouped.items()):
+            values = [row["value"] for row in rows]
+            latest = max(row["date"] for row in rows)
+            lines.append(
+                f"| `{model}` | {effort} | {metric} | {cohort} | {unit} | "
+                f"{display(statistics.fmean(values))} | {len(values)} | "
+                f"{display(min(values))}–{display(max(values))} | {latest} |"
+            )
+        lines += [
+            "",
+            "### Source observations",
+            "",
+            "| Model | Effort | Metric | Cohort | Value | Unit | Date | Source |",
+            "| --- | --- | --- | --- | ---: | --- | --- | --- |",
+        ]
+        for row in data["measurements"]:
+            lines.append(
+                f'| `{row["model"]}` | {row["effort"]} | {row["metric"]} | {row["cohort"]} | '
+                f'{display(row["value"])} | {row["unit"]} | {row["date"]} | '
+                f'{row["source"]} {source_link(row)} |'
+            )
     state_data = data.copy()
     if audit is not None:
         lines.extend(render_audit(audit))
@@ -219,7 +226,7 @@ def unique_choices(values):
     return choices
 
 
-def validate_named_selection(args, providers, incoming):
+def validate_named_selection(args, providers, local, incoming):
     chosen = unique_choices(args.model)
     supplied = {row["model"] for row in incoming["models"]}
     if len(incoming["models"]) != len(chosen) or chosen != supplied:
@@ -228,17 +235,26 @@ def validate_named_selection(args, providers, incoming):
     entry = None
     if args.provider_entry:
         draft = validate_provider(read_json(args.provider_entry))
-        entry = providers.get(draft["id"])
-        if entry is None and not args.preview:
+        local_by_id = {item["id"]: item for item in local}
+        if draft["id"] in providers:
+            registered = local_by_id.get(draft["id"])
+            if registered is None:
+                raise ValueError(f"{draft['id']} is a built-in provider; do not pass --provider-entry.")
+            if registered != draft:
+                raise ValueError(f"Provider entry for {draft['id']} does not match the registered provider.")
+            entry = registered
+        elif not args.preview:
             raise ValueError("Register the chosen provider before writing its measurements.")
-        entry = entry or draft
+        else:
+            entry = draft
     elif len(chosen) != 1:
         raise ValueError("A named refresh accepts one model. Use a provider entry for multiple models from that provider.")
 
     for model in incoming["models"]:
-        if entry is not None and entry["id"] != model["provider"]:
+        provider_key = model["provider"].lower()
+        if entry is not None and entry["id"] != provider_key:
             raise ValueError(f"{model['model']} is not in the chosen provider scope.")
-        provider = entry or providers.get(model["provider"])
+        provider = entry or providers.get(provider_key)
         if provider and not official_url(model["url"], provider):
             raise ValueError(f"{model['model']} needs a release or model page from its provider.")
 
@@ -246,11 +262,11 @@ def validate_named_selection(args, providers, incoming):
 def scoped_input(args, workspace, incoming):
     if not (args.catalog_report or args.model):
         return None
-    providers, _ = registry(workspace)
+    providers, local = registry(workspace)
     if args.catalog_report:
         audit = catalog_selection(args, providers, incoming)
     else:
-        validate_named_selection(args, providers, incoming)
+        validate_named_selection(args, providers, local, incoming)
         audit = None
     eligible = {row["model"] for row in incoming["models"]}
     if any(row["model"] not in eligible for row in incoming["measurements"]):
@@ -276,11 +292,11 @@ def main():
         parser.error("--provider-entry requires one or more --model choices.")
     if args.provider_entry and args.provider_entry == (args.input or "-"):
         parser.error("Use separate inputs for the provider entry and the observations.")
+    if args.input == args.catalog_report == "-":
+        parser.error("Only one of --input and --catalog-report can use stdin.")
     try:
         workspace = workspace_path(args.workspace)
         output = safe_output(workspace, DESTINATION)
-        if args.input == args.catalog_report == "-":
-            raise ValueError("Only one of --input and --catalog-report can use stdin.")
         if args.catalog_report and args.input is None:
             incoming = normalize({})
         else:

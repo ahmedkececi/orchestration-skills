@@ -2,10 +2,12 @@
 
 import argparse
 from datetime import date
+import ipaddress
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
@@ -20,14 +22,49 @@ SOURCE_STATES = {"read", "partial", "unavailable"}
 
 
 def valid_date(value):
-    return isinstance(value, str) and date.fromisoformat(value).isoformat() == value
+    if not isinstance(value, str):
+        return False
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
+
+
+def _public_host(host):
+    host = host.rstrip(".").lower()
+    if not host or host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return "." in host
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
 
 
 def valid_url(value):
     if not isinstance(value, str) or re.search(r"[\s<>|\\]", value):
         return False
-    url = urlsplit(value)
-    return url.scheme == "https" and bool(url.hostname) and not url.username and not url.password
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return False
+    try:
+        url = urlsplit(value)
+        _ = url.port
+    except ValueError:
+        return False
+    if url.scheme != "https" or not url.hostname:
+        return False
+    if url.username is not None or url.password is not None or "@" in url.netloc:
+        return False
+    return _public_host(url.hostname)
 
 
 def read_json(path):
@@ -48,13 +85,21 @@ def safe_output(workspace, relative):
     return output
 
 
+def _default_file_mode():
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
 def write_atomic(path, contents):
     path.parent.mkdir(exist_ok=True)
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else _default_file_mode()
     with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as file:
         temp = Path(file.name)
         try:
             file.write(contents)
             file.close()
+            os.chmod(temp, mode)
             os.replace(temp, path)
         finally:
             temp.unlink(missing_ok=True)
@@ -121,7 +166,7 @@ def registry(workspace):
     if path.exists():
         stored = read_json(path)
         fields(stored, "version providers", "Provider registry")
-        if stored["version"] != 1:
+        if type(stored["version"]) is not int or stored["version"] != 1:
             raise ValueError("Unsupported provider registry version.")
         for entry in rows(stored["providers"], "Workspace providers"):
             validate_provider(entry)
@@ -134,7 +179,9 @@ def registry(workspace):
 
 def official_url(url, provider):
     urls = provider["catalogs"] + provider["release_notes"] + provider.get("usage_docs", [])
-    hosts = {urlsplit(u).hostname for u in urls} | set(provider.get("official_hosts", []))
+    hosts = {urlsplit(u).hostname for u in urls} | {
+        host.lower() for host in provider.get("official_hosts", [])
+    }
     return valid_url(url) and urlsplit(url).hostname in hosts
 
 
@@ -159,7 +206,13 @@ def verify_scan(report, providers):
         for source in rows(scan["sources"], "Sources"):
             fields(source, "url status seen", "Source audit")
             url, status = source["url"], source["status"]
-            if url not in expected_urls or url in sources or status not in SOURCE_STATES:
+            if (
+                not isinstance(url, str)
+                or not isinstance(status, str)
+                or url not in expected_urls
+                or url in sources
+                or status not in SOURCE_STATES
+            ):
                 raise ValueError(f"Unknown, invalid or duplicated source audit for {pid}.")
             ids = {identifier(model, "model ID") for model in rows(source["seen"], "Seen model IDs")}
             if status == "unavailable" and ids:
@@ -248,17 +301,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "verify", "register"))
     parser.add_argument("--workspace", type=Path, required=True)
-    parser.add_argument("--input", default="-", help="JSON document or - for stdin.")
+    parser.add_argument("--input", default=None, help="JSON document or - for stdin.")
     args = parser.parse_args()
+    if args.action == "plan" and args.input is not None:
+        parser.error("plan does not accept --input.")
     try:
         workspace = workspace_path(args.workspace)
         if args.action == "register":
-            entry = read_json(args.input)
+            entry = read_json(args.input or "-")
             register(workspace, entry)
             print(f"Registered {entry['id']} in {workspace / REGISTRY}.")
             return
         providers, _ = registry(workspace)
-        data = list(providers.values()) if args.action == "plan" else verify_scan(read_json(args.input), providers)
+        data = (
+            list(providers.values())
+            if args.action == "plan"
+            else verify_scan(read_json(args.input or "-"), providers)
+        )
         print(json.dumps(data, indent=2))
     except (ValueError, OSError, TypeError, KeyError) as error:
         parser.exit(1, f"Catalog operation failed: {error}\n")

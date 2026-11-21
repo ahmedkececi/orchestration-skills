@@ -1,7 +1,7 @@
 ---
 name: opus-orchestration
 description: >-
-  Delegation and quota-failover policy for a multi-model agent stack run on subscriptions (Claude, ChatGPT/Codex, Gemini) plus one metered API (DeepSeek), where the main loop is Claude Opus 5.5 at high or xhigh effort (the variant of fable-orchestration for when Mythos/Fable is unavailable or its applicable allowance is spent). Coordinate delegation, review, usage limits and handoffs for this manager.
+  Delegation and quota-failover policy for a Claude Opus 5.5 (high/xhigh) manager across Claude, Codex, Gemini, and DeepSeek. Use at session start, before delegating or running commands, or on quota/rate limits.
 ---
 
 # Orchestration & delegation policy, Opus main loop (subscription stack)
@@ -17,8 +17,8 @@ covers restricted data, network or package installs and Codex outages. Opus dele
 medium cover real PG/HTTP, restricted data, localized UI or prompts and open-ended
 architectural debugging. gpt-6.2-astra gives second opinions; gemini-4-hydrogen takes
 video, audio and large-document intake, search-grounded lookups and wide reading;
-deepseek-flash takes large bulk jobs and low-stakes checks; gpt-6.1-terra medium (pilot),
-Haiku 5.5 or gpt-6-luna take bulk cleanup. Load at the start of every management session
+deepseek-flash takes large bulk jobs and low-stakes checks; gpt-6.1-terra medium (after sample qualification),
+Haiku high or gpt-6-luna take bulk cleanup. Load at the start of every management session
 whose main loop runs on Opus and before any task that would edit a file or run a command;
 also whenever spawning sub-agents (Agent tool, Workflow agent() calls, codex, gemini or
 deepseek lanes), planning any delegation, or when any provider returns a rate-limit, quota
@@ -122,7 +122,7 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
 | Pool | Models in it | How it limits | Check with |
 |---|---|---|---|
 | **Claude** subscription | Opus (main loop and delegates), Sonnet, Haiku; Mythos/Fable when used as advisor | A five-hour window and a weekly limit, shared by all models and by chat and Claude Code. A Mythos/Fable model may have a separate allowance; check the selected model and plan. | `/usage` |
-| **ChatGPT** subscription | gpt-6.2-astra, gpt-6.2-sol, gpt-6-luna | A weekly allowance shared by Work and Codex; lower plans also have a five-hour window. Astra drains it several times faster than Sol; Luna barely touches it. | `/status` in Codex |
+| **ChatGPT** subscription | gpt-6.2-astra, gpt-6.2-sol, gpt-6.1-terra, gpt-6-luna | A weekly allowance shared by Work and Codex; lower plans also have a five-hour window. Astra drains it several times faster than Sol; Luna barely touches it. | `/status` in Codex |
 | **Gemini** subscription | gemini-4-hydrogen, gemini-4-neon | Hydrogen uses plan-based request limits. Antigravity Neon on Google AI Pro/Ultra has a rolling five-hour window and a weekly cap. | `/stats` in Gemini CLI, Antigravity usage |
 | **DeepSeek** API (metered) | deepseek-flash | Prepaid balance or the configured gateway's limits. | Provider balance or gateway quota reporting |
 
@@ -155,11 +155,11 @@ and apply the final high-stakes check separately.
    Continue through the applicable lanes using Claude only, unless the
    operator has cleared another provider.
 5. **Is it mechanical work over many items?** For small and medium cleanup,
-   sample the first gpt-6.1-terra `medium` job. Use Terra first for
-   unrestricted batches once the sample passes. Haiku `high` covers batches
-   while the pilot is pending, after a failed pilot, for restricted data or
-   when Codex is down. For very large jobs use gpt-6-luna `high` or
-   deepseek-flash (publishable material only).
+   optionally qualify `gpt-6.1-terra` `medium` on your runner by sampling a
+   first job, then use Terra first for unrestricted batches once it passes.
+   Haiku `high` covers batches before qualification, after a failed sample, for
+   restricted data, or when Codex is down. For very large jobs use `gpt-6-luna`
+   `high` or `deepseek-flash` (publishable material only).
 6. **Is it wide reading that returns a conclusion** (a large codebase sweep,
    many documents, web research with sources)? `gemini-4-hydrogen`, which
    keeps that volume out of the Claude pool.
@@ -169,8 +169,8 @@ and apply the final high-stakes check separately.
    and 4 and the Opus cases in step 8.
 8. **Otherwise route by task.** Use Opus `medium` only for real PG/HTTP
    requiring local ports or network access, restricted data, localized
-   UI or prompt quality, and open-ended architectural debugging. Trial
-   gpt-6.2-sol on three standard code-debugging jobs (see Routing ledger).
+   UI or prompt quality, and open-ended architectural debugging. Optionally
+   qualify `gpt-6.2-sol` on standard code-debugging jobs (see Routing ledger).
    Use Sol `high` for other simple-to-medium work and Sonnet `high` only
    under the exceptions in step 2.
 9. **Is it a high-stakes call?** Add a peer question to `gpt-6.2-astra` in
@@ -184,15 +184,15 @@ and apply the final high-stakes check separately.
 | Architecture, specs, hard judgment, briefs, direction, review, final synthesis (no execution)                               | **Main loop** (Opus 5.5, `high`; `xhigh` for long-lived or irreversible calls)                                  | itself                                                                              | n/a                                                                      |
 | Advice on the hardest calls, when available                                                                                 | **Mythos/Fable** (advisor only)                                                                                    | the operator's advisor connection, or one sub-agent call when the operator names it | One peer question: problem, evidence, options, where unsure              |
 | Execution with a clear spec: implementation from a written design, migrations, test suites, refactors with fixed scope | **gpt-6.2-sol** (`high` by default, `xhigh` for higher-requirement, reasoning- or science-heavy sensitive work and escalation) | `codex exec -m gpt-6.2-sol`, effort `high` or `xhigh` as specified | Detailed and step by step, nothing left implicit |
-| Real PG/HTTP requiring local ports or network access, restricted data that needs Opus, localized UI or prompt quality, open-ended architectural debugging | **Opus** sub-agent, `medium`. Use **gpt-6.2-sol** for the three-job standard code-debugging trial | `model: 'opus'`, effort `medium`. Use the Sol command above for the trial | Goal, context, constraints and acceptance criteria. Use a step-by-step brief for Sol |
-| Simple-medium: scoped edits, pattern clones, lookups, templated work, straightforward reading and summarizing | **gpt-6.2-sol** `high`. **Sonnet** `high` only for restricted data, required network access or package installs, or when Codex is full or down | `codex exec -m gpt-6.2-sol`, effort `high`, or `model: 'sonnet'`, effort `high` | Named files, steps, output shape and boundaries |
+| Real PG/HTTP requiring local ports or network access, restricted data that needs Opus, localized UI or prompt quality, open-ended architectural debugging | **Opus** sub-agent, `medium`. Optionally qualify **gpt-6.2-sol** on standard code-debugging jobs | `model: 'opus'` (`claude-opus-5-5`), effort `medium`. Use the Sol command above when qualifying Sol | Goal, context, constraints and acceptance criteria. Use a step-by-step brief for Sol |
+| Simple-medium: scoped edits, pattern clones, lookups, templated work, straightforward reading and summarizing | **gpt-6.2-sol** `high`. **Sonnet** `high` only for restricted data, required network access or package installs, or when Codex is full or down | `codex exec -m gpt-6.2-sol`, effort `high`, or `model: 'sonnet'` (`claude-sonnet-5-5`), effort `high` | Named files, steps, output shape and boundaries |
 | Second opinion, out-of-the-box thinking, an angle the main loop may be missing                                              | **gpt-6.2-astra**                                                                                                 | `codex exec -m gpt-6.2-astra`, effort `medium`                                        | The open question plus the evidence, as to a peer                        |
-| Video, audio, long PDFs, screenshot sets turned into structured text                                                        | **gemini-4-hydrogen**                                                                                           | `gemini -m gemini-4-hydrogen -p`, effort `high`                                     | Bounded: what to extract, output schema, timestamp or page on every item |
-| Wide reading and search-grounded lookups that return a conclusion with sources                                              | **gemini-4-hydrogen**                                                                                           | same                                                                                | The question, the scope, a stop condition, sources required              |
+| Video, audio, long PDFs, screenshot sets turned into structured text                                                        | **gemini-4-hydrogen**                                                                                           | configured Gemini runner (e.g. `gemini -m gemini-4-hydrogen -p` or headless Antigravity) at `high` effort | Bounded: what to extract, output schema, timestamp or page on every item |
+| Wide reading and search-grounded lookups that return a conclusion with sources                                              | **gemini-4-hydrogen**                                                                                           | same (the configured Gemini runner)                                                 | The question, the scope, a stop condition, sources required              |
 | Very large bulk jobs, long-prompt bulk, bulk overflow from Haiku or luna                                                    | **deepseek-flash**                                                                                              | OpenAI- or Anthropic-compatible client                                              | Exact rules, output schema, shared material first, per-item part last    |
-| Independent check from a different model family | Claude or GPT wrote it → **gemini-4-neon** `high`. Google wrote it → **gpt-6.2-astra** `medium`, or **Opus** `high` if Codex is down | Neon via agy, Astra via `codex exec -m gpt-6.2-astra` at `medium`, Opus via `model: 'opus'` at `high`. See the Verification ladder | The artifact, file list and acceptance criteria. Omit the author's reasoning |
-| Second eye on a scoped question | **gemini-4-neon** `medium` | agy, `--model gemini-4-neon-medium` | Name the files, the question and the evidence to check. |
-| Bulk cleanup: normalizing, deduplicating, classifying, extracting | **terra (pilot) / Haiku** (small and medium). Sample the first Terra job. If it passes cleanly, use Terra first for unrestricted small and medium jobs. Use **Haiku 5.5** `high` for restricted data or when Codex is down. Use **gpt-6-luna** `high` for large jobs | `codex exec -m gpt-6.1-terra` at `medium`, `model: 'haiku'` at `high`, or `codex exec -m gpt-6-luna` at `high` | Exact rules with examples, small batches and spot checks |
+| Independent check from a different model family | Claude or GPT wrote it → **gemini-4-neon** `high`. Google wrote it → **gpt-6.2-astra** `medium`, or **Opus** `high` if Codex is down | Neon via the configured Gemini runner (`high`), Astra via `codex exec -m gpt-6.2-astra` at `medium`, Opus via `model: 'opus'` at `high`. See the Verification ladder | The artifact, file list and acceptance criteria. Omit the author's reasoning |
+| Second eye on a scoped question | **gemini-4-neon** `medium` | configured Gemini runner with Neon at `medium` (e.g. `--model gemini-4-neon-medium`) | Name the files, the question and the evidence to check. |
+| Bulk cleanup: normalizing, deduplicating, classifying, extracting | **terra (qualified sample) / Haiku** (small and medium). Sample the first Terra job on a new runner; if clean, use Terra first for unrestricted small and medium jobs. Use **Haiku** `high` (`claude-haiku-5-5`) before qualification, for restricted data, or when Codex is down. Use **gpt-6-luna** `high` for large jobs | `codex exec -m gpt-6.1-terra` at `medium`, `model: 'haiku'` at `high`, or `codex exec -m gpt-6-luna` at `high` | Exact rules with examples, small batches and spot checks |
 
 Integration (merging several delegates' outputs, resolving conflicts between
 them, wiring pieces together) is execution, not synthesis: the main loop
@@ -203,12 +203,17 @@ states those decisions.
 main loop Opus `high` (`xhigh` for long-lived calls), Opus delegates
 `medium`, Sonnet `high`, Haiku `high`, gpt-6.2-sol `high` (default), Sol `xhigh` for higher-requirement, reasoning- or
 science-heavy sensitive work and escalation, gpt-6.1-terra `medium`
-(cleanup pilot), gpt-6.2-astra `medium`, gpt-6-luna `high`, gemini-4-hydrogen
+(cleanup sample), gpt-6.2-astra `medium`, gpt-6-luna `high`, gemini-4-hydrogen
 `high`, gemini-4-neon `high` (independent review) or `medium` (second eye),
 deepseek-flash at its highest reasoning
 setting. Measured profile of each in "Model notes".
 
 Reserve deepseek-flash checks for bulk or low-stakes work.
+
+"DeepSeek v4.1" means one model today: V4.1 Flash, API alias `deepseek-flash`
+(canonical catalog ID `deepseek-v4.1-flash-1017`). There is no V4.1 Pro yet,
+and `deepseek-v4-pro` (`deepseek-v4-pro-0813`) is the older V4 Pro, which
+DeepSeek itself ranks below V4.1 Flash. Do not route to it.
 
 ## The hard rules
 
@@ -225,7 +230,7 @@ Reserve deepseek-flash checks for bulk or low-stakes work.
    science-heavy sensitive work and escalation. Reserve Opus delegates at
    `medium` for real PG/HTTP requiring local ports or network access,
    restricted data, localized UI or prompt quality, and open-ended
-   architectural debugging. Trial Sol on three standard code-debugging
+   architectural debugging. Optionally qualify Sol on standard code-debugging
    jobs under the Routing ledger. Sonnet `high` covers restricted data,
    required network access or package installs, or Codex full/down. Follow
    hard rule 7 and the routing table for data and specialized lanes. The
@@ -283,7 +288,7 @@ tests with short time limits, resource-limit probes run alone), or when the
 pool is past its "move" threshold (then spread across pools by headroom
 instead of widening inside one).
 
-Before launching, state the split in the checkpoint: the pieces, the lane
+Before launching, state the split in `.orchestration/orchestration-checkpoint.md`: the pieces, the lane
 and files of each, what joins them and who integrates. Ramp width from a
 few agents, not the full fleet. In the report to the operator, say how many
 agents ran and why the work was or was not split.
@@ -305,7 +310,8 @@ How tightly to write depends on who reads it.
   or package installs, or when Codex is full or down. Name the files,
   steps, output format, boundaries and stop condition. Give each agent one task.
 - **gpt-6.2-sol (detailed, complete).** Write numbered steps, exact paths
-  and commands, the acceptance check for each step, edge cases and scope.
+  and commands, the acceptance check for each step, edge cases and scope, and
+  explicitly forbid committing (`do not commit`).
   Use `high` by default and `xhigh` for higher-requirement, reasoning- or science-heavy sensitive
   work and escalation. Set an evidence target for standard code debugging
   and keep open architectural decisions with the main loop.
@@ -328,8 +334,8 @@ How tightly to write depends on who reads it.
   or long agentic terminal work at `high` or above.
 - **gemini-4-neon (reviewer).** Use `high` for review and
   re-review. Give it a bounded brief, a file list and the acceptance criteria.
-  It can run Node-based checks with `--allow node`. Allow about 15 minutes.
-  Route implementation to the execution lane.
+  Scope any verification tools to the brief, provide exact paths, and allow
+  about 15 minutes. Route implementation to the execution lane.
 - **deepseek-flash (explicit, cache-shaped).** Write it like a Sonnet brief
   with a strict output schema. Put everything shared across the fan-out
   (rules, examples, reference material) first and identical in every request,
@@ -338,7 +344,7 @@ How tightly to write depends on who reads it.
   explicitly. Its benchmark claims are vendor-reported; treat its output as
   unverified until checked. Check the configured endpoint's current rates
   before deferring work for a possible discount.
-- **Terra / Haiku 5.5 / gpt-6-luna (bulk).** One mechanical rule set, stated exactly,
+- **Terra / Haiku / gpt-6-luna (bulk).** One mechanical rule set, stated exactly,
   with two or three input and output examples. Split the data into batches
   small enough that a bad batch is cheap to redo, have each batch write to its
   own output file, and sample the results before merging. Never ask this tier
@@ -403,8 +409,8 @@ output. Label a same-family review as such in the final report.
 The aim is to keep working as long as possible with no drop in quality, and
 as fast as possible within that. Act **before** a pool runs dry, not after.
 
-1. **Read live usage, not estimates.** Claude: `get_usage` (or `/usage`);
-   Codex: `/status`; agy: the run log's `status` and quota errors; DeepSeek: provider quota or balance. Price-per-task figures do not measure subscription burn.
+1. **Read live usage, not estimates.** Claude: `/usage` (or `.orchestration/provider-state.json`);
+   Codex: `/status`; Gemini/agy: Gemini runner usage logs and quota errors; DeepSeek: provider quota or balance. Price-per-task figures do not measure subscription burn.
 2. **Thresholds.** Past the "move" mark, new
    delegated units go to the equivalent lane (the 1st fallback in the
    ladder below) instead of queuing on the pool; past the "stop" mark, no
@@ -413,10 +419,10 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 
    | Pool | Move delegated units | Stop large jobs, write the checkpoint |
    |---|---|---|
-   | Claude five-hour window | **85 %** | **90 %** (keep the checkpoint current from 85 %) |
-   | Claude weekly limit | **95 %** | **95 %** |
-   | Codex, agy: weekly | **95 %** | **95 %** |
-   | Codex/Neon five-hour, Hydrogen daily | **85 %** | **90 %** |
+   | Claude five-hour window | **90 %** | **95 %** (keep the checkpoint current from 90 %) |
+   | Claude weekly limit | **85 %** | **90 %** (keep the checkpoint current from 85 %) |
+   | Codex, agy: weekly | **85 %** | **90 %** |
+   | Codex/Neon five-hour, Hydrogen daily | **90 %** | **95 %** |
 
    The five-hour window resets within hours, so it is used later; the weekly
    limit costs days when it runs out, so delegated work leaves it earlier.
@@ -433,9 +439,9 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 5. **Protect Gemini's media and review lanes at the standard threshold.**
    Hydrogen covers media, wide reading and search, and Neon covers second-eye
    work, independent review and media fallback. Gemini uses the same standard
-   thresholds as every other pool (**85 %** move / **90 %** stop on the
-   five-hour or daily window, **95 %** weekly). When Gemini nears
-   85 %, prioritize media first.
+   thresholds as every other pool (**90 %** move / **95 %** stop on the
+   five-hour or daily window, **85 %** move / **90 %** stop weekly). When
+   Gemini nears 90 % (five-hour/daily) or 85 % (weekly), prioritize media first.
 6. **Raise verification for weaker fallbacks.** For Hydrogen's
    accuracy-heavy reading, Astra `medium` is **below** on accuracy. For
    Neon `high` review, Astra `medium` is **below** on accuracy, knowledge
@@ -446,8 +452,8 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
    reasoning and knowledge in the second-eye ladder. Raise verification
    one step, label the output and prefer waiting when reset is within
    about 30 minutes.
-7. **agy's Claude models are not a fallback lane.** Reserve them for configured short jobs. agy keeps
-   them for short single jobs only.
+7. **agy's Claude models are not a fallback lane.** Reserve them for configured
+   short single jobs only.
 
 ## When a limit is hit
 
@@ -472,14 +478,14 @@ backoff, treat it as B.
   seconds with jitter. Halve that lane's concurrency before retrying; for
   DeepSeek, narrowing concurrency is the whole fix. Three attempts, then mark
   the lane down for 15 minutes and continue as B.
-- **B, window exhausted.** Record the reset time. If it is within about 20
+- **B, window exhausted.** Record the reset time in `.orchestration/provider-state.json`. If it is within about 20
   minutes and other lanes have work, reorder and come back. Otherwise fail
   over along the ladder. Tell the operator once.
-- **C, plan exhausted.** Mark the affected model or shared pool down until its reset,
+- **C, plan exhausted.** Mark the affected model or shared pool down in `.orchestration/provider-state.json` until its reset,
   fail over, and tell the operator, naming any paid options without taking them. For a
   depleted DeepSeek balance, ask the operator to top up.
 - **D, not a limit.** Do not fail over. Fix the request.
-- **E, lane's own failure.** Count these per lane in the session ledger. A failure the main loop caused (a wrong path or conversation id in the brief, overlapping `--files`) does not count. After each one, add the trap to the brief and relaunch on the same lane. When a lane has made **more than three** (on the fourth), new units for that lane go to its 1st fallback in the ladder below (for Hydrogen doing implementation, gpt-6.2-sol), and a unit that was running moves too. If the fallback fails as well, the next step in the ladder continues from where it stopped, from files, not from zero. The quota thresholds still apply to the fallback.
+- **E, lane's own failure.** Count these per lane in `.orchestration/orchestration-ledger.md`. A failure the main loop caused (a wrong path or conversation id in the brief, overlapping file scopes) does not count. After each one, add the trap to the brief and relaunch on the same lane. When a lane has made **more than three** (on the fourth), new units for that lane go to its 1st fallback in the ladder below, and a unit that was running moves too. If the fallback fails as well, the next step in the ladder continues from where it stopped, from files, not from zero. The quota thresholds still apply to the fallback.
 
 ### 3. Failover ladders
 
@@ -498,7 +504,7 @@ budget. Never treat an unmeasured comparison as equivalent.
 
 | Lane that failed (profile it needs) | 1st fallback | 2nd fallback | 3rd fallback | If all fail |
 |---|---|---|---|---|
-| **Main loop** Opus `high` | Whole Claude pool down: gpt-6.2-astra `medium` in Codex. Use the knowledge-work profile to confirm equivalence. For a high-stakes document/PDF judgment, add a gemini-4-neon `high` review. | Codex also down: Antigravity **Orchestrator (Neon)** or **gemini-4-neon** `high`. See the handover below. | | Wait for reset |
+| **Main loop** Opus `high` | Whole Claude pool down: gpt-6.2-astra `medium` (`astra-orchestration`) or lower-burn gpt-6.2-sol `xhigh` (`sol-orchestration`) in Codex. Use the knowledge-work profile to confirm equivalence. For a high-stakes document/PDF judgment, add a gemini-4-neon `high` review. | Codex also down: Antigravity **Orchestrator (Neon)** or **gemini-4-neon** `high`. See the handover below. | | Wait for reset |
 | **Mythos/Fable advisor** `medium` | gemini-4-neon `high` (equal or better, slower) | gpt-6.2-astra `medium` with the same question, **below** on accuracy | | Decide without the second opinion and say so |
 | **Opus delegate** `medium` | gpt-6.2-sol `high`, with a step-by-step brief | gemini-4-neon `medium` | gemini-4-hydrogen `high` | Wait for reset |
 | **Opus** `high`, escalation | gpt-6.2-astra `medium` | gemini-4-neon `high` | | Wait for reset |
@@ -506,7 +512,7 @@ budget. Never treat an unmeasured comparison as equivalent.
 | **Haiku** `high` | gpt-6.1-terra `medium` (sample the first job on a new runner; if it fails, gpt-6.2-sol `high`) | gemini-4-hydrogen `medium` | | Queue |
 | **gpt-6.2-sol** `xhigh` | gemini-4-neon `high` (equal or better, slower) | gemini-4-neon `medium` (**below** on code and reasoning) | Opus `high` (**below** on code and reasoning) | Wait for reset |
 | **gpt-6.2-sol** `high`, default | gemini-4-neon `medium` | Opus `high` (**below** on reasoning) | gemini-4-hydrogen `high` (**below** on code and reasoning) | Wait for reset |
-| **gpt-6.2-astra** `medium` | Mythos/Fable advisor if available | gemini-4-neon `high` (equal or better, slower) | Opus `high` (**below** on code/reasoning/accuracy; same-family if Opus main loop) | Skip the second opinion and say so |
+| **gpt-6.2-astra** `medium` | Mythos/Fable advisor if available | gemini-4-neon `high` (equal or better, slower) | Opus `high` (**below** on code/reasoning/accuracy; **same-family** with Opus main loop — label explicitly) | Skip the second opinion and say so |
 | **gpt-6-luna** `high` (knowledge work) | gemini-4-hydrogen `low` | deepseek-flash (slower, first choice for very large publishable batches when budget permits) | Haiku `medium` (faster for small or restricted batches) | Queue |
 | **gemini-4-hydrogen** `high`, PDFs, images, reading, search | gpt-6.2-astra `medium`, **below** on accuracy. Require sources and raise verification one step. | Sonnet `high` (Claude), **below** on accuracy (and borderline on knowledge), for bulk reading only | | Queue |
 | **gemini-4-hydrogen**, video or audio | gemini-4-neon `high` (media only). Keep Hydrogen first for media when it has headroom. | | | Queue if a shared Gemini limit takes down both |
@@ -525,14 +531,14 @@ The operator talks to the main loop through the Claude app, and the app
 stops answering when the Claude pool is down, so the main loop cannot hand
 over at that moment. The handover is prepared **before** it is needed:
 
-1. **At 85 % of the Claude five-hour window (stop mark 90 %) or 95 % of the weekly limit**,
-   the main loop brings `orchestration-checkpoint.md` and the handover note
+1. **At 90 % of the Claude five-hour window (stop mark 95 %) or 85 % of the weekly limit (stop mark 90 %)**,
+   the main loop brings `.orchestration/orchestration-checkpoint.md` and the handover note
    up to date (goal, decisions, units with status, outputs, decisions still
    open), and commits, so a successor needs nothing from Claude.
 2. If the pool goes down and the reset is within about 30 minutes, the
    operator waits. Rebuilding the stack on another family costs more.
 3. Otherwise the operator opens Codex in the project folder with
-   `codex -m gpt-6.2-astra -c model_reasoning_effort=medium` and invokes `astra-orchestration` with the current checkpoint.
+   `codex -m gpt-6.2-astra -c model_reasoning_effort=medium` and invokes `astra-orchestration` (or, for lower Codex quota burn, `codex -m gpt-6.2-sol -c model_reasoning_effort=xhigh` with `sol-orchestration`) with the current checkpoint.
    Follow the project handover rules for checkpointing, decisions that must wait, and
    delegation to Sol, Neon and Hydrogen. Send document/PDF-heavy judgments
    to gemini-4-neon `high` for review. If Codex is down too, the operator
@@ -547,8 +553,8 @@ over at that moment. The handover is prepared **before** it is needed:
 
 A fallback lane starts from files, never from another model's memory.
 
-- **Checkpoint file.** `orchestration-checkpoint.md` in the working directory
-  holds the goal, decisions made and why, the unit list with a status per
+- **Checkpoint file.** `.orchestration/orchestration-checkpoint.md` holds the
+  goal, decisions made and why, the unit list with a status per
   unit (todo, running, done, verified), where each output lives, and open
   questions. Write it before any fan-out and update it when a unit changes
   state.
@@ -560,13 +566,17 @@ A fallback lane starts from files, never from another model's memory.
   share separately before merging.
 - **Raise verification one step** for work that fell to a lighter lane than
   the policy intended.
-- **Do not fail over mid-edit.** Restore files to the last committed state
-  before the new lane begins.
+- **Do not fail over mid-edit on unaccepted source edits.** If a writer
+  stopped while editing code or project files, revert **only that interrupted
+  unit's unaccepted edits** back to HEAD (never touch pre-existing dirty or
+  user-owned files or other units' committed work) before the new lane begins.
+  Idempotent output reports/artifacts inside the unit's work directory may be
+  preserved as evidence.
 
 ### 5. Provider state and recovery
 
-Keep `provider-state.json` in the working directory so every agent routes
-around a pool that is down instead of rediscovering it.
+Keep `.orchestration/provider-state.json` so every agent routes around a pool
+that is down instead of rediscovering it.
 
 ```json
 {
@@ -591,22 +601,24 @@ around a pool that is down instead of rediscovering it.
 ## CLI lanes
 
 **Codex (GPT).** GPT lanes run through `codex exec` with explicit model, effort, and sandbox settings. Execution lanes run on
-`-m gpt-6.2-sol`, that skill's default; pass `-m gpt-6.2-astra` for second
-opinions, `-m gpt-6.1-terra` for the cleanup pilot and `-m gpt-6-luna`
+`-m gpt-6.2-sol` (this policy's default); pass `-m gpt-6.2-astra` for second
+opinions, `-m gpt-6.1-terra` for cleanup qualification/batches and `-m gpt-6-luna`
 for large cleanup jobs. Sol defaults to `high`. Use `xhigh` for higher-requirement, reasoning-
 or science-heavy sensitive work and escalation. Check the selected model and client's requirements in the [Codex model guide](https://learn.chatgpt.com/docs/models).
 
-**Gemini.** Use `gemini-4-hydrogen` at high effort for media, wide reading and
-search. The media exception permits gemini-4-neon
-`high` to back up video/audio only. Gemini CLI headless runs use
-`gemini -m <model> -p "<prompt>" --output-format json` with the subscription
-account. Read the `response` field and pass the model explicitly. Use agy for
-Neon review and second-eye jobs with the model and effort pinned.
+**Gemini.** Use the Gemini runner configured in the project profile (such as
+Gemini CLI headless `gemini -m <model> -p "<prompt>" --output-format json` on
+the subscription account, reading the `response` field, or headless
+Antigravity `agy -p "<brief>" --model "<id>"`). Use `gemini-4-hydrogen` at
+`high` effort for media, wide reading and search (with `gemini-4-neon` `high`
+permitted as a video/audio backup only), and `gemini-4-neon` (`high` review /
+`medium` second eye) with model and effort pinned.
 
 **DeepSeek.** There is no first-party agent CLI. Use an OpenAI-compatible
 client pointed at `https://api.deepseek.com`, or an Anthropic-compatible
 harness pointed at `https://api.deepseek.com/anthropic`, with model
-`deepseek-flash`. Ramp concurrency rather than opening at full width.
+`deepseek-flash` (catalog ID `deepseek-v4.1-flash-1017`). Ramp concurrency
+rather than opening at full width.
 
 When assigning fleet lanes, stamp the model, effort and concurrency per lane
 in the spec so the launch is mechanical and no routing decision happens at
@@ -621,15 +633,14 @@ Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-or
 
 ## Routing ledger
 
-Append one line per delegation to `orchestration-ledger.md`: date, task type,
+Append one line per delegation to `.orchestration/orchestration-ledger.md`: date, task type,
 lane, effort, attempts, verification result, escalation if any. When the same
 task type fails on a lane three times, or passes cleanly on a lighter lane
 three times, propose a change to the routing table to the operator.
-When qualifying Sol for standard code debugging, record three distinct standard
-debugging jobs on gpt-6.2-sol, using `high` by default and `xhigh` only
-under hard rule 4. Record verification and escalation for each job.
-After the third job, use the ledger evidence to recommend a routing
-decision to the operator.
+Optionally, to qualify `gpt-6.2-sol` for standard code debugging in your
+project, record three distinct standard debugging jobs on `gpt-6.2-sol` (`high`
+by default, `xhigh` only under hard rule 4), log verification and escalation
+for each, and use the ledger evidence to propose a routing update.
 
 ## Exceptions
 
@@ -637,5 +648,7 @@ decision to the operator.
   task only, then return to this policy.
 - The operator can override any of this per session; absent that, this policy
   stands.
-- When Mythos/Fable's allowance returns and the operator moves the main loop back to
-  Mythos/Fable, switch to `fable-orchestration`.
+- When moving the main loop to another model or client family (for example when
+  Mythos/Fable's allowance returns or on a Claude pool handover), switch to its
+  corresponding skill (`fable-orchestration`, `astra-orchestration`,
+  `sol-orchestration`, or `neon-orchestration`).

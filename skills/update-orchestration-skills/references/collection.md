@@ -18,7 +18,7 @@ Identifiers use letters, numbers, hyphens, periods, underscores, slashes, colons
 python3 -B scripts/refresh.py --workspace /path/to/project --input /path/to/observations.json --preview
 ```
 
-For speed use `seconds-per-task` and a cohort that identifies the task mix, measurement method and harness. Put modeled estimates in a distinct metric such as `estimated-seconds-per-task`; they do not qualify as measured speed. Use the exact scoring version for a headline index. A metric may also identify a raw test such as `terminal-bench` with the test version and harness in its cohort.
+For speed use `seconds-per-task` and a cohort that identifies the task mix, measurement method and harness. Put modeled estimates in a distinct metric such as `estimated-seconds-per-task`; they do not qualify as measured speed. Use the exact scoring version for a headline index. For suite tests, use the exact versioned metric IDs from [benchmark-suite.json](benchmark-suite.json) (such as `terminal-bench-4.0`) with the harness and scoring cohort in `cohort`; other custom raw tests may use a descriptive metric ID with their version and harness in `cohort`.
 
 ## Task profiles and comparisons
 

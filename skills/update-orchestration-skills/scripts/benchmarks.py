@@ -9,6 +9,20 @@ from catalogs import fields, https_urls, identifier, read_json, rows, valid_date
 
 SUITE = read_json(Path(__file__).resolve().parents[1] / "references" / "benchmark-suite.json")
 UNITS = {test["metric"]: test["unit"] for test in SUITE}
+UNIT_SUFFIXES = {
+    "percent": "%",
+    "elo": " Elo",
+    "points": " pts",
+    "seconds": " s",
+    "usd": " USD",
+    "tokens": " tok",
+}
+
+
+def validate_metric_unit(metric, unit):
+    expected = UNITS.get(metric)
+    if expected and unit != expected:
+        raise ValueError(f"{metric} must use the {expected} unit.")
 
 
 def normalize_check(row):
@@ -18,7 +32,11 @@ def normalize_check(row):
     if not valid_date(row["date"]):
         raise ValueError("Each benchmark check needs an ISO date.")
     checked = rows(row["checked"], "Checked metric IDs")
-    if len(checked) != len(UNITS) or set(checked) != UNITS.keys():
+    if (
+        not all(isinstance(item, str) for item in checked)
+        or len(checked) != len(UNITS)
+        or set(checked) != UNITS.keys()
+    ):
         raise ValueError("Each benchmark check must account for every metric in benchmark-suite.json.")
     if rows(row["sources"], "Benchmark sources"):
         https_urls(row["sources"], "Benchmark sources")
@@ -36,9 +54,7 @@ def require_coverage(data, eligible):
         variant = (row["model"], row["effort"])
         if variant not in covered:
             raise ValueError(f"Missing benchmark checklist for {variant[0]} at {variant[1]} effort.")
-        expected = UNITS.get(row["metric"])
-        if expected and row["unit"] != expected:
-            raise ValueError(f"{row['metric']} must use the {expected} unit.")
+        validate_metric_unit(row["metric"], row["unit"])
 
 
 def matrix(data, grouped):
@@ -51,7 +67,7 @@ def matrix(data, grouped):
         if UNITS.get(metric) != unit:
             continue
         average = statistics.fmean(row["value"] for row in observations)
-        suffix = "%" if unit == "percent" else " Elo"
+        suffix = UNIT_SUFFIXES.get(unit, f" {unit}")
         cells[key][metric].append(f"{average:.10g}{suffix} (`{cohort}`)")
     represented = {model for model, _ in variants}
     variants.update((row["model"], "unspecified") for row in data["models"] if row["model"] not in represented)

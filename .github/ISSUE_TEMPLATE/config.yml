@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Offline walkthrough & quick start
+    url: https://github.com/ahmedkececi/ultimate-orchestration-skills/blob/main/examples/first-run.md
+    about: Try the offline benchmark preview and quota handoff example before filing an issue.
+  - name: Contributing guide
+    url: https://github.com/ahmedkececi/ultimate-orchestration-skills/blob/main/CONTRIBUTING.md
+    about: See guidelines for benchmark corrections, new presets, and local validation commands.

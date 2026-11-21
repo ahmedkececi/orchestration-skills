@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check Python syntax
+        run: |
+          python3 -B -m py_compile \
+            skills/update-orchestration-skills/scripts/benchmarks.py \
+            skills/update-orchestration-skills/scripts/catalogs.py \
+            skills/update-orchestration-skills/scripts/refresh.py \
+            tests/test_updater.py
+
+      - name: Validate bundled JSON files
+        run: |
+          python3 -B -c "
+          import json, pathlib
+          for p in [
+              'skills/update-orchestration-skills/references/benchmark-suite.json',
+              'skills/update-orchestration-skills/references/provider-catalogs.json',
+              'examples/measurements.json',
+          ]:
+              json.loads(pathlib.Path(p).read_text(encoding='utf-8'))
+              print('Valid JSON:', p)
+          "
+
+      - name: Run unit tests
+        run: python3 -B -m unittest discover -s tests -v
+
+      - name: Smoke test offline measurement preview
+        run: |
+          python3 -B skills/update-orchestration-skills/scripts/refresh.py \
+            --workspace . --input examples/measurements.json --preview > /dev/null

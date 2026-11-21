@@ -1,21 +1,28 @@
-# Project orchestration profile example
+# Project orchestration profile example (Mythos/Fable in Claude Code)
 
-Use this as a copyable starting point for the project profile that your repository instructions or session brief references. Fill only the lanes you can use. Keep the real profile in a project-approved location. Store credentials in the project's existing secret mechanism.
+Copy this file to `.orchestration/project-profile.md` in your repository and replace the sample values with the lanes, paths and commands approved for your project. Keep only the pools you actually use — unconfigured lanes fall back automatically. Store secret values in your project's secret manager or environment variables, never in this file.
 
-| Setting | Example or decision to fill in |
+Reference the saved profile from your repository instructions (`CLAUDE.md` or `AGENTS.md`):
+
+```markdown
+## Orchestration
+Read `.orchestration/project-profile.md` before delegating or switching pools.
+```
+
+| Setting | Example configuration (edit for your project) |
 | --- | --- |
-| Project instruction files | Applicable repository instructions and any project-specific contribution guide |
-| Manager | Mythos or Fable: record the exact model ID, supported effort and runner |
-| Authorized workers | Provider, account or pool label, exact model ID, effort, runner, available tools and allowed input classes |
-| Default execution | Codex Sol at high, then Claude Sonnet at high, subject to the approved workers |
-| Measurement data | Use `.orchestration/model-measurements.md` when refreshed. Record any project-specific quality floors or routing overrides. |
-| Independent review | An authorized fresh worker from a different model family, with a same-family fallback policy if appropriate |
-| Data policy | Which providers can see public, internal or restricted data and which classes must remain local |
-| Workspace | Writeable paths, worktree or branch conventions, allowed network access and rules for starting local services |
-| Verification | Format or lint commands, focused tests, full suite and build where applicable |
-| Usage and spending | How to read each pool's allowance, reset time, thresholds and any explicitly approved API budget |
-| Decision gates | Changes that require a maintainer, plus any production, security and irreversible operations reserved for explicit approval |
-| Handoff | Checkpoint path, owner and first verification step after a transfer |
-| Source control | Who stages or commits, branch and pull-request conventions, and how to preserve another worker's changes |
+| Project instruction files | `CLAUDE.md`, `CONTRIBUTING.md` |
+| Manager | Claude Mythos or Fable (`<exact-mythos-or-fable-model-id>`, confirm supported effort and runner in Claude Code; record per-model limits under its exact ID in `.orchestration/provider-state.json`) |
+| Authorized workers | 1) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed.<br>2) **Claude pool (`claude-sub`)**: `Claude Sonnet 5.5` (`high`) and `Claude Opus 5.5` (`medium`, confirm exact IDs in client) via `claude -p` or Claude Agent tool, read/write code, restricted data allowed. *(Add Gemini/Antigravity or DeepSeek lanes here if authorized.)* |
+| Default execution | Codex `gpt-6.2-sol` (`high` via `codex exec`) first to conserve scarce Mythos/Fable allowance, then Claude Sonnet (`high`) or Opus (`medium`) for restricted data and fallback |
+| Measurement data | `.orchestration/model-measurements.md` (refresh via `/update-orchestration-skills`). Never transfer benchmark scores between Mythos and Fable. |
+| Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` or `gpt-6.2-astra` reviews Claude edits; Claude Opus/Sonnet reviews Codex edits). Note: Opus is same-family with Mythos/Fable. |
+| Data policy | **Public/Internal**: Claude and Codex pools. **Restricted/PII**: Claude pool only (or local only). **Publishable only**: metered third-party APIs (e.g., DeepSeek). |
+| Workspace | Writable paths: `src/`, `tests/`, `docs/`. Read-only: `infra/prod/`, `.github/workflows/`. Branch convention: `feat/<topic>` or `fix/<topic>`. Local dev server allowed on `127.0.0.1` only. |
+| Verification | Lint: `ruff check .` · Focused tests: `pytest tests/unit` · Full suite: `pytest` · Build: `npm run build` |
+| Usage and spending | Check `.orchestration/provider-state.json` before delegating. **Weekly limits**: move at `85%`, stop at `90%`. **5-hour windows**: move at `90%`, stop at `95%`. Metered API cap: `$0` (subscriptions only; if enabling an API, name the env var e.g. `DEEPSEEK_API_KEY` and set a hard monthly cap). |
+| Decision gates | Maintainer approval required for DB schema migrations, auth/security changes, dependency major bumps, production deploys and force-pushes. |
+| Handoff | Checkpoint: `.orchestration/orchestration-checkpoint.md` · Ledger: `.orchestration/orchestration-ledger.md` · First check after transfer: `git status --short` + focused test command from checkpoint. |
+| Source control | Manager reviews diffs and decides when to commit; workers never run `git commit` or `git push`. Preserve unrelated working-tree changes. |
 
-For a new lane, verify the installed runner's current help and test an authorized read-only task before assigning writes or a batch. A credential reference may identify the secret by name. Keep its value out of this profile.
+For any new lane, check the installed runner's `--help` and run one read-only verification task before assigning file edits or batches. A credential reference may name an environment variable (such as `DEEPSEEK_API_KEY`); keep its value out of this file.

@@ -18,7 +18,9 @@
         "luna": "gpt-6-luna"
       },
       "official_hosts": [
-        "openai.com"
+        "www.openai.com",
+        "openai.com",
+        "platform.openai.com"
       ]
     },
     {
@@ -56,8 +58,10 @@
         "neon": "gemini-4-neon"
       },
       "official_hosts": [
+        "ai.google.dev",
         "blog.google",
-        "deepmind.google"
+        "deepmind.google",
+        "developers.googleblog.com"
       ]
     },
     {
