@@ -98,7 +98,27 @@ flowchart LR
 
 1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep all skill folder names unchanged.
 2. Copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from your repository instructions (`CLAUDE.md` or `AGENTS.md`). List authorized runners, data scopes, budget, writable paths and verification commands. Edit the profile's machine-readable lane block to match the model IDs, effort levels, pools and roles you approve in your client.
-3. Invoke the coordinator using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). Start with a bounded deliverable, one eligible worker and a verifiable acceptance check.
+3. Invoke the coordinator in chat using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex).
+
+#### What to type in chat
+
+Start a session by invoking the coordinator skill together with a bounded task and a verifiable acceptance check (or ask it to load your profile first):
+
+```text
+# Claude Code — start a task
+/opus-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+
+# Codex — start a task
+$sol-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+
+# Antigravity — start a task
+/neon-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate <your task> inside src/ and tests/, verify with <test command>, and run an independent cross-family review before accepting.
+
+# Any client — resume after a quota handoff (swap command for your client)
+$sol-orchestration Read .orchestration/orchestration-checkpoint.md and .orchestration/provider-state.json, run git status --short, and continue the remaining units.
+```
+
+See more ready-to-paste examples (including profile preflight and Turkish prompts) in [examples/first-run.md](examples/first-run.md#what-to-type-in-chat).
 
 ### Refresh model data on demand
 
@@ -235,7 +255,27 @@ flowchart LR
 
 1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Tüm skill klasör adlarını olduğu gibi koru.
 2. Koordinatör klasöründeki `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyala ve depo talimatlarından (`CLAUDE.md` veya `AGENTS.md`) bu dosyaya referans ver. Yetkili çalıştırıcıları, veri kapsamını, bütçeyi, yazılabilir yolları ve doğrulama komutlarını belirt. Profildeki JSON bloğunu istemcinde doğruladığın ve onayladığın model kimlikleri, efor seviyeleri, havuzlar ve rollerle doldur.
-3. Koordinatörü yukarıdaki **Komut** sütunundaki adla çağır (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Kapsamı belli, tek bir uygun ajana verilebilen ve ölçülebilir kabul kriteri olan bir işle başla.
+3. Koordinatörü sohbette yukarıdaki **Komut** sütunundaki adla çağır (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`).
+
+#### Chate ne yazarak başlarsın?
+
+Kurulumdan sonra sohbeti koordinatör komutu + kapsamı net bir görev + doğrulanabilir bir kontrolle başlat:
+
+```text
+# Claude Code — göreve başla
+/opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+
+# Codex — göreve başla
+$sol-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+
+# Antigravity — göreve başla
+/neon-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/ ve tests/ içinde <görevini> planlayıp yetkili ajana delege et, <test komutu> ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+
+# Kota devri sonrası başka istemciden devam et (komutu istemcine göre değiştir)
+$sol-orchestration .orchestration/orchestration-checkpoint.md ve .orchestration/provider-state.json dosyalarını oku, git status --short çalıştır ve kalan iş birimlerinden devam et.
+```
+
+Profil ön kontrolü ve ek örnek komutlar için [examples/first-run.md](examples/first-run.md#chate-ne-yazarak-başlarsın) dosyasına bakabilirsin.
 
 ### Model verilerini istediğin anda yenile
 

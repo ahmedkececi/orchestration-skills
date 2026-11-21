@@ -92,7 +92,63 @@ Exact next action and completion condition: Wait for Worker B's 4-line return (`
 
 Use the [workflow templates](../skills/sol-orchestration/workflow-templates.md) to write your own brief and handoff. The prespecified quota thresholds and fallback candidates live in the [coordinator presets](../README.md#choose-a-coordinator). The sample describes a decision the coordinator makes using its configured runners and observed quota.
 
+## What to type in chat
+
+After installing a coordinator skill and saving `.orchestration/project-profile.md`, open your client in the project root and send one of these starter prompts:
+
+1. **Preflight check (before your first task):**
+   ```text
+   /opus-orchestration Read .orchestration/project-profile.md, check my authorized lanes and .orchestration/provider-state.json, report any missing setup, and wait for my first task.
+   ```
+   *(In Codex use `$sol-orchestration` or `$astra-orchestration`; in Antigravity use `/neon-orchestration`; in Claude Code you can also use `/fable-orchestration`.)*
+
+2. **Start a real task:**
+   ```text
+   /opus-orchestration Read .orchestration/project-profile.md and .orchestration/provider-state.json. Plan and delegate updating UTC timestamp rendering in src/pages/ with unit tests in tests/. Verify with `npm test` and run an independent cross-family review before accepting.
+   ```
+
+3. **Resume in another client after a quota handoff:**
+   ```text
+   $sol-orchestration Read .orchestration/orchestration-checkpoint.md and .orchestration/provider-state.json, run `git status --short`, and continue the remaining units.
+   ```
+
+4. **Refresh benchmarks or add a provider:**
+   ```text
+   /update-orchestration-skills
+   /add-provider-orchestration-skills <PROVIDER>
+   ```
+   *(Replace `/` with `$` in Codex.)*
+
 ## Türkçe kısa başlangıç
+
+### Chate ne yazarak başlarsın?
+
+Koordinatör skill’ini kurup `.orchestration/project-profile.md` dosyasını hazırladıktan sonra istemcini proje dizininde açıp şu mesajlardan biriyle başlayabilirsin:
+
+1. **İlk kurulum kontrolü (görev vermeden önce):**
+   ```text
+   /opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku, yetkili hatlarımı ve eksik bir kurulum olup olmadığını kontrol edip ilk görevimi bekle.
+   ```
+   *(Codex’te `$sol-orchestration` veya `$astra-orchestration`, Antigravity’de `/neon-orchestration`, Claude Code’da istersen `/fable-orchestration` kullan.)*
+
+2. **Gerçek bir görevi başlatma:**
+   ```text
+   /opus-orchestration .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oku. src/pages/ altında UTC zaman damgası düzenlemesini ve tests/ testlerini planlayıp yetkili ajana delege et. `npm test` ile doğrula ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+   ```
+
+3. **Kota devri sonrası başka istemciden devam etme:**
+   ```text
+   $sol-orchestration .orchestration/orchestration-checkpoint.md ve .orchestration/provider-state.json dosyalarını oku, `git status --short` çalıştır ve kalan iş birimlerinden devam et.
+   ```
+
+4. **Model ölçümlerini yenileme veya sağlayıcı ekleme:**
+   ```text
+   /update-orchestration-skills
+   /add-provider-orchestration-skills <SAĞLAYICI>
+   ```
+   *(Codex’te `/` yerine `$` kullan.)*
+
+### Çevrimdışı demo özeti
 
 Yukarıdaki [çevrimdışı komutu](#preview-model-data-offline) Git ve Python 3.9+ ile çalıştırabilirsin. `awk` filtresi yalnızca canlı çalışma alanı tablolarını gösterir; boru (`|`) kısmını kaldırırsan üstte tarihsel arşiv, altta JSON gözlemleriyle birlikte tam çıktıyı görebilirsin. Doğrulanmamış testler `-` görünür; değerler gösterim amaçlıdır.
 
