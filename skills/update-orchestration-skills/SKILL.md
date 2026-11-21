@@ -9,7 +9,7 @@ Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-or
 
 ## With a model name
 
-A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. If the exact release is verified but there are no published scores, add the model with missing scores.
+A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. Use the complete benchmark checklist below even if the release has no published scores.
 
 ```sh
 python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --input observations.json
@@ -19,12 +19,18 @@ python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --in
 
 1. Run `python3 -B scripts/catalogs.py plan --workspace /path/to/project`. It lists the official sources, reference versions from the orchestration presets, and any workspace providers added by the companion skill.
 2. Read both the provider catalog and release history for each provider. Follow applicable pagination, tabs and dated links. Verify reference-model dates and newer release IDs from the official sources. Record the IDs observed in each source. Mark missing pages or unclear dates rather than claiming full coverage.
-3. Run `catalogs.py verify` with the report format in the [catalog workflow](references/catalog-workflow.md). Collect benchmark observations only for verified newer models returned by this step. A newer model with unpublished scores can still be added as a verified release.
-4. Save both the releases and the coverage audit. Omit `--input` if there are no verified scores.
+3. Run `catalogs.py verify` with the report format in the [catalog workflow](references/catalog-workflow.md). Run the complete benchmark checklist below only for the newer model IDs returned by the verifier.
+4. Save the releases, benchmark rows and catalog audit. Omit `--input` only when the verifier returned no newer models.
 
 ```sh
 python3 -B scripts/refresh.py --workspace /path/to/project --catalog-report scan.json --input observations.json
 ```
+
+## Check the complete benchmark suite
+
+For each verified model, identify its documented effort levels and any explicitly labeled benchmark variants. Use `unspecified` when no effort can be verified. Read the [benchmark checklist](references/benchmark-suite.json) and search for **every test column** for each variant. Start with the evaluator's model breakdown and follow the individual evaluation links for fields absent from the summary. Check exact test editions and harnesses. An index or a related test does not fill a missing raw result.
+
+Submit one `benchmark_checks` row per model and effort, even if every result is unavailable. List only sources actually inspected. Add numeric observations for verified results. The helper rejects incomplete checklists and displays a literal `-` for missing values. See the [measurement guide](references/collection.md#full-benchmark-checklist).
 
 ## Verification and result
 

@@ -1,0 +1,12 @@
+[
+  {"metric": "frontiercode-aa-2.0", "column": "FC2", "name": "FrontierCode-AA 2.0", "unit": "percent"},
+  {"metric": "terminal-bench-4.0", "column": "TB4", "name": "Terminal-Bench 4.0", "unit": "percent"},
+  {"metric": "terminal-bench-science-0.1", "column": "TBS", "name": "Terminal-Bench-Science 0.1.0", "unit": "percent"},
+  {"metric": "critpt-v2-hard", "column": "CritPt", "name": "CritPt v2 Hard Subset", "unit": "percent"},
+  {"metric": "hle-diamond", "column": "HLE-D", "name": "HLE-Diamond", "unit": "percent"},
+  {"metric": "aa-omniscience-v1.1-accuracy", "column": "Omni acc", "name": "AA-Omniscience v1.1 Accuracy", "unit": "percent"},
+  {"metric": "aa-omniscience-v1.1-non-hallucination", "column": "Non-hallucination", "name": "AA-Omniscience v1.1 Non-Hallucination", "unit": "percent"},
+  {"metric": "aa-briefcase-v1.1", "column": "Briefcase", "name": "AA-Briefcase v1.1", "unit": "elo"},
+  {"metric": "automationbench-aa", "column": "AutoB", "name": "AutomationBench-AA", "unit": "percent"},
+  {"metric": "gdp-pdf", "column": "GDP.pdf", "name": "GDP.pdf", "unit": "percent"}
+]

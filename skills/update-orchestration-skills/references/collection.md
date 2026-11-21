@@ -4,12 +4,13 @@ Use provider release notes and model documentation for exact model IDs and relea
 
 ## Input shape
 
-Pass a JSON object with one or both arrays. Every supplied row should use the listed fields.
+Pass a JSON object with the applicable arrays. Every supplied row should use the listed fields.
 
 | Array | Fields |
 | --- | --- |
 | `models` | `model`, `provider`, `released` (ISO date or null), `url` (official release or model documentation) |
 | `measurements` | `model`, `effort`, `metric`, `cohort`, `unit`, `source`, `date` (ISO date), `value` (number), `url` (direct result or documented export source) |
+| `benchmark_checks` | `model`, `effort`, `date` (ISO lookup date), `checked` (all metric IDs in the checklist), `sources` (URLs actually inspected, or an empty array when none could be read) |
 
 Identifiers use letters, numbers, hyphens, periods, underscores, slashes, colons or plus signs. Use a canonical model ID, a stable source identifier and a cohort identifier that encodes the benchmark version and harness or scoring method. Give a data mirror the primary source's identity or omit it. Use `unspecified` for an unreported effort and keep that receipt separate from explicitly measured efforts. Supported units are `points`, `percent`, `elo`, `seconds`, `usd` and `tokens`. These are representative field names and the syntax below reads a real export a user supplies.
 
@@ -29,5 +30,14 @@ For speed use `seconds-per-task` and a cohort that identifies the task mix, meas
 ## Scope and check an update
 
 - For a named update, include one exact `models` record and use `--model EXACT_ID`. The helper rejects observations for other IDs, even if a source page lists related variants.
-- For catalog mode, consult the [catalog workflow](catalog-workflow.md). The verified report supplies the model list. Import only benchmark rows for the returned IDs. Retain source links and explicitly report unmeasured efforts or tests.
+- For catalog mode, consult the [catalog workflow](catalog-workflow.md). The verified report supplies the model list. Import benchmark checks and observations only for the returned IDs. Report any unverified efforts or tests.
 - For a deliberate offline or custom import, leave out both scope flags and submit the user-approved observations directly. This does not mark catalog coverage as checked.
+
+
+## Full benchmark checklist
+
+Use the exact metric IDs, versions and units from [benchmark-suite.json](benchmark-suite.json). It mirrors the raw test columns in the [historical archive](model-measurements.md). Check FrontierCode, Terminal-Bench, Terminal-Bench-Science, CritPt, HLE-Diamond, both Omniscience measures, Briefcase, AutomationBench and GDP.pdf. Start from the exact model and effort page and the [Artificial Analysis evaluation methodology](https://artificialanalysis.ai/methodology/intelligence-benchmarking). Use a benchmark owner's result only when it documents the same test edition and identifies the evaluated model and effort. Keep separate harnesses or cohorts in separate observations.
+
+Record one complete checklist for every known model and effort variant in a live refresh. Use `unspecified` when no known effort is documented. Include only URLs actually read in `sources`, and keep the direct evidence links in the numeric measurement rows. An empty `measurements` array is valid when the checklist was attempted and no score was verified. The Markdown matrix renders every test column with a literal `-` wherever no matching verified observation exists. A real zero remains a numeric result.
+
+Report the aggregate index, time, cost or workload profiles separately when sourced. Leaving a profile unknown does not remove the raw test results. A similar benchmark or an overall index cannot substitute for a missing test score. If a test was unavailable now, retain any earlier verified measurements for the same variant and mark the reason for the gap in the refresh summary.

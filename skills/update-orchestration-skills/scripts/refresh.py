@@ -7,6 +7,8 @@ import math
 from pathlib import Path
 import re
 import statistics
+
+from benchmarks import matrix, normalize_check, require_coverage
 from catalogs import official_url, read_json, registry, safe_output, valid_date, valid_url, verify_scan, workspace_path, write_atomic
 
 
@@ -20,18 +22,25 @@ IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}")
 UNITS = {"points", "percent", "elo", "seconds", "usd", "tokens"}
 KEYS = {
     "models": ("model",),
+    "benchmark_checks": ("model", "effort"),
     "measurements": ("model", "effort", "metric", "cohort", "unit", "source"),
 }
 
 
 def normalize(payload):
     if not isinstance(payload, dict) or payload.keys() - KEYS.keys():
-        raise ValueError("Expected a JSON object with models and/or measurements arrays.")
+        raise ValueError("Expected a JSON object with models, measurements and/or benchmark_checks arrays.")
     data = {}
     for group, key_fields in KEYS.items():
         rows = payload.get(group, [])
         if not isinstance(rows, list):
             raise ValueError(f"{group} must be an array.")
+        if group == "benchmark_checks":
+            data[group] = [normalize_check(row) for row in rows]
+            keys = {(row["model"], row["effort"]) for row in data[group]}
+            if len(keys) != len(rows):
+                raise ValueError("Duplicate benchmark check for the same model and effort.")
+            continue
         entries = []
         for row in rows:
             if not isinstance(row, dict):
@@ -68,7 +77,7 @@ def merge(previous, incoming):
         for row in previous[group] + incoming[group]:
             key = tuple(row[field] for field in fields)
             old = rows.get(key)
-            if group == "measurements" and old and row["date"] < old["date"]:
+            if group in ("measurements", "benchmark_checks") and old and row["date"] < old["date"]:
                 continue
             if group == "models" and old and row["provider"].lower() != old["provider"].lower():
                 raise ValueError(f"Conflicting providers for {row['model']}. Use qualified model IDs.")
@@ -110,6 +119,7 @@ def render(baseline, data, audit):
     for row in data["measurements"]:
         key = tuple(row[k] for k in ("model", "effort", "metric", "cohort", "unit"))
         grouped[key].append(row)
+    lines.extend(matrix(data, grouped))
     lines += [
         "",
         "### Scores and profile averages",
@@ -158,7 +168,6 @@ def read_previous(path):
     return baseline, normalize(stored), audit
 
 
-
 def render_audit(audit):
     status = "complete against registered sources" if audit["complete"] else "incomplete"
     lines = ["", "### Latest catalog check", "", f'{audit["checked_on"]} · Coverage {status}.']
@@ -202,6 +211,7 @@ def scoped_input(args, workspace, incoming):
     eligible = {row["model"] for row in incoming["models"]}
     if any(row["model"] not in eligible for row in incoming["measurements"]):
         raise ValueError("Measurements include a model outside the verified refresh scope.")
+    require_coverage(incoming, eligible)
     return audit
 
 
