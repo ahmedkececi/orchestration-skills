@@ -197,8 +197,7 @@ and apply the final high-stakes check separately.
    `gpt-6.2-sol` `high` when Claude is full or down, or for parallel overflow.
 3. **Is the input video or audio, or a pile of long PDFs or screenshots to
    turn into text or inspect visually?** `gemini-4-hydrogen` `high` (the configured Gemini runner).
-   For video/audio only, `gemini-4-neon` `high` is the approved backup
-  .
+   For video/audio only, `gemini-4-neon` `high` is the approved backup.
 4. **Is it restricted data** (secrets, credentials, personal or client data)?
    Continue through the applicable lanes using **Claude only** (**`Opus`
    `medium`/`high`**, **`Sonnet` `high`**, **`Haiku` `high`** via `claude -p`),
@@ -551,8 +550,8 @@ same error returns after the backoff, treat it as B.
 - **B, window exhausted.** Record the reset time in `provider-state.json`. If
   it is within about 20 minutes and other lanes have work, reorder and come
   back. Otherwise fail over along the ladder. Tell the operator once.
-- **C, plan exhausted.** Mark the pool down in `provider-state.json` until
-  its reset, fail over, and tell the operator, naming any paid options without
+- **C, plan exhausted.** Mark the affected model or shared pool down in
+  `provider-state.json` until its reset, fail over, and tell the operator, naming any paid options without
   taking them. For a depleted DeepSeek quota, report and wait or route
   along the ladder.
 - **D, not a limit.** Do not fail over. Fix the request.
@@ -676,7 +675,7 @@ the user's Claude subscription:
 Execution lanes run on `-m gpt-6.2-sol` (`high` default, `xhigh` for higher
 requirements, reasoning-/science-heavy sensitive work and escalation); pass
 `-m gpt-6.1-terra` (`medium`) for the cleanup pilot and `-m gpt-6-luna`
-(`high`) for large cleanup jobs. Astra needs Codex CLI 0.153.0 or newer.
+(`high`) for large cleanup jobs. Check the selected model and client's requirements in the [Codex model guide](https://learn.chatgpt.com/docs/models).
 
 **Gemini.** Use the Gemini runner configured in the project profile, such
 as headless Antigravity (`agy -p "<brief>" --model "<id>"`). Pin the

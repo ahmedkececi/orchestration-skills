@@ -581,8 +581,8 @@ if the same error returns after the backoff, treat it as B.
 - **B, window exhausted.** Record the reset time in `provider-state.json`. If
   it is within about 20 minutes and other lanes have work, reorder and come
   back. Otherwise fail over along the ladder. Tell the operator once.
-- **C, plan exhausted.** Mark the pool down in `provider-state.json` until
-  its reset, fail over, and tell the operator, naming any paid options without
+- **C, plan exhausted.** Mark the affected model or shared pool down in
+  `provider-state.json` until its reset, fail over, and tell the operator, naming any paid options without
   taking them. For a depleted DeepSeek quota, report and wait or route
   along the ladder.
 - **D, not a limit.** Do not fail over. Fix the request.
@@ -710,7 +710,7 @@ Execution lanes run on `-m gpt-6.2-sol` (`high` default, `xhigh` for higher
 requirements, reasoning-/science-heavy sensitive work and escalation); pass
 `-m gpt-6.2-astra` (`medium`) for peer questions and Google-authored reviews,
 `-m gpt-6.1-terra` (`medium`) for the cleanup pilot, and `-m gpt-6-luna`
-(`high`) for large cleanup jobs. Astra needs Codex CLI 0.153.0 or newer. Use the project's approved sandbox for the task.
+(`high`) for large cleanup jobs. Check the selected model and client's requirements in the [Codex model guide](https://learn.chatgpt.com/docs/models). Use the project's approved sandbox for the task.
 
 **Gemini via headless CLI.** Use the configured runner when a task needs
 its own workspace, narrowly scoped tool permissions, or CLI logging. In

@@ -594,7 +594,7 @@ around a pool that is down instead of rediscovering it.
 `-m gpt-6.2-sol`, that skill's default; pass `-m gpt-6.2-astra` for second
 opinions, `-m gpt-6.1-terra` for the cleanup pilot and `-m gpt-6-luna`
 for large cleanup jobs. Sol defaults to `high`. Use `xhigh` for higher-requirement, reasoning-
-or science-heavy sensitive work and escalation. Astra needs Codex CLI 0.153.0 or newer.
+or science-heavy sensitive work and escalation. Check the selected model and client's requirements in the [Codex model guide](https://learn.chatgpt.com/docs/models).
 
 **Gemini.** Use `gemini-4-hydrogen` at high effort for media, wide reading and
 search. The media exception permits gemini-4-neon

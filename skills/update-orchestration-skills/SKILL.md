@@ -9,7 +9,7 @@ Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-or
 
 ## With a model name
 
-A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. Use the complete benchmark checklist below even if the release has no published scores.
+A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. Named lookups have no release-date cutoff. Use the complete benchmark checklist below even if the release has no published scores.
 
 ```sh
 python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --input observations.json
