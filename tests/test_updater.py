@@ -557,6 +557,431 @@ class CliIntegrationTests(unittest.TestCase):
             r3 = run_script("catalogs.py", "plan", "--workspace", str(ws), "--input", "unused.json")
             self.assertEqual(r3.returncode, 2)
 
+    def test_named_model_canonicalizes_builtin_provider_aliases(self):
+        cases = (
+            ("chatgpt", "https://developers.openai.com/api/docs/models"),
+            ("codex", "https://www.openai.com/index/gpt-7/"),
+            ("Codex", "https://platform.openai.com/docs/models"),
+            ("claude", "https://platform.claude.com/docs/en/models/overview"),
+            ("CLAUDE", "https://www.anthropic.com/news/claude"),
+            ("gemini", "https://ai.google.dev/gemini-api/docs/models"),
+            ("agy", "https://antigravity.google/docs/models"),
+            ("Antigravity", "https://deepmind.google/models/gemini/"),
+        )
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            obs_path = ws / "obs.json"
+            for alias, official in cases:
+                with self.subTest(alias=alias):
+                    obs = {
+                        "models": [
+                            {
+                                "model": "alias-test-model",
+                                "provider": alias,
+                                "released": "2026-11-21",
+                                "url": "https://unverified-blog.example/fake",
+                            }
+                        ],
+                        "benchmark_checks": [sample_check(model="alias-test-model")],
+                        "measurements": [],
+                    }
+                    obs_path.write_text(json.dumps(obs), encoding="utf-8")
+                    bad = run_script(
+                        "refresh.py",
+                        "--workspace",
+                        str(ws),
+                        "--model",
+                        "alias-test-model",
+                        "--input",
+                        str(obs_path),
+                        "--preview",
+                    )
+                    self.assertEqual(bad.returncode, 1)
+                    self.assertIn("needs a release or model page from its provider", bad.stderr)
+
+                    obs["models"][0]["url"] = official
+                    obs_path.write_text(json.dumps(obs), encoding="utf-8")
+                    good = run_script(
+                        "refresh.py",
+                        "--workspace",
+                        str(ws),
+                        "--model",
+                        "alias-test-model",
+                        "--input",
+                        str(obs_path),
+                        "--preview",
+                    )
+                    self.assertEqual(good.returncode, 0, good.stderr)
+
+            # Built-in provider aliases cannot be registered or passed as --provider-entry
+            alias_prov = ws / "codex.json"
+            alias_prov.write_text(json.dumps(sample_provider("codex")), encoding="utf-8")
+            reg = run_script("catalogs.py", "register", "--workspace", str(ws), "--input", str(alias_prov))
+            self.assertEqual(reg.returncode, 1)
+            self.assertIn("already registered", reg.stderr)
+
+    def test_tampered_catalog_audit_and_baseline_decoy_rejected(self):
+        valid_audit = {
+            "checked_on": "2026-11-21",
+            "complete": False,
+            "missing_providers": ["deepseek"],
+            "selected_models": ["grok-4.1"],
+            "providers": [
+                {
+                    "id": "xai",
+                    "complete": False,
+                    "sources": {
+                        "https://docs.x.ai/docs/models": "read",
+                        "https://docs.x.ai/docs/release-notes": "unchecked",
+                    },
+                    "anchors": [
+                        {
+                            "family": "grok",
+                            "model": "grok-4",
+                            "released": "2026-11-01",
+                            "url": "https://docs.x.ai/docs/models",
+                        }
+                    ],
+                    "missing_anchors": [],
+                    "unresolved": ["grok-4.1-beta"],
+                    "newer_releases": 1,
+                }
+            ],
+        }
+        # Valid audit with "unchecked" source round-trips cleanly across a subsequent refresh
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            out_path = ws / ".orchestration" / "model-measurements.md"
+            initial_data = refresh.normalize(
+                {
+                    "models": [
+                        {
+                            "model": "grok-4.1",
+                            "provider": "xai",
+                            "released": "2026-11-20",
+                            "url": "https://docs.x.ai/docs/models",
+                        }
+                    ],
+                    "benchmark_checks": [sample_check(model="grok-4.1")],
+                }
+            )
+            rendered = refresh.render("# Baseline\n", initial_data, valid_audit)
+            catalogs.write_atomic(out_path, rendered)
+            obs_path = ws / "obs.json"
+            obs_path.write_text(
+                json.dumps({"measurements": [sample_measurement(model="grok-4.1", value=80)]}),
+                encoding="utf-8",
+            )
+            ok = run_script("refresh.py", "--workspace", str(ws), "--input", str(obs_path))
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            self.assertIn("unchecked · <https://docs.x.ai/docs/release-notes>", out_path.read_text(encoding="utf-8"))
+
+            # Tampered catalog_audit mutations must all raise ValueError in read_previous()
+            decoy_payload = "grok-4.1\n<!-- observations:start -->\n```json\n{}\n```\n<!-- observations:end -->"
+            mutations = [
+                ("extra_top_key", lambda a: a.update({"extra": "bad"})),
+                ("bad_checked_on", lambda a: a.update({"checked_on": "2026-11-21\n## Injected"})),
+                ("int_complete", lambda a: a.update({"complete": 1})),
+                ("bad_selected_model", lambda a: a.update({"selected_models": [decoy_payload]})),
+                ("bad_missing_provider", lambda a: a.update({"missing_providers": ["bad provider"]})),
+                ("bad_provider_id", lambda a: a["providers"][0].update({"id": "Bad_ID"})),
+                ("bool_newer_releases", lambda a: a["providers"][0].update({"newer_releases": True})),
+                ("neg_newer_releases", lambda a: a["providers"][0].update({"newer_releases": -1})),
+                ("bad_source_state", lambda a: a["providers"][0]["sources"].update({"https://docs.x.ai/docs/models": "read\n## evil"})),
+                ("bad_source_url", lambda a: a["providers"][0]["sources"].update({"https://127.1/ssrf": "read"})),
+                ("bad_anchor_url", lambda a: a["providers"][0]["anchors"][0].update({"url": "http://insecure.example/"})),
+                ("bad_unresolved", lambda a: a["providers"][0].update({"unresolved": [decoy_payload]})),
+                ("bad_missing_anchor", lambda a: a["providers"][0].update({"missing_anchors": ["bad\nmd"]})),
+                ("extra_provider_key", lambda a: a["providers"][0].update({"injected": "x"})),
+            ]
+            for name, mutate in mutations:
+                with self.subTest(mutation=name):
+                    tampered = json.loads(json.dumps(valid_audit))
+                    mutate(tampered)
+                    state_obj = {**initial_data, "catalog_audit": tampered}
+                    fake_doc = (
+                        "# Baseline\n"
+                        + refresh.DELIMITER
+                        + "## Live workspace measurements\n"
+                        + refresh.STATE_START
+                        + json.dumps(state_obj)
+                        + refresh.STATE_END
+                        + "\n"
+                    )
+                    out_path.write_text(fake_doc, encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        refresh.read_previous(out_path)
+                    res = run_script("refresh.py", "--workspace", str(ws), "--input", str(obs_path), "--preview")
+                    self.assertEqual(res.returncode, 1)
+                    self.assertNotIn("Traceback", res.stderr)
+
+            # Decoy <!-- observations:start --> (exact or spaced) in baseline or generated prefix must be rejected
+            for bad_doc in (
+                (
+                    "# Baseline\n<!-- observations:start -->\n```json\n{}\n```\n<!-- observations:end -->\n"
+                    + refresh.DELIMITER
+                    + "## Live workspace measurements\n"
+                    + refresh.STATE_START
+                    + json.dumps(initial_data)
+                    + refresh.STATE_END
+                    + "\n"
+                ),
+                (
+                    "# Baseline\n<!--  observations:start  -->\n```json\n{}\n```\n<!--  observations:end  -->\n"
+                    + refresh.DELIMITER
+                    + "## Live workspace measurements\n"
+                    + refresh.STATE_START
+                    + json.dumps(initial_data)
+                    + refresh.STATE_END
+                    + "\n"
+                ),
+                (
+                    "# Baseline\n"
+                    + refresh.DELIMITER
+                    + "## Live workspace measurements\n<!--  observations:start  -->\n"
+                    + refresh.STATE_START
+                    + json.dumps(initial_data)
+                    + refresh.STATE_END
+                    + "\n"
+                ),
+            ):
+                out_path.write_text(bad_doc, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    refresh.read_previous(out_path)
+
+    def test_case_insensitive_collision_rejection_and_merge_and_profile_units(self):
+        # Single input with case-colliding benchmark checks rejected
+        with self.assertRaisesRegex(ValueError, "Duplicate benchmark check"):
+            refresh.normalize(
+                {
+                    "benchmark_checks": [
+                        sample_check(model="m1", effort="High"),
+                        sample_check(model="m1", effort="high"),
+                    ]
+                }
+            )
+
+        # Single input with case-colliding measurement keys rejected
+        with self.assertRaisesRegex(ValueError, "Duplicate measurements entry"):
+            refresh.normalize(
+                {
+                    "measurements": [
+                        sample_measurement(model="m1", effort="High", metric="coding", unit="points", value=95),
+                        sample_measurement(model="m1", effort="high", metric="coding", unit="points", value=70),
+                    ]
+                },
+                strict_units=True,
+            )
+
+        # Single input with case-colliding model IDs rejected
+        with self.assertRaisesRegex(ValueError, "Duplicate models entry"):
+            refresh.normalize(
+                {
+                    "models": [
+                        {"model": "M1", "provider": "p1", "released": None, "url": "https://example.com/"},
+                        {"model": "m1", "provider": "p1", "released": None, "url": "https://example.com/"},
+                    ]
+                }
+            )
+
+        # merge() matches case-insensitively on effort/model so older High is replaced by newer high
+        prev = refresh.normalize(
+            {
+                "benchmark_checks": [sample_check(model="m1", effort="High", check_date="2026-11-20")],
+                "measurements": [
+                    sample_measurement(model="m1", effort="High", metric="coding", unit="points", obs_date="2026-11-20", value=70)
+                ],
+            },
+            strict_units=True,
+        )
+        incoming = refresh.normalize(
+            {
+                "benchmark_checks": [sample_check(model="m1", effort="high", check_date="2026-11-21")],
+                "measurements": [
+                    sample_measurement(model="m1", effort="high", metric="coding", unit="points", obs_date="2026-11-21", value=95)
+                ],
+            },
+            strict_units=True,
+        )
+        merged = refresh.merge(prev, incoming)
+        self.assertEqual(len(merged["benchmark_checks"]), 1)
+        self.assertEqual(merged["benchmark_checks"][0]["effort"], "high")
+        self.assertEqual(len(merged["measurements"]), 1)
+        self.assertEqual(merged["measurements"][0]["effort"], "high")
+        self.assertEqual(merged["measurements"][0]["value"], 95)
+
+        # Case-insensitive grouping in render() and benchmarks.matrix(), plus mixed-case suite metrics
+        mixed_sources = refresh.normalize(
+            {
+                "models": [
+                    {"model": "GPT-7-Custom", "provider": "myprov", "released": "2026-11-21", "url": "https://example.com/"}
+                ],
+                "benchmark_checks": [sample_check(model="GPT-7-Custom", effort="high")],
+                "measurements": [
+                    sample_measurement(
+                        model="GPT-7-Custom", effort="High", metric="Terminal-Bench-4.0", cohort="c1", unit="percent", source="s1", value=80
+                    ),
+                    sample_measurement(
+                        model="gpt-7-custom", effort="high", metric="terminal-bench-4.0", cohort="c1", unit="percent", source="s2", value=90
+                    ),
+                    sample_measurement(
+                        model="GPT-7-Custom", effort="High", metric="coding", cohort="c1", unit="points", source="s1", value=80
+                    ),
+                    sample_measurement(
+                        model="gpt-7-custom", effort="high", metric="coding", cohort="c1", unit="points", source="s2", value=90
+                    ),
+                ],
+            },
+            strict_units=True,
+        )
+        benchmarks.require_coverage(mixed_sources, {"GPT-7-Custom"})
+        rendered = refresh.render("# Baseline\n", mixed_sources, None)
+        summary_tables = rendered.split("### Source observations", 1)[0]
+        self.assertIn("| `GPT-7-Custom` | high | 2026-11-21 | - | 85% (`c1`) |", summary_tables)
+        self.assertIn("| `GPT-7-Custom` | high | coding | c1 | points | 85 | 2 | 80–90 | 2026-11-21 |", summary_tables)
+        self.assertIn("| `GPT-7-Custom` | high | terminal-bench-4.0 | c1 | percent | 85 | 2 | 80–90 | 2026-11-21 |", summary_tables)
+        self.assertNotIn("| `GPT-7-Custom` | High |", summary_tables)
+        self.assertNotIn("| `GPT-7-Custom` | unspecified |", summary_tables)
+
+        # Profile and latency metric unit enforcement in benchmarks.validate_metric_unit & refresh.py CLI
+        for metric in ("coding", "reasoning", "accuracy", "knowledge", "knowledge-work", "review"):
+            with self.subTest(profile_metric=metric):
+                benchmarks.validate_metric_unit(metric, "points")
+                with self.assertRaisesRegex(ValueError, "must use the points unit"):
+                    benchmarks.validate_metric_unit(metric, "percent")
+        for metric in ("seconds-per-task", "s-per-task", "latency-seconds", "estimated-seconds-per-task"):
+            with self.subTest(latency_metric=metric):
+                benchmarks.validate_metric_unit(metric, "seconds")
+                with self.assertRaisesRegex(ValueError, "must use the seconds unit"):
+                    benchmarks.validate_metric_unit(metric, "points")
+
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            obs_path = ws / "bad-unit.json"
+            obs_path.write_text(
+                json.dumps({"measurements": [sample_measurement(metric="coding", unit="percent", value=80)]}),
+                encoding="utf-8",
+            )
+            bad = run_script("refresh.py", "--workspace", str(ws), "--input", str(obs_path), "--preview")
+            self.assertEqual(bad.returncode, 1)
+            self.assertIn("must use the points unit", bad.stderr)
+
+            obs_path.write_text(
+                json.dumps({"measurements": [sample_measurement(metric="seconds-per-task", unit="points", value=120)]}),
+                encoding="utf-8",
+            )
+            bad_lat = run_script("refresh.py", "--workspace", str(ws), "--input", str(obs_path), "--preview")
+            self.assertEqual(bad_lat.returncode, 1)
+            self.assertIn("must use the seconds unit", bad_lat.stderr)
+
+        collection_doc = (REFS_DIR / "collection.md").read_text(encoding="utf-8")
+        self.assertIn('`unit: "points"`', collection_doc)
+        self.assertIn('`unit: "seconds"`', collection_doc)
+
+    def test_hardened_url_slug_managed_client_and_adversarial_json_errors(self):
+        # F1 + L16 + H3: hardened host/URL validation
+        for good in (
+            "https://[2606:4700:4700::1111]/docs",
+            "https://xn--bcher-kva.example/models",
+        ):
+            self.assertTrue(catalogs.valid_url(good), f"Expected True for {good!r}")
+
+        hardened_bad_urls = (
+            "https://example.com:0/",
+            "https://docs.example.com./models",
+            "https://.a/",
+            "https://a..b/",
+            "https://-bad.example.com/",
+            "https://bad-.example.com/",
+            "https://127.1/",
+            "https://127.0.1/",
+            "https://0177.0.0.1/",
+            "https://0x7f.0.0.1/",
+            "https://0x7f.1/",
+            "https://169.254.43518/latest/meta-data/",
+            "https://0xa9.0xfe.0xa9.0xfe/latest/meta-data/",
+            "https://10.1/",
+            "https://192.168.1/",
+            "https://172.16.1/",
+            "https://0.1/",
+            "https://100.64.0.1/",
+            "https://100.100.100.200/latest/meta-data/",
+            "https://[::ffff:100.64.0.1]/",
+            "https://[2002:7f00:0001::]/",
+            "https://[2002:a9fe:a9fe::]/",
+            "https://[2002:6440:0001::]/",
+            "https://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]/",
+            "https://[2001:0000:7f00:0001:0000:0000:80ff:fffe]/",
+            "https://224.0.0.1/",
+            "https://[ff0e::1]/",
+            "https://127\u30020\u30020.1/",
+            "https://\uff11\uff12\uff17.0.0.1/",
+            "https://example\u3002com/",
+            "https://foo.\uff49\uff4e\uff54\uff45\uff52\uff4e\uff41\uff4c/",
+            "https://metadata.google.internal/",
+            "https://router.home.arpa/",
+            "https://home.arpa/",
+            "https://example.com/\x80c1",
+            "https://example.com/\x9b31m",
+            "https://example.com/\u202eevil",
+            "https://example.com/\u2066bidi",
+        )
+        for bad in hardened_bad_urls:
+            self.assertFalse(catalogs.valid_url(bad), f"Expected False for {bad!r}")
+
+        # official_url strips trailing dot on host comparison, while rejecting trailing-dot candidate URLs
+        prov_dot = {
+            "catalogs": ["https://docs.example.com./models"],
+            "release_notes": [],
+            "official_hosts": ["api.example.com."],
+        }
+        self.assertTrue(catalogs.official_url("https://docs.example.com/models", prov_dot))
+        self.assertTrue(catalogs.official_url("https://api.example.com/v1", prov_dot))
+        self.assertFalse(catalogs.official_url("https://docs.example.com./models", prov_dot))
+
+        # H3: SLUG max length bound (<= 128)
+        self.assertIsNotNone(catalogs.SLUG.fullmatch("a" * 128))
+        self.assertIsNone(catalogs.SLUG.fullmatch("a" * 129))
+
+        # L16: managed-client permits single spaces in client names; cli does not
+        mc = sample_provider("acme")
+        mc["runtime"] = {
+            "mode": "managed-client",
+            "entrypoint": "Acme Studio",
+            "auth": "account-session",
+            "credential_env": None,
+            "model": "acme-1",
+        }
+        catalogs.validate_provider(mc)
+        mc_bad = json.loads(json.dumps(mc))
+        mc_bad["runtime"]["entrypoint"] = "Acme\nStudio"
+        with self.assertRaises(ValueError):
+            catalogs.validate_provider(mc_bad)
+        cli_bad = json.loads(json.dumps(mc))
+        cli_bad["runtime"]["mode"] = "cli"
+        with self.assertRaises(ValueError):
+            catalogs.validate_provider(cli_bad)
+
+        # F7: RecursionError and OverflowError exit cleanly with code 1 and no traceback
+        nested_json = "[" * 2000 + "]" * 2000
+        huge_int_json = json.dumps({"measurements": [sample_measurement(value=10**400)]})
+        with tempfile.TemporaryDirectory() as td:
+            ws = Path(td)
+            cat_rec = run_script("catalogs.py", "verify", "--workspace", str(ws), "--input", "-", stdin_text=nested_json)
+            self.assertEqual(cat_rec.returncode, 1)
+            self.assertIn("Catalog operation failed", cat_rec.stderr)
+            self.assertNotIn("Traceback", cat_rec.stderr)
+
+            ref_rec = run_script("refresh.py", "--workspace", str(ws), "--input", "-", stdin_text=nested_json)
+            self.assertEqual(ref_rec.returncode, 1)
+            self.assertIn("Refresh failed", ref_rec.stderr)
+            self.assertNotIn("Traceback", ref_rec.stderr)
+
+            ref_ovf = run_script("refresh.py", "--workspace", str(ws), "--input", "-", stdin_text=huge_int_json)
+            self.assertEqual(ref_ovf.returncode, 1)
+            self.assertIn("Refresh failed", ref_ovf.stderr)
+            self.assertNotIn("Traceback", ref_ovf.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

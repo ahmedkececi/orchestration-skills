@@ -16,9 +16,21 @@ from urllib.parse import urlsplit
 BUILTIN = Path(__file__).resolve().parents[1] / "references" / "provider-catalogs.json"
 REGISTRY = Path(".orchestration/provider-catalogs.json")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}")
-SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+CLIENT_NAME = re.compile(r"(?=.{1,128}\Z)[A-Za-z0-9][A-Za-z0-9._:/+-]*(?: [A-Za-z0-9._:/+-]+)*")
+SLUG = re.compile(r"(?=.{1,128}\Z)[a-z0-9]+(?:-[a-z0-9]+)*")
 ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]{2,63}")
+HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+TLD_LABEL = re.compile(r"(?:[a-z]{2,63}|xn--[a-z0-9](?:[a-z0-9-]{0,57}[a-z0-9])?)")
+RESERVED_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa")
 SOURCE_STATES = {"read", "partial", "unavailable"}
+PROVIDER_ALIASES = {
+    "chatgpt": "openai",
+    "codex": "openai",
+    "claude": "anthropic",
+    "gemini": "google",
+    "agy": "google",
+    "antigravity": "google",
+}
 
 
 def valid_date(value):
@@ -30,17 +42,31 @@ def valid_date(value):
         return False
 
 
-def _public_host(host):
-    host = host.rstrip(".").lower()
-    if not host or host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
-        return False
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return "." in host
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    return not (
+def _has_unsafe_url_chars(value):
+    for ch in value:
+        code = ord(ch)
+        if (
+            code < 32
+            or 0x7F <= code <= 0x9F
+            or 0x202A <= code <= 0x202E
+            or 0x2066 <= code <= 0x2069
+            or code in (0x061C, 0x200E, 0x200F)
+        ):
+            return True
+    return False
+
+
+def _is_public_ip(ip):
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return _is_public_ip(ip.ipv4_mapped)
+        if ip.sixtofour is not None and not _is_public_ip(ip.sixtofour):
+            return False
+        if ip.teredo is not None:
+            server, client = ip.teredo
+            if not (_is_public_ip(server) and _is_public_ip(client)):
+                return False
+    return ip.is_global and not (
         ip.is_private
         or ip.is_loopback
         or ip.is_link_local
@@ -50,17 +76,40 @@ def _public_host(host):
     )
 
 
+def _public_host(host):
+    if not host or any(ch in "\u3002\uff0e\uff61" or 0xFF00 <= ord(ch) <= 0xFFEF for ch in host):
+        return False
+    try:
+        ascii_host = host.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return False
+    if not ascii_host or len(ascii_host) > 253 or ascii_host.startswith(".") or ascii_host.endswith("."):
+        return False
+    try:
+        ip = ipaddress.ip_address(ascii_host)
+    except ValueError:
+        if ascii_host in ("localhost", "home.arpa") or ascii_host.endswith(RESERVED_SUFFIXES):
+            return False
+        labels = ascii_host.split(".")
+        if len(labels) < 2:
+            return False
+        if not all(HOST_LABEL.fullmatch(label) for label in labels):
+            return False
+        return bool(TLD_LABEL.fullmatch(labels[-1]))
+    return _is_public_ip(ip)
+
+
 def valid_url(value):
     if not isinstance(value, str) or re.search(r"[\s<>|\\]", value):
         return False
-    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+    if _has_unsafe_url_chars(value):
         return False
     try:
         url = urlsplit(value)
-        _ = url.port
+        port = url.port
     except ValueError:
         return False
-    if url.scheme != "https" or not url.hostname:
+    if port == 0 or url.scheme != "https" or not url.hostname:
         return False
     if url.username is not None or url.password is not None or "@" in url.netloc:
         return False
@@ -144,8 +193,10 @@ def validate_provider(entry):
     if mode == "api":
         if not valid_url(runtime["entrypoint"]):
             raise ValueError("An API entry point requires a public HTTPS URL.")
-    elif mode in ("cli", "managed-client"):
+    elif mode == "cli":
         identifier(runtime["entrypoint"], "runner name")
+    elif mode == "managed-client":
+        identifier(runtime["entrypoint"], "client name", CLIENT_NAME)
     else:
         raise ValueError("Use api, cli or managed-client for runtime.mode.")
     if runtime["auth"] not in ("api-key", "oauth", "account-session", "platform-managed", "none"):
@@ -170,7 +221,7 @@ def registry(workspace):
             raise ValueError("Unsupported provider registry version.")
         for entry in rows(stored["providers"], "Workspace providers"):
             validate_provider(entry)
-            if entry["id"] in providers:
+            if entry["id"] in providers or entry["id"] in PROVIDER_ALIASES:
                 raise ValueError(f"Duplicate or built-in provider: {entry['id']}.")
             local.append(entry)
             providers[entry["id"]] = {**entry, "anchors": {}}
@@ -178,11 +229,17 @@ def registry(workspace):
 
 
 def official_url(url, provider):
+    if not valid_url(url):
+        return False
     urls = provider["catalogs"] + provider["release_notes"] + provider.get("usage_docs", [])
-    hosts = {urlsplit(u).hostname for u in urls} | {
-        host.lower() for host in provider.get("official_hosts", [])
+    hosts = {
+        urlsplit(u).hostname.rstrip(".").lower()
+        for u in urls
+        if urlsplit(u).hostname
+    } | {
+        host.rstrip(".").lower() for host in provider.get("official_hosts", [])
     }
-    return valid_url(url) and urlsplit(url).hostname in hosts
+    return urlsplit(url).hostname.rstrip(".").lower() in hosts
 
 
 def verify_scan(report, providers):
@@ -289,7 +346,7 @@ def verify_scan(report, providers):
 def register(workspace, entry):
     validate_provider(entry)
     providers, local = registry(workspace)
-    if entry["id"] in providers:
+    if entry["id"] in providers or entry["id"] in PROVIDER_ALIASES:
         if entry in local:
             return
         raise ValueError(f"{entry['id']} is already registered.")
@@ -319,7 +376,7 @@ def main():
             else verify_scan(read_json(args.input or "-"), providers)
         )
         print(json.dumps(data, indent=2))
-    except (ValueError, OSError, TypeError, KeyError) as error:
+    except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as error:
         parser.exit(1, f"Catalog operation failed: {error}\n")
 
 

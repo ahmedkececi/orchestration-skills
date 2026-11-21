@@ -5,12 +5,14 @@ from collections import defaultdict
 import json
 import math
 from pathlib import Path
+import re
 import statistics
 
-from benchmarks import matrix, normalize_check, require_coverage, validate_metric_unit
+from benchmarks import SUITE_BY_LOWER, matrix, normalize_check, require_coverage, validate_metric_unit
 from catalogs import (
-    IDENTIFIER, official_url, read_json, registry, safe_output, valid_date, valid_url,
-    validate_provider, verify_scan, workspace_path, write_atomic,
+    IDENTIFIER, PROVIDER_ALIASES, SLUG, SOURCE_STATES, fields, identifier,
+    official_url, read_json, registry, rows as require_list, safe_output, valid_date,
+    valid_url, validate_provider, verify_scan, workspace_path, write_atomic,
 )
 
 
@@ -20,6 +22,10 @@ DESTINATION = Path(".orchestration/model-measurements.md")
 DELIMITER = "\n<!-- workspace-measurements:v1 -->\n"
 STATE_START = "\n<!-- observations:start -->\n```json\n"
 STATE_END = "\n```\n<!-- observations:end -->"
+OBSERVATIONS_MARKER_RE = re.compile(r"<!--\s*observations:(?:start|end)\s*-->")
+OBSERVATIONS_START_RE = re.compile(r"<!--\s*observations:start\s*-->")
+OBSERVATIONS_END_RE = re.compile(r"<!--\s*observations:end\s*-->")
+AUDIT_SOURCE_STATES = SOURCE_STATES | {"unchecked"}
 UNITS = {"points", "percent", "elo", "seconds", "usd", "tokens"}
 KEYS = {
     "models": ("model",),
@@ -28,7 +34,11 @@ KEYS = {
 }
 
 
-def normalize(payload):
+def _row_key(group, row):
+    return tuple(row[field].lower() for field in KEYS[group])
+
+
+def normalize(payload, *, strict_units=False):
     if not isinstance(payload, dict) or payload.keys() - KEYS.keys():
         raise ValueError("Expected a JSON object with models, measurements and/or benchmark_checks arrays.")
     data = {}
@@ -38,7 +48,7 @@ def normalize(payload):
             raise ValueError(f"{group} must be an array.")
         if group == "benchmark_checks":
             data[group] = [normalize_check(row) for row in rows]
-            keys = {(row["model"], row["effort"]) for row in data[group]}
+            keys = {_row_key(group, row) for row in data[group]}
             if len(keys) != len(rows):
                 raise ValueError("Duplicate benchmark check for the same model and effort.")
             continue
@@ -56,7 +66,7 @@ def normalize(payload):
                 raise ValueError(f"Invalid identifier in {group}: {row.get('model')!r}.")
             if not valid_url(row["url"]):
                 raise ValueError("Each row requires an HTTPS source URL without credentials.")
-            key = tuple(row[field] for field in key_fields)
+            key = _row_key(group, row)
             if key in seen_keys:
                 raise ValueError(f"Duplicate {group} entry for {row['model']!r}.")
             seen_keys.add(key)
@@ -66,9 +76,15 @@ def normalize(payload):
             else:
                 if not valid_date(row["date"]) or row["unit"] not in UNITS:
                     raise ValueError("Each measurement needs an ISO date and a supported unit.")
-                validate_metric_unit(row["metric"], row["unit"])
+                validate_metric_unit(row["metric"], row["unit"], strict_profiles=strict_units)
                 value = row["value"]
-                if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                if type(value) not in (int, float):
+                    raise ValueError("Measurements must be finite, nonnegative numbers.")
+                try:
+                    finite = math.isfinite(value)
+                except OverflowError:
+                    finite = False
+                if not finite or value < 0:
                     raise ValueError("Measurements must be finite, nonnegative numbers.")
                 if row["unit"] == "percent" and value > 100:
                     raise ValueError("A percentage must be between 0 and 100.")
@@ -81,10 +97,10 @@ def normalize(payload):
 
 def merge(previous, incoming):
     merged = {}
-    for group, fields in KEYS.items():
+    for group in KEYS:
         rows = {}
         for row in previous[group] + incoming[group]:
-            key = tuple(row[field] for field in fields)
+            key = _row_key(group, row)
             old = rows.get(key)
             if group in ("measurements", "benchmark_checks") and old and row["date"] < old["date"]:
                 continue
@@ -124,9 +140,10 @@ def render(baseline, data, audit):
             f'{row["released"] or "Unknown"} | {source_link(row)} |'
         )
 
+    model_labels = {row["model"].lower(): row["model"] for row in data["models"]}
     grouped = defaultdict(list)
     for row in data["measurements"]:
-        key = tuple(row[k] for k in ("model", "effort", "metric", "cohort", "unit"))
+        key = tuple(row[k].lower() for k in ("model", "effort", "metric", "cohort", "unit"))
         grouped[key].append(row)
     lines.extend(matrix(data, grouped))
     if data["measurements"]:
@@ -137,11 +154,19 @@ def render(baseline, data, audit):
             "| Model | Effort | Metric | Cohort | Unit | Mean | n | Range | Latest |",
             "| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |",
         ]
-        for (model, effort, metric, cohort, unit), rows in sorted(grouped.items()):
+        for (model_k, effort_k, metric_k, cohort_k, unit), rows in sorted(grouped.items()):
+            models_seen = {row["model"] for row in rows}
+            efforts_seen = {row["effort"] for row in rows}
+            metrics_seen = {row["metric"] for row in rows}
+            cohorts_seen = {row["cohort"] for row in rows}
+            disp_model = model_labels.get(model_k) or (model_k if model_k in models_seen else min(models_seen))
+            disp_effort = effort_k if effort_k in efforts_seen else min(efforts_seen)
+            disp_metric = SUITE_BY_LOWER.get(metric_k) or (metric_k if metric_k in metrics_seen else min(metrics_seen))
+            disp_cohort = cohort_k if cohort_k in cohorts_seen else min(cohorts_seen)
             values = [row["value"] for row in rows]
             latest = max(row["date"] for row in rows)
             lines.append(
-                f"| `{model}` | {effort} | {metric} | {cohort} | {unit} | "
+                f"| `{disp_model}` | {disp_effort} | {disp_metric} | {disp_cohort} | {unit} | "
                 f"{display(statistics.fmean(values))} | {len(values)} | "
                 f"{display(min(values))}–{display(max(values))} | {latest} |"
             )
@@ -166,19 +191,89 @@ def render(baseline, data, audit):
     return baseline.rstrip() + "\n" + DELIMITER + "\n".join(lines) + "\n" + STATE_START + state + STATE_END + "\n"
 
 
+def validate_audit(audit):
+    if not isinstance(audit, dict):
+        raise ValueError("catalog_audit must be a JSON object.")
+    required = {"checked_on", "complete", "missing_providers", "providers"}
+    allowed = required | {"selected_models"}
+    if not (required <= audit.keys() <= allowed):
+        raise ValueError("catalog_audit has missing or unexpected fields.")
+    if not valid_date(audit["checked_on"]):
+        raise ValueError("catalog_audit.checked_on must be an ISO date.")
+    if type(audit["complete"]) is not bool:
+        raise ValueError("catalog_audit.complete must be a boolean.")
+    missing_providers = require_list(audit["missing_providers"], "catalog_audit.missing_providers")
+    if len({identifier(pid, "missing provider ID", SLUG) for pid in missing_providers}) != len(missing_providers):
+        raise ValueError("catalog_audit.missing_providers contains duplicate entries.")
+    if "selected_models" in audit:
+        selected = require_list(audit["selected_models"], "catalog_audit.selected_models")
+        if len({identifier(model, "selected model ID") for model in selected}) != len(selected):
+            raise ValueError("catalog_audit.selected_models contains duplicate entries.")
+    seen_providers = set()
+    for row in require_list(audit["providers"], "catalog_audit.providers"):
+        fields(
+            row,
+            "id complete sources anchors missing_anchors unresolved newer_releases",
+            "catalog_audit provider",
+        )
+        pid = identifier(row["id"], "catalog_audit provider ID", SLUG)
+        if pid in seen_providers:
+            raise ValueError(f"Duplicate provider in catalog_audit: {pid}.")
+        seen_providers.add(pid)
+        if type(row["complete"]) is not bool:
+            raise ValueError(f"catalog_audit provider {pid} complete must be a boolean.")
+        if type(row["newer_releases"]) is not int or row["newer_releases"] < 0:
+            raise ValueError(f"catalog_audit provider {pid} newer_releases must be a non-negative integer.")
+        sources = row["sources"]
+        if not isinstance(sources, dict):
+            raise ValueError(f"catalog_audit provider {pid} sources must be an object.")
+        for url, state in sources.items():
+            if not valid_url(url) or not isinstance(state, str) or state not in AUDIT_SOURCE_STATES:
+                raise ValueError(f"Invalid source audit entry for {pid}.")
+        seen_anchor_families = set()
+        for anchor in require_list(row["anchors"], f"catalog_audit provider {pid} anchors"):
+            fields(anchor, "family model released url", "catalog_audit anchor")
+            family = identifier(anchor["family"], "catalog_audit anchor family", SLUG)
+            if family in seen_anchor_families:
+                raise ValueError(f"Duplicate anchor family in catalog_audit for {pid}: {family}.")
+            seen_anchor_families.add(family)
+            identifier(anchor["model"], "catalog_audit anchor model ID")
+            if not valid_date(anchor["released"]) or not valid_url(anchor["url"]):
+                raise ValueError(f"Invalid anchor date or URL in catalog_audit for {pid}.")
+        missing_anchors = require_list(row["missing_anchors"], f"catalog_audit provider {pid} missing_anchors")
+        if len({identifier(name, "catalog_audit missing anchor model ID") for name in missing_anchors}) != len(missing_anchors):
+            raise ValueError(f"Duplicate missing_anchors entry in catalog_audit for {pid}.")
+        unresolved = require_list(row["unresolved"], f"catalog_audit provider {pid} unresolved")
+        if len({identifier(name, "catalog_audit unresolved model ID") for name in unresolved}) != len(unresolved):
+            raise ValueError(f"Duplicate unresolved entry in catalog_audit for {pid}.")
+    return audit
+
+
 def read_previous(path):
     if not path.exists():
         return BASELINE.read_text(encoding="utf-8"), normalize({}), None
     baseline, separator, generated = path.read_text(encoding="utf-8").partition(DELIMITER)
-    if not separator or generated.count(STATE_START) != 1 or not generated.rstrip().endswith(STATE_END):
+    if (
+        not separator
+        or OBSERVATIONS_MARKER_RE.search(baseline)
+        or len(OBSERVATIONS_START_RE.findall(generated)) != 1
+        or len(OBSERVATIONS_END_RE.findall(generated)) != 1
+        or generated.count(STATE_START) != 1
+        or not generated.rstrip().endswith(STATE_END)
+    ):
         raise ValueError(f"{path} is not a recognized generated snapshot. Move or repair it before refreshing.")
     state = generated.split(STATE_START, 1)[1].rsplit(STATE_END, 1)[0]
     stored = json.loads(state)
+    if not isinstance(stored, dict):
+        raise ValueError(f"{path} state block must contain a JSON object.")
     audit = stored.pop("catalog_audit", None)
+    if audit is not None:
+        audit = validate_audit(audit)
     return baseline, normalize(stored), audit
 
 
 def render_audit(audit):
+    validate_audit(audit)
     status = "complete against registered sources" if audit["complete"] else "incomplete"
     lines = ["", "### Latest catalog check", "", f'{audit["checked_on"]} · Coverage {status}.']
     if "selected_models" in audit:
@@ -236,7 +331,7 @@ def validate_named_selection(args, providers, local, incoming):
     if args.provider_entry:
         draft = validate_provider(read_json(args.provider_entry))
         local_by_id = {item["id"]: item for item in local}
-        if draft["id"] in providers:
+        if draft["id"] in providers or draft["id"] in PROVIDER_ALIASES:
             registered = local_by_id.get(draft["id"])
             if registered is None:
                 raise ValueError(f"{draft['id']} is a built-in provider; do not pass --provider-entry.")
@@ -252,9 +347,10 @@ def validate_named_selection(args, providers, local, incoming):
 
     for model in incoming["models"]:
         provider_key = model["provider"].lower()
+        canonical_provider = PROVIDER_ALIASES.get(provider_key, provider_key)
         if entry is not None and entry["id"] != provider_key:
             raise ValueError(f"{model['model']} is not in the chosen provider scope.")
-        provider = entry or providers.get(provider_key)
+        provider = entry or providers.get(canonical_provider)
         if provider and not official_url(model["url"], provider):
             raise ValueError(f"{model['model']} needs a release or model page from its provider.")
 
@@ -269,7 +365,8 @@ def scoped_input(args, workspace, incoming):
         validate_named_selection(args, providers, local, incoming)
         audit = None
     eligible = {row["model"] for row in incoming["models"]}
-    if any(row["model"] not in eligible for row in incoming["measurements"]):
+    eligible_ci = {model.lower() for model in eligible}
+    if any(row["model"].lower() not in eligible_ci for row in incoming["measurements"]):
         raise ValueError("Measurements include a model outside the verified refresh scope.")
     require_coverage(incoming, eligible)
     return audit
@@ -300,7 +397,7 @@ def main():
         if args.catalog_report and args.input is None:
             incoming = normalize({})
         else:
-            incoming = normalize(read_json(args.input or "-"))
+            incoming = normalize(read_json(args.input or "-"), strict_units=True)
         audit = scoped_input(args, workspace, incoming)
         if audit is None and not any(incoming.values()):
             raise ValueError("No verified release or measurement rows to import.")
@@ -315,7 +412,7 @@ def main():
             if audit is not None:
                 state = "complete against registered sources" if audit["complete"] else "incomplete"
                 print(f"Catalog coverage: {state}. See the Latest catalog check section for details.")
-    except (ValueError, OSError, TypeError, KeyError, OverflowError) as error:
+    except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as error:
         parser.exit(1, f"Refresh failed: {error}\n")
 
 

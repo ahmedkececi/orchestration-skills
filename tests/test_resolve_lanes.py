@@ -334,14 +334,19 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         states, _ = resolve_lanes.parse_provider_state(raw_state, self.now, 45)
 
         # Author family = google -> cross-family (claude, codex, deepseek) must rank before google!
+        # Because partial-no-knowledge lacks knowledge, L11 scores all historical review candidates
+        # consistently with 0.6*accuracy + 0.4*reasoning:
+        # openai-strong=72.8 (deprioritized), partial-no-knowledge=70.0 (healthy equiv),
+        # claude-equiv=69.8 (healthy equiv, headroom 42 beats unknown headroom), google-top=85.2 (same-family).
         res = resolve_lanes.resolve_lanes(
             candidates, states, role="review", author_family="google", state_loaded=True
         )
         ranked = res["ranked"]
-        self.assertEqual(ranked[0]["model"], "claude-equiv")  # healthy equivalent beats deprioritized openai-strong
-        self.assertEqual(ranked[1]["model"], "openai-strong")
-        self.assertEqual(ranked[2]["model"], "partial-no-knowledge")  # 0.6*70 + 0.4*70 = 70.0
-        self.assertEqual(ranked[2]["score"], 70.0)
+        self.assertEqual(ranked[0]["model"], "claude-equiv")  # healthy equivalent with known headroom (42)
+        self.assertEqual(ranked[1]["model"], "partial-no-knowledge")  # healthy equivalent (70.0), unknown headroom
+        self.assertEqual(ranked[1]["score"], 70.0)
+        self.assertEqual(ranked[2]["model"], "openai-strong")  # deprioritized equivalent (72.8)
+        self.assertEqual(ranked[2]["score"], 72.8)
         self.assertEqual(ranked[3]["model"], "google-top")
         self.assertTrue(ranked[3]["same_family"])
         self.assertIn("same-family", ranked[3]["flags"])
@@ -371,7 +376,7 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         )
         self.assertEqual([r["model"] for r in res["ranked"]], ["claude-opus-5-5"])
         excluded_models = {r["model"] for r in res["excluded"]}
-        self.assertEqual(excluded_models, {"Fable 5.2", "gpt-6.2-astra"})
+        self.assertEqual(excluded_models, {"claude-fable-5-2", "gpt-6.2-astra"})
 
         # Empty intersection (--restricted-data + --providers openai) returns empty ranked cleanly.
         empty = resolve_lanes.resolve_lanes(
@@ -740,6 +745,139 @@ class CliIntegrationTests(unittest.TestCase):
             "resolve_lanes.py", "--workspace", str(REPO_ROOT), "--state", "/nonexistent/provider-state.json"
         )
         self.assertEqual(missing_state.returncode, 1)
+
+        bad_fam_chars = run_script("resolve_lanes.py", "--workspace", str(REPO_ROOT), "--author-family", "bad family!")
+        self.assertEqual(bad_fam_chars.returncode, 2)
+
+        overflow_now = run_script(
+            "resolve_lanes.py", "--workspace", str(REPO_ROOT), "--now", "9999-12-31T23:59:59-05:00"
+        )
+        self.assertEqual(overflow_now.returncode, 2)
+        self.assertNotIn("Traceback", overflow_now.stderr)
+
+    def test_cli_accepts_custom_author_family_and_handles_deep_json(self):
+        proc = run_script(
+            "resolve_lanes.py",
+            "--workspace",
+            str(REPO_ROOT),
+            "--role",
+            "review",
+            "--author-family",
+            "zhipu",
+            "--format",
+            "json",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["author_family"], "zhipu")
+
+        with tempfile.TemporaryDirectory() as td:
+            deep_state = Path(td) / "deep.json"
+            deep_state.write_text("{" + '"a":' * 1500 + "1" + "}" * 1500, encoding="utf-8")
+            deep_proc = run_script(
+                "resolve_lanes.py",
+                "--workspace",
+                str(REPO_ROOT),
+                "--state",
+                str(deep_state),
+            )
+            self.assertEqual(deep_proc.returncode, 1)
+            self.assertNotIn("Traceback", deep_proc.stderr)
+
+    def test_python_api_normalizes_allowed_providers_and_parses_edge_cases(self):
+        candidates = [
+            make_candidate("claude-opus-5-5", effort="high", pool="claude", family="claude", coding=81),
+            make_candidate("gpt-6.2-sol", effort="high", pool="codex", family="openai", coding=85),
+        ]
+        res = resolve_lanes.resolve_lanes(candidates, {}, allowed_providers=["anthropic"])
+        self.assertEqual([r["model"] for r in res["ranked"]], ["claude-opus-5-5"])
+
+        report = resolve_lanes.resolve_from_paths(
+            workspace=REPO_ROOT,
+            role="coding",
+            allowed_providers=["openai"],
+            now=resolve_lanes.parse_iso_utc("2026-11-21T16:00:00Z"),
+        )
+        self.assertEqual(report["allowed_providers"], ["codex"])
+        self.assertTrue(report["ranked"])
+        self.assertTrue(all(r["pool"] == "codex" for r in report["ranked"]))
+
+    def test_parsing_hardening_model_effort_numbers_provider_and_profile_lanes(self):
+        # L13: parse_model_and_effort backticks and namespaced IDs
+        self.assertEqual(resolve_lanes.parse_model_and_effort("`claude-opus-5-5`"), ("claude-opus-5-5", "default"))
+        self.assertEqual(resolve_lanes.parse_model_and_effort("`gpt-6.2-astra` `high`"), ("gpt-6.2-astra", "high"))
+        self.assertEqual(resolve_lanes.parse_model_and_effort("openai/gpt-6.2-astra"), ("openai/gpt-6.2-astra", "unspecified"))
+        self.assertEqual(resolve_lanes.parse_model_and_effort("openai/gpt-6.2-astra/high"), ("openai/gpt-6.2-astra", "high"))
+        self.assertEqual(resolve_lanes.parse_model_and_effort("opus-5.5/high"), ("opus-5.5", "high"))
+
+        # L13: parse_number commas, scientific notation, ranges, and annotations
+        self.assertEqual(resolve_lanes.parse_number("1,200"), 1200.0)
+        self.assertEqual(resolve_lanes.parse_number("1e3"), 1000.0)
+        self.assertEqual(resolve_lanes.parse_number("1.5e2"), 150.0)
+        self.assertEqual(resolve_lanes.parse_number("-5"), -5.0)
+        self.assertEqual(resolve_lanes.parse_number("-3.2"), -3.2)
+        self.assertIsNone(resolve_lanes.parse_number("108\u2013114"))
+        self.assertIsNone(resolve_lanes.parse_number("108-114"))
+        self.assertIsNone(resolve_lanes.parse_number("-5\u2013-2"))
+        self.assertIsNone(resolve_lanes.parse_number("-5--2"))
+        self.assertIsNone(resolve_lanes.parse_number("1,23"))
+        self.assertIsNone(resolve_lanes.parse_number("1000,000"))
+        self.assertIsNone(resolve_lanes.parse_number("1.2.3"))
+        self.assertIsNone(resolve_lanes.parse_number("1e"))
+        self.assertIsNone(resolve_lanes.parse_number("1e+"))
+        self.assertEqual(resolve_lanes.parse_number("81.00 (n=3, 81.00\u201381.00, 0.00)"), 81.0)
+        self.assertEqual(resolve_lanes.parse_number("~357"), 357.0)
+        self.assertEqual(resolve_lanes.parse_number("258*"), 258.0)
+        self.assertEqual(resolve_lanes.parse_number("95%"), 95.0)
+        self.assertEqual(resolve_lanes.parse_number("12s"), 12.0)
+
+        # L13: infer_provider_from_model word boundaries
+        self.assertEqual(resolve_lanes.infer_provider_from_model("solar-pro"), "unknown")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("octopus-v2"), "unknown")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("jargon-v1"), "unknown")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("o365-mini"), "unknown")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("Qwen3.8-Flash-Next"), "alibaba")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("gpt-6.2-sol"), "openai")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("opus-5.5"), "anthropic")
+        self.assertEqual(resolve_lanes.infer_provider_from_model("gemini-4-argon"), "google")
+
+        # L12: POOL_ID allows underscores
+        lanes = resolve_lanes.parse_authorized_lanes(profile_text(
+            authorized_lane("custom-model", "high", "open_router", roles=("coding",)),
+        ))
+        self.assertIn(("custom-model", "high", "open_router"), lanes)
+
+        # L15: duplicate roles rejected in parse_authorized_lanes
+        with self.assertRaisesRegex(ValueError, "unique supported roles"):
+            resolve_lanes.parse_authorized_lanes(profile_text(
+                authorized_lane("gpt-6.2-sol", "high", "codex", roles=("coding", "coding")),
+            ))
+
+        # L15: case-insensitive model matching in lane_key preserving display case
+        ci_lanes = resolve_lanes.parse_authorized_lanes(profile_text(
+            authorized_lane("GPT-6.2-Sol", "high", "codex", roles=("coding",)),
+        ))
+        ci_res = resolve_lanes.resolve_lanes(
+            [make_candidate("gpt-6.2-sol", effort="high", pool="codex", family="openai", coding=87)],
+            {},
+            authorized_lanes=ci_lanes,
+        )
+        self.assertEqual(ci_res["recommended"]["model"], "GPT-6.2-Sol")
+
+        # L15: excluded.sort places None after negative scores
+        neg_res = resolve_lanes.resolve_lanes(
+            [
+                make_candidate("a-unscored", pool="claude", coding=None),
+                make_candidate("z-negative", pool="claude", coding=-5.0),
+                make_candidate("m-positive", pool="claude", coding=50.0),
+            ],
+            {},
+            allowed_providers=["codex"],
+        )
+        self.assertEqual(
+            [row["model"] for row in neg_res["excluded"]],
+            ["m-positive", "z-negative", "a-unscored"],
+        )
 
 
 if __name__ == "__main__":
