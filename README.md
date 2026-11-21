@@ -32,11 +32,18 @@
 
 ### Refresh model data on demand
 
-Run `/update-orchestration-skills` in Claude Code or Antigravity. In Codex use `$update-orchestration-skills`. You can add model names to narrow the lookup, ask for a preview or supply your own measurement export.
+Run `/update-orchestration-skills` in Claude Code or Antigravity. In Codex use `$update-orchestration-skills`.
+
+- **No model name:** Checks official catalogs and release notes for versions released after the presets' reference models. The result lists checked sources and unresolved models or coverage gaps.
+- **One model name:** For example, `/update-orchestration-skills Claude Opus 6` requests just that model. Its exact release and any published scores are verified before saving. You can also ask for a preview or import your own measurements.
 
 The command uses the client's live source tools and the included Python 3.9+ helper. It merges verified source observations into `.orchestration/model-measurements.md` in the current workspace. Newly announced models can appear with unknown scores. Comparable observations have source links, a date, model and effort, version or cohort, and a count and range for averaged results. The project's access and routing rules still determine which models can run.
 
 The [historical snapshot](skills/update-orchestration-skills/references/model-measurements.md) combines benchmark scores and profile averages in one Markdown file. The [collection guide](skills/update-orchestration-skills/references/collection.md) describes live lookup and custom imports.
+
+### Add a provider
+
+Install [add-provider-orchestration-skills](skills/add-provider-orchestration-skills/) alongside the updater. Run `/add-provider-orchestration-skills PROVIDER` in Claude Code or Antigravity, or `$add-provider-orchestration-skills PROVIDER` in Codex. The agent verifies the provider's public catalog, release notes and how to call an official model. It saves the source links and setup details in `.orchestration/provider-catalogs.json`. Future catalog checks include that provider. The project profile still controls which runners can receive work.
 
 Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://developers.openai.com/blog/eval-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
 
@@ -70,11 +77,18 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 
 ### Model verilerini istediğin anda yenile
 
-Claude Code veya Antigravity’de `/update-orchestration-skills`, Codex’te `$update-orchestration-skills` yaz. Belirli modelleri ekleyerek aramayı daraltabilir, önizleme isteyebilir veya kendi ölçüm çıktını verebilirsin.
+Claude Code veya Antigravity’de `/update-orchestration-skills`, Codex’te `$update-orchestration-skills` yaz.
+
+- **Model adı yoksa:** Hazır profillerdeki referans sürümlerden daha yeni modeller için resmî katalogları ve sürüm notlarını tarar. Sonuçta kontrol edilen kaynaklar, doğrulanamayan modeller ve eksik kalan taramalar görünür.
+- **Bir model adı varsa:** Örneğin `/update-orchestration-skills Claude Opus 6` yalnızca o modeli arar. Tam sürümü ve yayımlanmış skorları doğrulayıp kaydeder. Önizleme isteyebilir veya kendi ölçüm verini de içe aktarabilirsin.
 
 Komut, istemcinin canlı kaynak araçlarını ve paketteki Python 3.9+ yardımcısını kullanır. Doğrulanan ölçümleri çalışma alanındaki `.orchestration/model-measurements.md` dosyasına yazar. Yeni duyurulmuş bir modelin skoru henüz yoksa bu alan bilinmiyor olarak kalır. Karşılaştırılabilir ölçümler kaynak bağlantısı, tarih, model, efor ve ölçüm sürümüyle birlikte gösterilir. Ortalamalarda ölçüm sayısı ve aralığı yer alır. Hangi modellerin kullanılabileceğini projenin yetki ve yönlendirme kuralları belirler.
 
 [Arşiv](skills/update-orchestration-skills/references/model-measurements.md), benchmark skorlarını ve profil ortalamalarını tek Markdown dosyasında birleştirir. [Veri toplama kılavuzu](skills/update-orchestration-skills/references/collection.md) canlı aramayı ve özel veri aktarmayı açıklar.
+
+### Sağlayıcı ekle
+
+[add-provider-orchestration-skills](skills/add-provider-orchestration-skills/) klasörünü güncelleyicinin yanına kur. Claude Code veya Antigravity’de `/add-provider-orchestration-skills SAĞLAYICI`, Codex’te `$add-provider-orchestration-skills SAĞLAYICI` yaz. Ajan resmî model kataloğunu, sürüm notlarını ve modelin nasıl çağrıldığını araştırıp doğrular. Kaynak bağlantılarını ve kurulum bilgilerini `.orchestration/provider-catalogs.json` dosyasına kaydeder. Sonraki katalog taramaları bu sağlayıcıyı da içerir. Hangi çalıştırıcılara görev verilebileceğini proje profili belirler.
 
 İstemci belgeleri [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://developers.openai.com/blog/eval-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
 

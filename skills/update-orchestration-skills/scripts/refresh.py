@@ -2,16 +2,12 @@
 
 import argparse
 from collections import defaultdict
-from datetime import date
 import json
 import math
-import os
 from pathlib import Path
 import re
 import statistics
-import sys
-from tempfile import NamedTemporaryFile
-from urllib.parse import urlsplit
+from catalogs import official_url, read_json, registry, safe_output, valid_date, valid_url, verify_scan, workspace_path, write_atomic
 
 
 SKILL = Path(__file__).resolve().parents[1]
@@ -26,21 +22,6 @@ KEYS = {
     "models": ("model",),
     "measurements": ("model", "effort", "metric", "cohort", "unit", "source"),
 }
-
-
-def valid_date(value):
-    return date.fromisoformat(value).isoformat() == value
-
-
-def valid_url(value):
-    url = urlsplit(value)
-    return (
-        url.scheme == "https"
-        and bool(url.hostname)
-        and not url.username
-        and not url.password
-        and re.search(r"[\s<>|\\]", value) is None
-    )
 
 
 def normalize(payload):
@@ -89,6 +70,8 @@ def merge(previous, incoming):
             old = rows.get(key)
             if group == "measurements" and old and row["date"] < old["date"]:
                 continue
+            if group == "models" and old and row["provider"].lower() != old["provider"].lower():
+                raise ValueError(f"Conflicting providers for {row['model']}. Use qualified model IDs.")
             if group == "models" and old and row["released"] is None:
                 row = {**row, "released": old["released"]}
             rows[key] = row
@@ -104,7 +87,7 @@ def display(value):
     return format(value, ".10g")
 
 
-def render(baseline, data):
+def render(baseline, data, audit):
     lines = [
         "## Live workspace measurements",
         "",
@@ -155,58 +138,106 @@ def render(baseline, data):
             f'{display(row["value"])} | {row["unit"]} | {row["date"]} | '
             f'{row["source"]} {source_link(row)} |'
         )
-    state = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False)
+    state_data = data.copy()
+    if audit is not None:
+        lines.extend(render_audit(audit))
+        state_data["catalog_audit"] = audit
+    state = json.dumps(state_data, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False)
     return baseline.rstrip() + "\n" + DELIMITER + "\n".join(lines) + "\n" + STATE_START + state + STATE_END + "\n"
 
 
 def read_previous(path):
     if not path.exists():
-        return BASELINE.read_text(encoding="utf-8"), normalize({})
+        return BASELINE.read_text(encoding="utf-8"), normalize({}), None
     baseline, separator, generated = path.read_text(encoding="utf-8").partition(DELIMITER)
     if not separator or generated.count(STATE_START) != 1 or not generated.rstrip().endswith(STATE_END):
         raise ValueError(f"{path} is not a recognized generated snapshot. Move or repair it before refreshing.")
     state = generated.split(STATE_START, 1)[1].rsplit(STATE_END, 1)[0]
-    return baseline, normalize(json.loads(state))
+    stored = json.loads(state)
+    audit = stored.pop("catalog_audit", None)
+    return baseline, normalize(stored), audit
 
 
-def write_atomic(path, contents):
-    path.parent.mkdir(exist_ok=True)
-    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as file:
-        temp = Path(file.name)
-        try:
-            file.write(contents)
-            file.close()
-            os.replace(temp, path)
-        finally:
-            temp.unlink(missing_ok=True)
+
+def render_audit(audit):
+    status = "complete against registered sources" if audit["complete"] else "incomplete"
+    lines = ["", "### Latest catalog check", "", f'{audit["checked_on"]} · Coverage {status}.']
+    if audit["missing_providers"]:
+        lines.append("Unchecked providers: " + ", ".join(audit["missing_providers"]) + ".")
+    lines.append("")
+    for row in audit["providers"]:
+        state = "complete" if row["complete"] else "incomplete"
+        lines.append(f'- **{row["id"]}** · {state}. Newer releases verified: {row["newer_releases"]}.')
+        for url, source_state in row["sources"].items():
+            lines.append(f"  - {source_state} · <{url}>")
+        for anchor in row["anchors"]:
+            lines.append(f'  - Reference `{anchor["model"]}` · {anchor["released"]} · {source_link(anchor)}')
+        if row["missing_anchors"]:
+            names = ", ".join(row["missing_anchors"])
+            lines.append(f"  - Missing dates for skill reference models: {names}.")
+        if row["unresolved"]:
+            names = ", ".join(row["unresolved"])
+            lines.append(f"  - Unresolved model IDs or release order: {names}.")
+    return lines
+
+
+def scoped_input(args, workspace, incoming):
+    if not (args.catalog_report or args.model):
+        return None
+    providers, _ = registry(workspace)
+    if args.catalog_report:
+        if incoming["models"]:
+            raise ValueError("In catalog mode, model records come from the verified report.")
+        result = verify_scan(read_json(args.catalog_report), providers)
+        incoming["models"] = result["models"]
+        audit = result["audit"]
+    else:
+        if len(incoming["models"]) != 1 or incoming["models"][0]["model"] != args.model:
+            raise ValueError("A named refresh requires one documented release record for the exact requested model ID.")
+        model = incoming["models"][0]
+        provider = providers.get(model["provider"])
+        if provider and not official_url(model["url"], provider):
+            raise ValueError("The named model needs a release or model page from its provider.")
+        audit = None
+    eligible = {row["model"] for row in incoming["models"]}
+    if any(row["model"] not in eligible for row in incoming["measurements"]):
+        raise ValueError("Measurements include a model outside the verified refresh scope.")
+    return audit
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, required=True, help="Explicit project root.")
-    parser.add_argument("--input", default="-", help="JSON input file, or - for stdin.")
+    parser.add_argument("--input", help="Observation JSON file or - for stdin.")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--model", help="Import only this exact verified model ID.")
+    scope.add_argument("--catalog-report", help="Import newer models from this catalog report.")
     parser.add_argument("--preview", action="store_true", help="Print the merged document without writing.")
     args = parser.parse_args()
     try:
-        workspace = args.workspace.resolve(strict=True)
-        if not workspace.is_dir():
-            raise ValueError("The workspace must be a directory.")
-        output = workspace / DESTINATION
-        if output.is_symlink() or output.parent.is_symlink():
-            raise ValueError("The workspace measurement path may not use symlinks.")
-        incoming_text = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8")
-        incoming = normalize(json.loads(incoming_text))
-        if not any(incoming.values()):
+        workspace = workspace_path(args.workspace)
+        output = safe_output(workspace, DESTINATION)
+        if args.input == args.catalog_report == "-":
+            raise ValueError("Only one of --input and --catalog-report can use stdin.")
+        if args.catalog_report and args.input is None:
+            incoming = normalize({})
+        else:
+            incoming = normalize(read_json(args.input or "-"))
+        audit = scoped_input(args, workspace, incoming)
+        if audit is None and not any(incoming.values()):
             raise ValueError("No verified release or measurement rows to import.")
-        baseline, previous = read_previous(output)
+        baseline, previous, prior_audit = read_previous(output)
         data = merge(previous, incoming)
-        rendered = render(baseline, data)
+        rendered = render(baseline, data, audit if audit is not None else prior_audit)
         if args.preview:
             print(rendered, end="")
         else:
             write_atomic(output, rendered)
             print(f"{output}: {len(data['models'])} releases, {len(data['measurements'])} observations.")
-    except (ValueError, OSError, TypeError, OverflowError) as error:
+            if audit is not None:
+                state = "complete against registered sources" if audit["complete"] else "incomplete"
+                print(f"Catalog coverage: {state}. See the Latest catalog check section for details.")
+    except (ValueError, OSError, TypeError, KeyError, OverflowError) as error:
         parser.exit(1, f"Refresh failed: {error}\n")
 
 

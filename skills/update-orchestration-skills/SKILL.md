@@ -1,21 +1,35 @@
 ---
 name: update-orchestration-skills
-description: Refresh local orchestration benchmark data from current releases and sourced measurements. Use when the user invokes the update command, asks to refresh model scores, or supplies a measurement export to import.
+description: Discover models released after the orchestration presets' reference versions, or refresh a single named model. Use for verified model releases, benchmark updates and local measurement imports.
 ---
 
-# Refresh orchestration measurements
+# Refresh orchestration model data
 
-Use this procedure for an explicit refresh request. The result is one workspace file, `.orchestration/model-measurements.md`. Its scores and profile averages are available for the next routing decision in this session. The bundled skill files and upstream repository stay separate from this workspace data.
+Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-orchestration-skills` in Codex. Work in the user's current project. Read the [catalog workflow](references/catalog-workflow.md) and the [measurement guide](references/collection.md). Write verified results to `.orchestration/model-measurements.md`.
 
-1. Identify the current workspace root. With a model argument, scope the refresh to those models. Otherwise read the authorized project profile, look for recent releases from its providers and refresh any measured variants that can be compared with its current lanes. Without a project profile, use the providers in the bundled measurement snapshot as the search scope.
-2. Use the host's live search or fetch tools to verify releases in provider documentation and benchmark results at their source. Open the actual table or model result. Start with the links in the [collection guide](references/collection.md). For a user-provided export, validate its provenance and convert it to the same input format.
-3. Record the exact model variant, explicit effort, benchmark version, cohort, unit, source URL and observation date. Use the same series and normalization for a comparison. Keep benchmark scores, workload profile values, reported costs and measured task time in distinct metrics. A release without benchmark data is still useful. Add the release and leave its scores unknown. Do not infer effort, transfer Mythos/Fable scores between models, scrape gated data, or use a headline index as a task profile.
-4. Build the input described in the [collection guide](references/collection.md). Run the bundled script from this skill folder with the actual project root as the workspace, passing the JSON via stdin or `--input`. For a preview request, add `--preview`; otherwise write the workspace file. If the helper cannot run, report the source-linked findings and the exact missing capability. If no source can be verified, leave the last workspace snapshot in use.
+## With a model name
 
-   ```sh
-   python3 scripts/refresh.py --workspace /path/to/project --input /path/to/observations.json
-   ```
+A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. If the exact release is verified but there are no published scores, add the model with missing scores.
 
-5. Report the workspace path, new models, updated measurements, gaps and which authorized lanes are now comparable. Re-read the result when continuing an orchestration session. A catalog entry does not authorize a provider, a charge, a dependency install or a change of model for active work.
+```sh
+python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --input observations.json
+```
 
-On clients that expose skill slash commands, invoke `/update-orchestration-skills`. In Codex use `$update-orchestration-skills` or choose it from the skills menu.
+## Without a model name
+
+1. Run `python3 -B scripts/catalogs.py plan --workspace /path/to/project`. It lists the official sources, reference versions from the orchestration presets, and any workspace providers added by the companion skill.
+2. Read both the provider catalog and release history for each provider. Follow applicable pagination, tabs and dated links. Verify reference-model dates and newer release IDs from the official sources. Record the IDs observed in each source. Mark missing pages or unclear dates rather than claiming full coverage.
+3. Run `catalogs.py verify` with the report format in the [catalog workflow](references/catalog-workflow.md). Collect benchmark observations only for verified newer models returned by this step. A newer model with unpublished scores can still be added as a verified release.
+4. Save both the releases and the coverage audit. Omit `--input` if there are no verified scores.
+
+```sh
+python3 -B scripts/refresh.py --workspace /path/to/project --catalog-report scan.json --input observations.json
+```
+
+## Verification and result
+
+Use the host's live source tools. Open primary sources, distinguish release dates from account rollout dates, and match benchmark version and exact effort. Keep estimates, raw scores and profile values separate. If the sources conflict, record the gap. Use a reported ID only for the actual release it identifies and never transfer a score between Mythos and Fable.
+
+Add `--preview` when requested. Read the resulting workspace file or preview and report the new model IDs, source links, observed scores, missing scores and any incomplete catalog coverage. When the host cannot access a source, retain prior measurements and label the gap. A documented model becomes eligible for routing through the project's separately authorized runner, data scope and budget.
+
+For an explicit user-supplied measurement export, use the [import procedure](references/collection.md). To register a new provider for future scans, use [add-provider-orchestration-skills](../add-provider-orchestration-skills/).
