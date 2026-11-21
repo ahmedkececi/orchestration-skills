@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-22
+
+### Added
+- **4-step first-run CLI & `.orchestration/` bootstrap across all five coordinator presets (`astra`, `sol`, `neon`, `fable`, `opus`):** Before delegating on a fresh workspace, coordinators now detect installed worker CLIs and read-only auth status (`claude`, `codex`, `agy`), show a `CLI | Installed | Signed in` status table, ask which pools/paths/tests to enable, guide official installation (only with explicit operator approval) and interactive terminal sign-in (never pasting tokens into chat), re-verify auth, and create `.orchestration/project-profile.md` (with `<!-- orchestration-lanes:v1 -->`) and `.orchestration/provider-state.json` before starting work.
+- `CLI installation and login` quick-reference section in all five `references/cli-lanes-and-ledger.md` files (covering macOS/Linux, Windows PowerShell, and SSH/device-auth sign-in) plus an optional collapsible CLI install/sign-in reference in both English and Turkish sections of `README.md`.
+- Copy-paste starter chat prompts (`What to type in chat` / `Chate ne yazarak başlarsın?`) for Claude Code, Codex, and Antigravity in `README.md` and `examples/first-run.md` (English and Turkish parity).
+- Onboarding invariant assertions (`First-run bootstrap`, `claude auth status`, `codex login status`, `agy auth login`) in `tests/test_skills.py`.
+
+### Fixed
+- Eliminated first-run stalls when `.orchestration/project-profile.md` or `.orchestration/provider-state.json` is missing and prevented coordinators from silently falling back past uninstalled or signed-out CLIs that the operator wants to use.
+
 ## [1.2.2] - 2026-11-22
 
 ### Added
