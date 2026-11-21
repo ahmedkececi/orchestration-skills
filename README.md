@@ -159,11 +159,11 @@ Proje dizininde istemcine uygun komutu seç. Bu komut yalnızca seçili koordina
 ```sh
 # Codex
 npx skills add ahmedkececi/ultimate-orchestration-skills --agent codex --copy \
-  --skill sol-orchestration --skill update-orchestration-skills
+  --skill sol-orchestration --skill astra-orchestration --skill update-orchestration-skills
 
 # Claude Code
 npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --copy \
-  --skill opus-orchestration --skill update-orchestration-skills
+  --skill opus-orchestration --skill fable-orchestration --skill update-orchestration-skills
 ```
 
 Antigravity, farklı bir koordinatör veya Node.js olmadan kurulum için depoyu bir kez klonlayıp ilgili klasörleri projene kopyala (orijinal klasör adlarını koru):
