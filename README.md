@@ -1,5 +1,6 @@
 # Ultimate Orchestration Skills
 
+[![CI](https://github.com/ahmedkececi/ultimate-orchestration-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedkececi/ultimate-orchestration-skills/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Clients](https://img.shields.io/badge/Clients-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-6366f1)](#choose-a-coordinator)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776ab)](#refresh-model-data-on-demand)
@@ -38,6 +39,8 @@ mkdir -p .agents/skills
 cp -R /tmp/uos/skills/neon-orchestration /tmp/uos/skills/update-orchestration-skills .agents/skills/
 rm -rf /tmp/uos
 ```
+
+Each coordinator preset uses progressive disclosure (`SKILL.md` plus on-demand `references/` files to save context tokens), so keep the full folder including `references/` when copying.
 
 [Skills CLI options](https://github.com/vercel-labs/skills#usage)
 
@@ -154,6 +157,8 @@ mkdir -p .agents/skills
 cp -R /tmp/uos/skills/neon-orchestration /tmp/uos/skills/update-orchestration-skills .agents/skills/
 rm -rf /tmp/uos
 ```
+
+Her koordinatör profili aşamalı yükleme (`SKILL.md` ve bağlam token’larından tasarruf etmek için gerektiğinde yüklenen `references/` dosyaları) kullanır; bu nedenle kopyalarken `references/` dahil klasörün tamamını koru.
 
 [Skills CLI seçenekleri](https://github.com/vercel-labs/skills#usage)
 

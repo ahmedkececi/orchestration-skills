@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-21
+
+### Added
+- Lossless progressive-disclosure `references/` files (`delegation-and-verification.md`, `quota-and-failover.md`, `cli-lanes-and-ledger.md`) across all five coordinator presets (`astra`, `sol`, `neon`, `fable`, `opus`), loaded on demand via a mandatory trigger table in each `SKILL.md`.
+- Zero-dependency `tests/test_skills.py` integrity suite validating YAML frontmatter across all seven skills, lean `SKILL.md` line budgets and `references/` links for all five coordinator presets, local relative Markdown link resolution across documentation and skills, and byte-identical `workflow-templates.md` parity.
+- Live GitHub Actions CI status badge and progressive-disclosure copy guidance (English and Turkish) in `README.md`.
+
+### Changed
+- Trimmed all five coordinator `SKILL.md` entry files to under 450 lines while preserving every original rule, CLI flag, model ID, failover ladder, and exception verbatim across `SKILL.md` and `references/`.
+- Upgraded `.github/workflows/ci.yml` to Node 24 actions (`actions/checkout@v6`, `actions/setup-python@v6`), expanded the runner matrix to Python 3.9 (`ubuntu-24.04`), 3.12 (`ubuntu-latest`), and 3.13 (`ubuntu-latest`), and included `tests/test_skills.py` in syntax compilation checks.
+
 ## [1.0.1] - 2026-11-21
 
 ### Added

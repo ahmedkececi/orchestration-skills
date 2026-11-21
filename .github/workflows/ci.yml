@@ -32,6 +32,7 @@ jobs:
             skills/update-orchestration-skills/scripts/benchmarks.py \
             skills/update-orchestration-skills/scripts/catalogs.py \
             skills/update-orchestration-skills/scripts/refresh.py \
+            tests/test_skills.py \
             tests/test_updater.py
 
       - name: Validate bundled JSON files
