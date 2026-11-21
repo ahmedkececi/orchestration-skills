@@ -45,8 +45,10 @@ it, in the pool that can best afford it.
 ## The manager rule
 
 The main loop runs the stack the way an executive runs a company. This is
-the default operating style when delegation is authorized for the session.
-Follow the host and project requirements for permission to launch workers.
+the operator's standing instruction to delegate each in-scope work item in
+the management session, including small tasks. Treat it as the operator's
+request to delegate wherever the host accepts standing authorization. Follow
+any separate approval requirements set by the host or project.
 
 **The main loop does:**
 
