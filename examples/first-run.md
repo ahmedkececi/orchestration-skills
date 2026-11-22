@@ -96,9 +96,9 @@ Use the [workflow templates](../skills/sol-orchestration/workflow-templates.md) 
 
 After installing a coordinator skill, open your client in the project root and send one of these starter prompts — if `.orchestration/` does not exist yet, the coordinator checks which CLIs (`claude`, `codex`, `agy`) are installed and signed in, helps you install (with your approval) and sign in to the ones you want to use, and creates `.orchestration/` before starting:
 
-1. **First-time setup & CLI check only (before your first task):**
+1. **First-time setup & CLI check only (recommended starter prompt before your first task):**
    ```text
-   /opus-orchestration Check which CLIs (claude, codex, agy) are installed and signed in, ask which pools I want to enable, help me install or sign in to any missing/signed-out ones I want to use, then initialize .orchestration/project-profile.md and .orchestration/provider-state.json after confirming my writable paths and test commands. Wait for my first task once ready.
+   /opus-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, guide me through installing or signing in to the ones I want to use, set up .orchestration/ if missing, and wait for me to give you a task to delegate.
    ```
    *(In Codex use `$sol-orchestration` or `$astra-orchestration`; in Antigravity use `/neon-orchestration`; in Claude Code you can also use `/fable-orchestration`.)*
 
@@ -125,9 +125,9 @@ After installing a coordinator skill, open your client in the project root and s
 
 Koordinatör skill’ini kurduktan sonra istemcini proje dizininde açıp şu mesajlardan biriyle doğrudan başlayabilirsin — `.orchestration/` klasörü henüz yoksa koordinatör hangi CLI’ların (`claude`, `codex`, `agy`) kurulu ve oturum açık olduğunu kontrol eder, kullanmak istediklerinin kurulumu (onayınla) ve oturum açması için seni yönlendirip `.orchestration/` dosyalarını oluşturur:
 
-1. **Yalnızca ilk kurulum ve CLI kontrolü (görev vermeden önce):**
+1. **Yalnızca ilk kurulum ve CLI kontrolü (ilk görevden önce önerilen açılış promptu):**
    ```text
-   /opus-orchestration Hangi CLI'ların (claude, codex, agy) kurulu ve oturum açık olduğunu kontrol et, hangi havuzları kullanacağımı sor, eksik veya oturumu kapalı olanları kurmam/oturum açmam için beni yönlendir; ardından yazılabilir yolları ve test komutlarını onaylatıp .orchestration/project-profile.md ve .orchestration/provider-state.json dosyalarını oluştur ve ilk görevimi bekle.
+   /opus-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; delege etmek için sana görev vermemi bekle.
    ```
    *(Codex’te `$sol-orchestration` veya `$astra-orchestration`, Antigravity’de `/neon-orchestration`, Claude Code’da istersen `/fable-orchestration` kullan.)*
 

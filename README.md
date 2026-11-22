@@ -82,9 +82,16 @@ flowchart LR
 | Approach | Built for | Trade-off compared to Ultimate Orchestration Skills |
 | --- | --- | --- |
 | **Agent frameworks** (`LangGraph`, `CrewAI`) | Building custom multi-agent backend apps | Requires SDKs, orchestration code, state storage and API keys instead of working inside your existing Claude Code, Codex or Antigravity CLI sessions. |
-| **API routers / proxies** (`OpenRouter`, `LiteLLM`) | Pay-per-token API routing and failover | Optimizes token price behind an external proxy rather than rolling 5-hour/weekly subscription allowances, cross-family code review or client-to-client checkpoint handoffs. |
+| **Local AI gateways / proxies** (`OmniRoute`, `LiteLLM`) | Unifying API keys and OAuth tokens behind a local proxy with HTTP load balancing and `429` failover | Runs a local daemon, redirects CLI traffic through a proxy/token store, and swaps raw HTTP requests reactively on `429` — without preserving each native CLI's tools, proactive subscription thresholds, benchmark-profile routing, cross-family review, or client-to-client checkpoint handoffs. |
+| **Hosted API routers** (`OpenRouter`) | Pay-per-token cloud API routing | Optimizes token price on metered API calls rather than rolling 5-hour/weekly subscription allowances, native CLI agents, or cross-family verification. |
 | **Single-client subagents** (default `Claude Code` / `Codex`) | Parallel work within one provider pool | Shares one quota pool and usually reviews with the same model family; stalls when that pool hits its cap. |
-| **Ultimate Orchestration Skills** | Daily engineering across existing subscriptions | Zero infrastructure, zero proxy, routes each unit to the strongest efficient model across pools, verifies cross-family, hands off across clients via files and refreshes benchmarks live. |
+| **Ultimate Orchestration Skills** | Daily engineering across existing subscriptions | Zero infrastructure, zero proxy, native CLI sessions only; routes each task unit by benchmark profile and proactive quota headroom, verifies cross-family, hands off across clients via files, and refreshes benchmarks live. |
+
+> **How it stands out from open-source local proxies like OmniRoute:**
+> - **Zero daemon, zero proxy, zero token vault:** Never runs a local server or SQLite token store and never intercepts CLI OAuth traffic. `claude`, `codex`, and `agy` stay on their official native sign-ins and tool sandboxes.
+> - **Task-level orchestration, not HTTP request swapping:** Splits work into owned units with writable-path boundaries and routes each unit across 4 separate benchmark profiles (coding, reasoning, factual accuracy, knowledge/PDF) — instead of blindly rerouting a mid-session HTTP call after a `429`.
+> - **Proactive quota balancing & clean client handoffs:** Moves new units *before* exhaustion (85% weekly / 90% 5-hour) and transfers full manager ownership to another client via `.orchestration/orchestration-checkpoint.md` when a window closes.
+> - **Independent cross-family review & safety guardrails:** Verifies deliverables with a fresh reviewer from another model family, enforces a 2-round `BLOCKER`/`NIT` circuit breaker and test-integrity checks, blocks workers from external actions (`git push`/publish), and ranks lanes deterministically offline with `resolve_lanes.py` plus live benchmark updates.
 
 ### Choose a coordinator
 
@@ -101,17 +108,17 @@ flowchart LR
 
 #### What to type in chat
 
-Right after installing, open chat in your project folder and paste the command for your client — no manual file copying required:
+Right after installing, open chat in your project folder and paste the setup prompt for your client — no placeholders to edit and no manual file copying required:
 
 ```text
-# Claude Code — first run or start a task
-/opus-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
+# Claude Code — first-run setup & CLI readiness
+/opus-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, guide me through installing or signing in to the ones I want to use, set up .orchestration/ if missing, and wait for me to give you a task to delegate.
 
-# Codex — first run or start a task
-$sol-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
+# Codex — first-run setup & CLI readiness
+$sol-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, guide me through installing or signing in to the ones I want to use, set up .orchestration/ if missing, and wait for me to give you a task to delegate.
 
-# Antigravity — first run or start a task
-/neon-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, help me install or sign in to the ones I want to use, set up .orchestration/ if missing, then plan and delegate <your task> with an independent cross-family review before accepting.
+# Antigravity — first-run setup & CLI readiness
+/neon-orchestration Check my installed CLIs (claude, codex, agy) and sign-in status, guide me through installing or signing in to the ones I want to use, set up .orchestration/ if missing, and wait for me to give you a task to delegate.
 
 # Any client — resume after a quota handoff (swap command for your client)
 $sol-orchestration Read .orchestration/orchestration-checkpoint.md and .orchestration/provider-state.json, run git status --short, and continue the remaining units.
@@ -262,9 +269,16 @@ flowchart LR
 | Yaklaşım | Ne için tasarlandı | Ultimate Orchestration Skills’e göre farkı |
 | --- | --- | --- |
 | **Ajan framework’leri** (`LangGraph`, `CrewAI`) | Özel çoklu ajan arka uç uygulamaları yazmak | Mevcut Claude Code, Codex veya Antigravity oturumlarınla doğrudan çalışmak yerine SDK, orkestrasyon kodu, durum veritabanı ve API anahtarı gerektirir. |
-| **API yönlendirici / proxy’ler** (`OpenRouter`, `LiteLLM`) | Token başına ücretli API yönlendirme ve yedekleme | Dönen 5 saatlik/haftalık abonelik kotaları, çapraz aile kod incelemesi veya istemciler arası dosya devri yerine harici bir proxy arkasında token maliyetini optimize eder. |
+| **Yerel AI gateway / proxy’ler** (`OmniRoute`, `LiteLLM`) | API anahtarlarını ve OAuth oturumlarını yerel bir proxy arkasında toplayıp HTTP yük dengeleme ve `429` yedeği sunmak | Yerel bir arka plan servisi/token deposu çalıştırır, CLI trafiğini proxy’den geçirir ve `429` geldiğinde ham HTTP isteğini tepkisel olarak değiştirir; her CLI’ın kendi yerel araçlarını, proaktif abonelik eşiklerini, benchmark profili bazlı yönlendirmeyi, çapraz aile incelemesini veya istemciler arası devir kaydını sağlamaz. |
+| **Bulut API yönlendiricileri** (`OpenRouter`) | Token başına ücretli bulut API yönlendirme | Dönen 5 saatlik/haftalık abonelik kotaları, yerel CLI ajanları veya çapraz aile doğrulaması yerine ücretli API çağrılarında token maliyetini optimize eder. |
 | **Tek istemcili alt ajanlar** (varsayılan `Claude Code` / `Codex`) | Tek sağlayıcı havuzu içinde paralel çalışma | Tek kota havuzunu paylaşır ve genelde aynı model ailesiyle inceleme yapar; o havuz dolduğunda akış durur. |
-| **Ultimate Orchestration Skills** | Mevcut aboneliklerle günlük mühendislik akışı | Sıfır altyapı, sıfır proxy; her birimi havuzlar arasında en yetenekli ve verimli modele yönlendirir, farklı aileyle doğrular, dosyadan başka istemciye devreder ve benchmark’ları canlı günceller. |
+| **Ultimate Orchestration Skills** | Mevcut aboneliklerle günlük mühendislik akışı | Sıfır altyapı, sıfır proxy, yalnızca resmî CLI oturumları; her iş birimini benchmark profiline ve proaktif kalan kotaya göre yönlendirir, farklı model ailesiyle doğrular, dosyadan başka istemciye devreder ve benchmark’ları canlı günceller. |
+
+> **OmniRoute gibi açık kaynaklı yerel proxy’lerden nasıl ayrışır?**
+> - **Sıfır arka plan servisi, sıfır proxy, sıfır token deposu:** Yerel sunucu veya SQLite token kasası çalıştırmaz, CLI OAuth trafiğini araya girerek yönlendirmez. `claude`, `codex` ve `agy` kendi resmî oturumları ve yerel araç/sandbox ortamlarıyla doğrudan çalışır.
+> - **Ham HTTP isteği değiştirme değil, görev düzeyinde orkestrasyon:** `429` hatası gelince oturum ortasında körü körüne API isteği yönlendirmek yerine, işi yazılabilir dosya sınırlarıyla birimlere böler ve her birimi 4 ayrı benchmark profiline (kodlama, muhakeme, olgusal doğruluk, bilgi/PDF) göre en uygun ajana verir.
+> - **Proaktif kota dengeleme ve temiz istemci devri:** Kota tükenmeden *önce* yeni birimleri taşır (haftalık %85 / 5 saatlik %90) ve pencere kapandığında koordinatörlüğü `.orchestration/orchestration-checkpoint.md` üzerinden başka bir istemciye kayıpsız devreder.
+> - **Farklı model ailesinden bağımsız inceleme ve güvenlik kapıları:** Çıktıyı başka bir model ailesinden taze bir inceleyiciye doğrulattırır, en fazla 2 turluk `BLOCKER`/`NIT` devre kesicisi ve test bütünlüğü kontrolü uygular, ajanların harici işlemlerini (`git push`/yayınlama) engeller ve `resolve_lanes.py` + canlı benchmark güncellemesiyle çevrimdışı deterministik sıralama yapar.
 
 ### Koordinatör seç
 
@@ -281,17 +295,17 @@ flowchart LR
 
 #### Chate ne yazarak başlarsın?
 
-Kurulumdan hemen sonra elle dosya kopyalamaya gerek kalmadan şu mesajlardan biriyle başlayabilirsin:
+Kurulumdan hemen sonra yer tutucu düzenlemeye veya elle dosya kopyalamaya gerek kalmadan istemcine uygun başlangıç mesajını doğrudan yapıştırabilirsin:
 
 ```text
-# Claude Code — ilk kurulum veya göreve başla
-/opus-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Claude Code — ilk kurulum ve CLI kontrolü
+/opus-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; delege etmek için sana görev vermemi bekle.
 
-# Codex — ilk kurulum veya göreve başla
-$sol-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Codex — ilk kurulum ve CLI kontrolü
+$sol-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; delege etmek için sana görev vermemi bekle.
 
-# Antigravity — ilk kurulum veya göreve başla
-/neon-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; ardından <görevini> planlayıp yetkili ajana delege et ve kabul etmeden önce farklı model ailesinden bağımsız inceleme yaptır.
+# Antigravity — ilk kurulum ve CLI kontrolü
+/neon-orchestration Kurulu CLI'ları (claude, codex, agy) ve oturum durumlarını kontrol et, kullanmak istediklerimin kurulumu/oturum açması için beni yönlendir, .orchestration/ henüz yoksa kur; delege etmek için sana görev vermemi bekle.
 
 # Kota devri sonrası başka istemciden devam et (komutu istemcine göre değiştir)
 $sol-orchestration .orchestration/orchestration-checkpoint.md ve .orchestration/provider-state.json dosyalarını oku, git status --short çalıştır ve kalan iş birimlerinden devam et.
