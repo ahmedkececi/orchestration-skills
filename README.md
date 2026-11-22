@@ -1,4 +1,4 @@
-# Ultimate Orchestration Skills
+# <img src=".claude-plugin/icon.png" width="36" height="36" align="absmiddle" alt="Ultimate Orchestration Skills logo" /> Ultimate Orchestration Skills
 
 [![CI](https://github.com/ahmedkececi/ultimate-orchestration-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedkececi/ultimate-orchestration-skills/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

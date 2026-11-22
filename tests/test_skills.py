@@ -633,6 +633,17 @@ class SkillIntegrityTests(unittest.TestCase):
         html = docs_index.read_text(encoding="utf-8")
         self.assertTrue(html.strip(), "docs/index.html must not be empty")
         self.assertIn("<html", html.lower(), "docs/index.html must contain an <html> element")
+        self.assertIn('href="icon.png"', html, "docs/index.html must reference canonical icon.png favicon")
+        self.assertIn('src="icon.png"', html, "docs/index.html must render canonical icon.png brand logo")
+
+        plugin_icon = REPO_ROOT / ".claude-plugin" / "icon.png"
+        docs_icon = REPO_ROOT / "docs" / "icon.png"
+        self.assertTrue(docs_icon.is_file(), f"Missing {docs_icon}")
+        self.assertEqual(
+            docs_icon.read_bytes(),
+            plugin_icon.read_bytes(),
+            "docs/icon.png must stay byte-identical to .claude-plugin/icon.png",
+        )
 
         demo_gif = REPO_ROOT / "assets" / "demo.gif"
         self.assertTrue(demo_gif.is_file(), f"Missing {demo_gif}")

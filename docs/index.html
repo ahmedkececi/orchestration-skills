@@ -6,6 +6,9 @@
   <meta name="color-scheme" content="dark">
   <title>Ultimate Orchestration Skills — Interactive Quota &amp; Lane Simulator</title>
   <meta name="description" content="Interactive browser simulator for Ultimate Orchestration Skills: test deterministic multi-agent lane routing, subscription quota thresholds, cross-family reviews, and runway savings.">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta property="og:image" content="https://ahmedkececi.github.io/ultimate-orchestration-skills/icon.png">
   <style>
     :root {
       --bg: #080c15;
@@ -91,12 +94,11 @@
     }
     .brand:hover { text-decoration: none; }
     .brand-icon {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border-radius: 8px;
-      background: linear-gradient(135deg, var(--indigo-solid), var(--emerald-solid));
-      display: grid;
-      place-items: center;
+      display: block;
+      object-fit: cover;
       flex-shrink: 0;
       box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
     }
@@ -1138,17 +1140,9 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="#top">
-        <span class="brand-icon" aria-hidden="true">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="5" cy="12" r="2.5"></circle>
-            <circle cx="19" cy="6" r="2.5"></circle>
-            <circle cx="19" cy="18" r="2.5"></circle>
-            <path d="M7.5 11.2 16.5 7"></path>
-            <path d="M7.5 12.8 16.5 17"></path>
-          </svg>
-        </span>
+        <img class="brand-icon" src="icon.png" width="32" height="32" alt="">
         <span>Ultimate Orchestration Skills</span>
-        <span class="version-pill">v1.2.3</span>
+        <span class="version-pill">v1.3.0</span>
       </a>
 
       <nav class="nav-links" aria-label="Primary">
