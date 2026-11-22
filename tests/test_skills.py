@@ -408,8 +408,11 @@ class SkillIntegrityTests(unittest.TestCase):
         role_checks = (
             ("coding", None),
             ("reasoning", None),
+            ("accuracy", None),
+            ("knowledge", None),
             ("review", "claude"),
             ("review", "openai"),
+            ("review", "google"),
         )
         for preset in COORDINATOR_PRESETS:
             profile_path = SKILLS_DIR / preset / "project-profile.example.md"

@@ -13,7 +13,7 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | --- | --- |
 | Project instruction files | `AGENTS.md`, `CONTRIBUTING.md` |
 | Manager | Orchestrator (Neon), or `gemini-4-neon` at `high` effort when selectable in Antigravity |
-| Authorized workers | 1) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed.<br>2) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`) and `Claude Sonnet 5.5` (`high`, confirm exact IDs in client) via `claude -p`, read/write code, restricted data allowed.<br>3) **Antigravity/Gemini pool (`agy-sub`)**: `gemini-4-hydrogen` (`high`) via Native Swarm or `agy` for PDFs, media, screenshots and wide reading. |
+| Authorized workers | 1) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed.<br>2) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`) and `Claude Sonnet 5.5` (`high`, confirm exact IDs in client) via `claude -p`, read/write code, restricted data allowed.<br>3) **Antigravity/Gemini pool (`agy-sub`)**: `gemini-4-neon` (`high`) and `gemini-4-hydrogen` (`high`) via Native Swarm or `agy` for PDFs, media, screenshots, wide reading, factual checks and isolated cross-family review of GPT/Claude edits. *(Add metered DeepSeek API lanes here only if authorized.)* |
 | Default execution | Codex `gpt-6.2-sol` (`high`) for clear-spec coding, paired with Claude Opus (`medium`) or Claude Sonnet (`high`) so Antigravity quota stays reserved for the manager and cross-family reviews |
 | Measurement data | `.orchestration/model-measurements.md` (refresh via `/update-orchestration-skills`). Override: require verified coding scores on the same cohort before swapping primary implementation lane. |
 | Independent review | Fresh worker from a different model family than the author (e.g., Claude Opus `high` reviews Gemini/Neon or GPT edits). Add a separate worker lane for an isolated Neon review of GPT/Claude edits if you authorize it. Same-family fallback allowed only with explicit `same-family review` label. |
@@ -53,6 +53,7 @@ authorizes zero workers.
   {"model": "claude-opus-5-5", "effort": "medium", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
   {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "reasoning", "review"], "restricted_data": true},
   {"model": "claude-sonnet-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
+  {"model": "gemini-4-neon", "effort": "high", "pool": "gemini", "runner": "Native Swarm", "roles": ["knowledge", "accuracy", "review"]},
   {"model": "gemini-4-hydrogen", "effort": "high", "pool": "gemini", "runner": "Native Swarm", "roles": ["knowledge", "accuracy"]}
 ]
 ```

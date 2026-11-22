@@ -60,8 +60,10 @@ What the output demonstrates:
   at `91%` weekly usage (above the unified `90%` move threshold -> `deprioritized`),
   `resolve_lanes.py` recommends healthy `claude-opus-5-5 (high)` (`42%`
   headroom) first.
-- **Cross-family review:** Opus is authorized for review outside the
-  author's OpenAI family. The authorized Sol reviewer is flagged
+- **Cross-family review:** Both `gemini-4-neon (high)` (Google family, score
+  `85.6`, `60%` headroom) and `claude-opus-5-5 (high)` (Claude family, `42%`
+  headroom) are authorized for review outside the author's OpenAI family, so
+  `gemini-4-neon (high)` ranks first. The authorized Sol reviewer is flagged
   `same-family`.
 - **Pre-dispatch projected overflow & post-unit EWMA calibration:** Passing
   `--unit-size l` projects `current + estimated_burn × safety_margin` against

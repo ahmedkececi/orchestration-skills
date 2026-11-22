@@ -1454,13 +1454,14 @@
           <div class="control-group">
             <div class="control-label-row">
               <span class="control-label" data-i18n="lblLaneScope">Authorized Lane Scope</span>
-              <span class="control-hint" data-i18n="lblLaneScopeHint">Profile vs 4-pool</span>
+              <span class="control-hint" data-i18n="lblLaneScopeHint">3 subs vs +API</span>
             </div>
             <div class="seg-group seg-sm" id="scopeButtons">
-              <button type="button" class="seg-btn active" data-scope="profile" data-i18n="scopeProfile">Profile Lanes</button>
-              <button type="button" class="seg-btn" data-scope="expanded" data-i18n="scopeExpanded">+ 4-Pool Optional</button>
+              <button type="button" class="seg-btn active" data-scope="profile" data-i18n="scopeProfile">Profile (3 Subs)</button>
+              <button type="button" class="seg-btn" data-scope="expanded" data-i18n="scopeExpanded">+ DeepSeek API</button>
               <button type="button" class="seg-btn" data-scope="advisory" data-i18n="scopeAdvisory">All 20 (Advisory)</button>
             </div>
+            <div class="guard-note" id="scopeNote"></div>
           </div>
 
           <div class="control-group">
@@ -1926,7 +1927,9 @@
             { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
             { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
             { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
-            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false }
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
+            { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy", "review"], restricted_data: false },
+            { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy"], restricted_data: false }
           ]
         },
         astra: {
@@ -1947,7 +1950,9 @@
             { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
             { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
             { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
-            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false }
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
+            { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy", "review"], restricted_data: false },
+            { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy"], restricted_data: false }
           ]
         },
         opus: {
@@ -1967,7 +1972,9 @@
             { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
             { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
             { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "review"], restricted_data: true },
-            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true }
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
+            { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy", "review"], restricted_data: false },
+            { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy"], restricted_data: false }
           ]
         },
         fable: {
@@ -1987,7 +1994,9 @@
             { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
             { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
             { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "review"], restricted_data: true },
-            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true }
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
+            { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy", "review"], restricted_data: false },
+            { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy", roles: ["knowledge", "accuracy"], restricted_data: false }
           ]
         },
         neon: {
@@ -2009,14 +2018,13 @@
             { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
             { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
             { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "Native Swarm", roles: ["knowledge", "accuracy", "review"], restricted_data: false },
             { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "Native Swarm", roles: ["knowledge", "accuracy"], restricted_data: false }
           ]
         }
       };
 
       const OPTIONAL_4POOL_LANES = [
-        { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy / Native Swarm", roles: ["coding", "accuracy", "knowledge", "review"], restricted_data: false },
-        { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy / Native Swarm", roles: ["coding", "reasoning", "accuracy", "knowledge", "review"], restricted_data: false },
         { model: "deepseek-v4.1-flash-1017", effort: "max", pool: "deepseek", runner: "deepseek API (metered)", roles: ["coding", "knowledge"], restricted_data: false }
       ];
 
@@ -2056,10 +2064,13 @@
           lblPreset: "Coordinator Preset",
           lblPresetHint: "project-profile.example.md",
           lblLaneScope: "Authorized Lane Scope",
-          lblLaneScopeHint: "Profile vs 4-pool",
-          scopeProfile: "Profile Lanes",
-          scopeExpanded: "+ 4-Pool Optional",
+          lblLaneScopeHint: "3 subs vs +API",
+          scopeProfile: "Profile (3 Subs)",
+          scopeExpanded: "+ DeepSeek API",
           scopeAdvisory: "All 20 (Advisory)",
+          scopeNoteProfile: "Uses the 3 subscription pools authorized in project-profile.example.md (Codex + Claude + Gemini/Antigravity, $0 API).",
+          scopeNoteExpanded: "Adds the optional metered DeepSeek API (deepseek-flash) as a 4th pool for publishable coding and bulk/PDF work.",
+          scopeNoteAdvisory: "Simulates no authorization block: ranks all 20 bundled models for reference only (no automatic recommendation).",
           lblRole: "Task Role",
           roleCoding: "Coding",
           roleReasoning: "Reasoning",
@@ -2268,10 +2279,13 @@
           lblPreset: "Koordinatör Profili",
           lblPresetHint: "project-profile.example.md",
           lblLaneScope: "Yetkili Hat Kapsamı",
-          lblLaneScopeHint: "Profil vs 4 havuz",
-          scopeProfile: "Profil Hatları",
-          scopeExpanded: "+ 4 Havuz Opsiyonel",
-          scopeAdvisory: "Tümü 20 (Bilgi Amaçlı)",
+          lblLaneScopeHint: "3 abonelik vs +API",
+          scopeProfile: "Profil (3 Abonelik)",
+          scopeExpanded: "+ DeepSeek API",
+          scopeAdvisory: "Tümü 20 (Danışma)",
+          scopeNoteProfile: "project-profile.example.md içindeki 3 abonelik havuzunu kullanır (Codex + Claude + Gemini/Antigravity, $0 API).",
+          scopeNoteExpanded: "3 aboneliğe ek olarak yayınlanabilir kodlama ve toplu işler için isteğe bağlı ücretli DeepSeek API (deepseek-flash) 4. havuzunu açar.",
+          scopeNoteAdvisory: "Yetki bloğu olmadan çalışmayı simüle eder: arşivdeki 20 modelin tamamını yalnızca bilgi amaçlı sıralar (otomatik öneri vermez).",
           lblRole: "Görev Rolü",
           roleCoding: "Kodlama",
           roleReasoning: "Muhakeme",
@@ -3414,11 +3428,14 @@
           pools: state.pools
         });
 
-        // Update preset meta bar
+        // Update preset meta bar & scope explanation
         const authCount = authMap ? authMap.size : BUNDLED_CANDIDATES.length;
         document.getElementById("presetMeta").innerHTML =
           `<span><strong>${esc(t("presetManager"))}:</strong> <span class="mono">${esc(preset.manager)}</span></span>` +
           `<span class="badge b-modeled">${esc(t("presetAuthCount", { n: authCount }))}</span>`;
+        const scopeNoteKey = state.scope === "expanded" ? "scopeNoteExpanded" : (state.scope === "advisory" ? "scopeNoteAdvisory" : "scopeNoteProfile");
+        const scopeNoteEl = document.getElementById("scopeNote");
+        if (scopeNoteEl) scopeNoteEl.textContent = t(scopeNoteKey);
 
         // Role CLI flags & Author Family visibility
         document.getElementById("roleCliFlag").textContent = "--role " + state.role;

@@ -13,11 +13,11 @@ Read `.orchestration/project-profile.md` before delegating or switching pools.
 | --- | --- |
 | Project instruction files | `AGENTS.md`, `CONTRIBUTING.md` |
 | Manager | `gpt-6.2-sol` at `xhigh` effort via Codex (`codex -m gpt-6.2-sol -c model_reasoning_effort=xhigh`) |
-| Authorized workers | 1) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`) and `Claude Sonnet 5.5` (`high`, confirm exact IDs in client) via `claude -p`, read/write code, restricted data allowed.<br>2) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed. *(Add Gemini/Antigravity or DeepSeek lanes here if authorized.)* |
-| Default execution | Claude Opus (`medium` via `claude -p`) first to preserve Codex headroom, then Codex `gpt-6.2-sol` (`high` via `codex exec`) as overflow/fallback |
+| Authorized workers | 1) **Claude pool (`claude-sub`)**: `Claude Opus 5.5` (`medium`/`high`) and `Claude Sonnet 5.5` (`high`, confirm exact IDs in client) via `claude -p`, read/write code, restricted data allowed.<br>2) **Codex pool (`codex-sub`)**: `gpt-6.2-sol` (`high`/`xhigh`) via `codex exec`, read/write code, internal data allowed.<br>3) **Antigravity/Gemini pool (`agy-sub`)**: `gemini-4-neon` (`high`) and `gemini-4-hydrogen` (`high`) via `agy` for PDFs, media, screenshots, wide reading, factual checks and cross-family review. *(Add metered DeepSeek API lanes here only if authorized.)* |
+| Default execution | Claude Opus (`medium` via `claude -p`) first to preserve Codex headroom, then Codex `gpt-6.2-sol` (`high` via `codex exec`) as overflow/fallback, and Gemini (`agy`) for PDF/media and factual/cross-family checks |
 | Measurement data | `.orchestration/model-measurements.md` (refresh via `$update-orchestration-skills`). Override: require verified coding scores on the same cohort before swapping primary implementation lane. |
-| Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` reviews Claude edits; Claude Opus `high` reviews Codex edits). Same-family fallback allowed only with explicit `same-family review` label. |
-| Data policy | **Public/Internal**: Codex and Claude pools. **Restricted/PII**: Claude pool only (or local only). **Publishable only**: metered third-party APIs (e.g., DeepSeek). |
+| Independent review | Fresh worker from a different model family than the author (e.g., Codex `gpt-6.2-sol` or Gemini `gemini-4-neon` reviews Claude edits; Claude Opus `high` or Gemini `gemini-4-neon` reviews Codex edits). Same-family fallback allowed only with explicit `same-family review` label. |
+| Data policy | **Public/Internal**: Codex, Claude and Antigravity/Gemini subscription pools. **Restricted/PII**: Claude pool only (or local only). **Publishable only**: metered third-party APIs (e.g., DeepSeek). |
 | Workspace | Writable paths: `src/`, `tests/`, `docs/`. Read-only: `infra/prod/`, `.github/workflows/`. Branch convention: `feat/<topic>` or `fix/<topic>`. Local dev server allowed on `127.0.0.1` only. |
 | Restricted paths | Paths excluded from external/non-Claude runners (e.g., `.env*`, `secrets/`, `data/pii/`). Strip secrets from every brief regardless of destination. |
 | Verification | Lint: `ruff check .` · Focused tests: `pytest tests/unit` · Full suite: `pytest` · Build: `npm run build` |
@@ -52,6 +52,8 @@ authorizes zero workers.
   {"model": "claude-opus-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding", "reasoning", "review"], "restricted_data": true},
   {"model": "claude-sonnet-5-5", "effort": "high", "pool": "claude", "runner": "claude -p", "roles": ["coding"], "restricted_data": true},
   {"model": "gpt-6.2-sol", "effort": "high", "pool": "codex", "runner": "codex exec", "roles": ["coding", "review"]},
-  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["reasoning"]}
+  {"model": "gpt-6.2-sol", "effort": "xhigh", "pool": "codex", "runner": "codex exec", "roles": ["reasoning"]},
+  {"model": "gemini-4-neon", "effort": "high", "pool": "gemini", "runner": "agy", "roles": ["knowledge", "accuracy", "review"]},
+  {"model": "gemini-4-hydrogen", "effort": "high", "pool": "gemini", "runner": "agy", "roles": ["knowledge", "accuracy"]}
 ]
 ```
