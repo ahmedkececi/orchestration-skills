@@ -42,6 +42,12 @@ python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --workspace . --profile skills/astra-orchestration/project-profile.example.md \
   --role review --author-family openai \
   --state examples/provider-state.json --now 2026-11-21T16:00:00Z
+
+# Pre-dispatch projected-overflow check for a large (`l`) coding unit
+python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --profile skills/astra-orchestration/project-profile.example.md \
+  --role coding --unit-size l \
+  --state examples/provider-state.json --now 2026-11-21T16:00:00Z
 ```
 
 What the output demonstrates:
@@ -51,12 +57,28 @@ What the output demonstrates:
   `gpt-6.2-sol` `xhigh` reserved for `--role reasoning`). For `--role coding`,
   `gpt-6.2-sol` (`high`, score `82`) and `claude-opus-5-5` (`high`, score `81`)
   are within the ±3-point equivalence band (`equivalent`), and because Codex is
-  at `87%` weekly usage (above the `85%` move threshold -> `deprioritized`),
+  at `91%` weekly usage (above the unified `90%` move threshold -> `deprioritized`),
   `resolve_lanes.py` recommends healthy `claude-opus-5-5 (high)` (`42%`
   headroom) first.
 - **Cross-family review:** Opus is authorized for review outside the
   author's OpenAI family. The authorized Sol reviewer is flagged
   `same-family`.
+- **Pre-dispatch projected overflow & post-unit EWMA calibration:** Passing
+  `--unit-size l` projects `current + estimated_burn × safety_margin` against
+  the unified `95%` stop mark before dispatch — on `examples/provider-state.json`
+  Codex's projected weekly usage crosses `95%` (`projected-overflow` ->
+  `blocked`, just like a calibrated ~`11%` `l` unit at `89%` five-hour), so
+  healthy `claude-opus-5-5 (high)` is selected before work begins. After a unit
+  finishes, log real before/after usage to a writable state file so future
+  estimates automatically calibrate to your plan (skipping EWMA updates if a
+  window reset occurred):
+
+  ```sh
+  python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+    --workspace . --state .orchestration/provider-state.json \
+    --record-burn --burn-provider codex --burn-model gpt-6.2-sol --burn-effort high \
+    --unit-size l --before-5h 72 --after-5h 83 --before-weekly 40 --after-weekly 44
+  ```
 - In a real project, save the authorization block in
   `.orchestration/project-profile.md` and omit `--profile`. Use
   `--restricted-data` to require a lane approved for that data and
@@ -68,8 +90,8 @@ What the output demonstrates:
 **Example task:** Update three files to render timestamps consistently. The project lets two independent model pools see the repository and run the relevant checks. The manager owns the plan and final review. A third authorized model family can independently review the result.
 
 1. **Before the limit:** Worker A owns the first file. The manager records the goal, writable paths, expected behavior and acceptance checks in `.orchestration/orchestration-checkpoint.md`. Each remaining unit has an owner or is marked pending.
-2. **At the configured move threshold:** Suppose Pool A's weekly pool reaches 85% usage (the default weekly move threshold; five-hour windows move later at 90% because they reset within hours). The next unit moves to Worker B after checking its data permissions, tools, quality profile and separate quota headroom. In the sample benchmark table above, both coding scores (`FC2` and `TB4`) are available on the same `demo-fixture` cohort, while `GDP.pdf` is `-` (unknown — not usable for document-work decisions).
-3. **After the handoff:** Worker B reads `.orchestration/orchestration-checkpoint.md`, finishes its assigned files and returns the 4-line contract (`STATUS` / `RESULT` / `EVIDENCE` / `NOT DONE`). A fresh reviewer from another authorized model family receives the diff and acceptance criteria. The manager uses that evidence to decide whether the task is done.
+2. **At the configured move threshold (or pre-dispatch `projected-overflow`):** Suppose Pool A reaches 90% usage on either its weekly or five-hour window (the unified 90% move / 95% stop threshold for both windows — or earlier if a pre-dispatch `resolve_lanes.py --unit-size` check flags `projected-overflow` >= 95%). The next unit moves to Worker B after checking its data permissions, tools, quality profile and separate quota headroom. In the sample benchmark table above, both coding scores (`FC2` and `TB4`) are available on the same `demo-fixture` cohort, while `GDP.pdf` is `-` (unknown — not usable for document-work decisions).
+3. **After the handoff:** Worker B reads `.orchestration/orchestration-checkpoint.md`, finishes its assigned files and returns the 4-line contract (`STATUS` / `RESULT` / `EVIDENCE` / `NOT DONE`). The manager reads live post-unit usage and runs `--record-burn` to update `.orchestration/provider-state.json` calibration. A fresh reviewer from another authorized model family receives the diff and acceptance criteria. The manager uses that evidence to decide whether the task is done.
 
 A checkpoint excerpt in `.orchestration/orchestration-checkpoint.md` follows the [workflow templates](../skills/sol-orchestration/workflow-templates.md#handoff-and-routing-record) format:
 
@@ -84,7 +106,7 @@ Accepted decisions and unresolved decisions: Accepted — reuse `src/utils/forma
 
 | Pool | Current status | Reset time with timezone | Fallback |
 | --- | --- | --- | --- |
-| Pool A | weekly 85% (at move threshold) | 2026-11-24 00:00 UTC | Pool B |
+| Pool A | weekly 91% (above 90% move threshold) | 2026-11-24 00:00 UTC | Pool B |
 | Pool B | weekly 28% / 5h 15% (healthy) | 2026-11-24 00:00 UTC | Local review |
 
 Manager verification already run: Confirmed Unit 1 diff stays inside `src/pages/summary.ts` and fixture test passes.
@@ -156,4 +178,4 @@ Koordinatör skill’ini kurduktan sonra istemcini proje dizininde açıp şu me
 
 Yukarıdaki [çevrimdışı komutu](#preview-model-data-offline) Git ve Python 3.9+ ile çalıştırabilirsin. `awk` filtresi yalnızca canlı çalışma alanı tablolarını gösterir; boru (`|`) kısmını kaldırırsan üstte tarihsel arşiv, altta JSON gözlemleriyle birlikte tam çıktıyı görebilirsin. Doğrulanmamış testler `-` görünür; değerler gösterim amaçlıdır.
 
-[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz haftalık taşıma eşiğine (%85) ulaşınca kalan iş yetkili ikinci havuza aktarılır. [Çevrimdışı hat çözümleme](#resolve-lanes-deterministically-offline) bölümündeki `resolve_lanes.py` komutları bu eşik ve çapraz aile inceleme sıralamasını örnek `provider-state.json` üzerinde doğrudan gösterir: `--role coding` için `gpt-6.2-sol` (`high`, skor `82`) ile `claude-opus-5-5` (`high`, skor `81`) ±3 puanlık eşdeğerlik bandında (`equivalent`) yer alır ve Codex haftalık `%87` kullanımla (`%85` taşıma eşiğinin üzerinde -> `deprioritized`) olduğu için `resolve_lanes.py` ilk sırada sağlıklı `claude-opus-5-5 (high)` (`%42` kalan kota) hattını önerir. `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.
+[Kota devri örneğinde](#follow-a-quota-handoff) ilk havuz birleşik taşıma eşiğine (**%90** taşıma / **%95** durdurma — hem 5 saatlik hem haftalık pencerede) ulaşınca veya iş öncesi `--unit-size` kontrolü `projected-overflow` (`>= %95`) işaretleyince kalan iş yetkili ikinci havuza aktarılır. [Çevrimdışı hat çözümleme](#resolve-lanes-deterministically-offline) bölümündeki `resolve_lanes.py` komutları bu eşiği, `--unit-size l` taşma korumasını ve çapraz aile inceleme sıralamasını örnek `provider-state.json` üzerinde doğrudan gösterir: `--role coding` için `gpt-6.2-sol` (`high`, skor `82`) ile `claude-opus-5-5` (`high`, skor `81`) ±3 puanlık eşdeğerlik bandında (`equivalent`) yer alır ve Codex haftalık `%91` kullanımla (`%90` taşıma eşiğinin üzerinde -> `deprioritized`, `--unit-size l` ile `projected-overflow` -> `blocked`) olduğu için `resolve_lanes.py` ilk sırada sağlıklı `claude-opus-5-5 (high)` (`%42` kalan kota) hattını önerir. İş bitince `--record-burn` komutu gerçek önce/sonra tüketimi `.orchestration/provider-state.json` içindeki `_calibration` EWMA geçmişine yazar (pencere sıfırlanırsa EWMA güncellemesini atlar). `.orchestration/orchestration-checkpoint.md` içindeki devir kaydı hangi dosyaların kaldığını, havuzların durumunu ve yeni ajanın ilk neyi kontrol edeceğini gösterir.

@@ -1047,6 +1047,79 @@
       flex-wrap: wrap;
     }
 
+    /* Pre-dispatch Quota Guard */
+    .guard-box {
+      padding: 11px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(56, 189, 248, 0.05);
+      border: 1px solid rgba(56, 189, 248, 0.24);
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .guard-box.is-active {
+      border-color: rgba(56, 189, 248, 0.52);
+      background: rgba(56, 189, 248, 0.09);
+    }
+    .unit-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .unit-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-dim);
+      border-radius: var(--radius-sm);
+      padding: 6px 4px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .unit-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .unit-btn.active {
+      background: var(--cyan-soft);
+      border-color: var(--cyan);
+      color: #e0f2fe;
+    }
+    .unit-name { font-size: 0.78rem; font-weight: 700; }
+    .unit-mult { font-size: 0.64rem; color: var(--text-muted); }
+    .unit-btn.active .unit-mult { color: #bae6fd; }
+    .calib-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .calib-select {
+      width: 100%;
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+      font-size: 0.78rem;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      outline: none;
+    }
+    .calib-select:focus { border-color: var(--cyan); }
+    .calib-select:disabled { opacity: 0.45; cursor: not-allowed; }
+    .guard-note {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      line-height: 1.42;
+    }
+    .proj-col-hidden { display: none; }
+    .proj-val-ok { color: var(--emerald); font-weight: 700; }
+    .proj-val-warn { color: var(--amber); font-weight: 700; }
+    .proj-val-stop { color: var(--rose); font-weight: 700; }
+    .cell-sub-note { font-size: 0.69rem; color: var(--text-muted); margin-top: 2px; white-space: nowrap; }
+
     @media (max-width: 1020px) {
       .sim-grid, .est-grid { grid-template-columns: 1fr; }
       .install-grid { grid-template-columns: 1fr; }
@@ -1054,6 +1127,7 @@
     @media (max-width: 640px) {
       .nav-links { display: none; }
       .preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .unit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .kpi-grid { grid-template-columns: 1fr; }
       .mix-row { grid-template-columns: 120px 1fr 40px; }
       .slider-row { grid-template-columns: 68px 1fr 38px; }
@@ -1106,8 +1180,8 @@
       </p>
       <div class="rule-chips">
         <span class="rule-chip"><strong data-i18n="chipEq">±3-pt equivalence</strong> · <span data-i18n="chipEqSub">headroom breaks ties</span></span>
-        <span class="rule-chip"><strong data-i18n="chipWeekly">Weekly 85% / 90%</strong> · <span data-i18n="chipWeeklySub">move / stop</span></span>
-        <span class="rule-chip"><strong data-i18n="chip5h">5-Hour 90% / 95%</strong> · <span data-i18n="chip5hSub">move / stop</span></span>
+        <span class="rule-chip"><strong data-i18n="chipUnified">Unified 90% / 95%</strong> · <span data-i18n="chipUnifiedSub">5-hour &amp; weekly move / stop</span></span>
+        <span class="rule-chip"><strong data-i18n="chipGuard">Pre-dispatch guard</strong> · <span data-i18n="chipGuardSub">projected ≥95% blocked</span></span>
         <span class="rule-chip"><strong data-i18n="chipCross">Cross-family review</strong> · <span data-i18n="chipCrossSub">independent verifier</span></span>
         <span class="rule-chip"><strong data-i18n="chipZero">Zero proxy / Zero daemon</strong> · <span data-i18n="chipZeroSub">native CLIs only</span></span>
       </div>
@@ -1126,7 +1200,8 @@
       <div class="scenario-bar" role="group" aria-label="Quick Scenarios">
         <span class="scenario-label" data-i18n="scenarioLabel">Scenarios:</span>
         <button type="button" class="scenario-btn active" data-scenario="normal" data-i18n="scNormal">Normal Day</button>
-        <button type="button" class="scenario-btn" data-scenario="codex87" data-i18n="scCodex87">Codex 87% Weekly Cap</button>
+        <button type="button" class="scenario-btn" data-scenario="codex91" data-i18n="scCodex91">Codex 91% Weekly Cap</button>
+        <button type="button" class="scenario-btn" data-scenario="projectedOverflow" data-i18n="scProjectedOverflow">5h 89% + Large Unit (Projected Overflow)</button>
         <button type="button" class="scenario-btn" data-scenario="claudeOutage" data-i18n="scClaudeOutage">Claude Outage</button>
         <button type="button" class="scenario-btn" data-scenario="pdfSprint" data-i18n="scPdfSprint">Heavy PDF Sprint</button>
         <button type="button" class="scenario-btn" data-scenario="restrictedReview" data-i18n="scRestrictedReview">Restricted Data + Cross-Family Review</button>
@@ -1216,10 +1291,58 @@
             <span class="toggle-pill" aria-hidden="true"></span>
           </label>
 
+          <div class="guard-box" id="quotaGuardBox">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblUnitSize">Pre-Dispatch Unit Size</span>
+              <span class="control-hint mono" id="unitSizeCliFlag">Current % only</span>
+            </div>
+            <div class="unit-grid" id="unitSizeButtons">
+              <button type="button" class="unit-btn active" data-unit="none">
+                <span class="unit-name" data-i18n="unitNone">None</span>
+                <span class="unit-mult" data-i18n="unitNoneSub">Current %</span>
+              </button>
+              <button type="button" class="unit-btn" data-unit="xs">
+                <span class="unit-name">XS</span>
+                <span class="unit-mult">0.25×</span>
+              </button>
+              <button type="button" class="unit-btn" data-unit="s">
+                <span class="unit-name">S</span>
+                <span class="unit-mult">0.55×</span>
+              </button>
+              <button type="button" class="unit-btn" data-unit="m">
+                <span class="unit-name">M</span>
+                <span class="unit-mult">1.0×</span>
+              </button>
+              <button type="button" class="unit-btn" data-unit="l">
+                <span class="unit-name">L</span>
+                <span class="unit-mult">1.9×</span>
+              </button>
+              <button type="button" class="unit-btn" data-unit="xl">
+                <span class="unit-name">XL</span>
+                <span class="unit-mult">3.2×</span>
+              </button>
+            </div>
+            <div class="calib-row">
+              <div class="control-label-row">
+                <span class="control-label" data-i18n="lblCalibration">Plan Calibration (EWMA)</span>
+                <span class="control-hint mono" id="calibSafetyHint">1.40× safety</span>
+              </div>
+              <select class="calib-select" id="calibrationSelect" aria-label="Plan Calibration">
+                <option value="cold" data-i18n="calibCold">Cold Start (1.40× safety)</option>
+                <option value="standard" data-i18n="calibStandard">Calibrated — Standard / Pro (1.20×, 1.0× burn)</option>
+                <option value="heavy" data-i18n="calibHeavy">Calibrated — Heavy / Small Plan (1.20×, 1.4× burn)</option>
+                <option value="max" data-i18n="calibMax">Calibrated — High-Allowance / Max (1.15×, 0.5× burn)</option>
+              </select>
+            </div>
+            <div class="guard-note" id="guardFormulaNote" data-i18n="guardFormulaNote">
+              Projects post-unit usage: current + est_burn × safety_margin. Blocks projected ≥95% (projected-overflow) and deprioritizes ≥90% before dispatch.
+            </div>
+          </div>
+
           <div class="control-group">
             <div class="control-label-row">
               <span class="control-label" data-i18n="lblQuotas">Live Subscription Pool Quotas</span>
-              <span class="control-hint" data-i18n="lblQuotasHint">85%/90% wk · 90%/95% 5h</span>
+              <span class="control-hint" data-i18n="lblQuotasHint">90%/95% wk &amp; 5h</span>
             </div>
             <div class="pool-list" id="poolSliders"></div>
           </div>
@@ -1247,8 +1370,10 @@
                     <th data-i18n="thPool">Pool / Family</th>
                     <th data-i18n="thScore">Score</th>
                     <th data-i18n="thDelta">&Delta; Top</th>
+                    <th class="proj-col proj-col-hidden" id="thEstBurn" data-i18n="thEstBurn">Est. Burn</th>
+                    <th class="proj-col proj-col-hidden" id="thProjected" data-i18n="thProjected">Projected (5h / Wk)</th>
                     <th data-i18n="thStatus">Status Badges</th>
-                    <th data-i18n="thHeadroom">Headroom</th>
+                    <th id="thHeadroom" data-i18n="thHeadroom">Headroom</th>
                   </tr>
                 </thead>
                 <tbody id="candidatesBody"></tbody>
@@ -1264,6 +1389,14 @@
               <button type="button" class="copy-btn" id="copyCliBtn" data-i18n="btnCopy">Copy</button>
             </div>
             <pre class="code-pre mono" id="cliCommand"></pre>
+          </div>
+
+          <div class="code-box">
+            <div class="code-bar">
+              <span data-i18n="recordBurnHeader">Post-unit EWMA calibration command (--record-burn)</span>
+              <button type="button" class="copy-btn" id="copyRecordBurnBtn" data-i18n="btnCopy">Copy</button>
+            </div>
+            <pre class="code-pre mono" id="recordBurnCommand"></pre>
           </div>
 
           <details class="collapsible">
@@ -1503,10 +1636,34 @@
        *    Canonical model IDs match resolve_lanes.py HISTORICAL_MODEL_IDS
        * ===================================================================== */
       const EQUIVALENCE_POINTS = 3.0;
-      const WEEKLY_MOVE_PCT = 85.0;
-      const WEEKLY_STOP_PCT = 90.0;
+      const WEEKLY_MOVE_PCT = 90.0;
+      const WEEKLY_STOP_PCT = 95.0;
       const FIVE_HOUR_MOVE_PCT = 90.0;
       const FIVE_HOUR_STOP_PCT = 95.0;
+
+      const UNIT_SIZES = ["xs", "s", "m", "l", "xl"];
+      const UNIT_SIZE_MULTIPLIERS = {
+        xs: 0.25,
+        s: 0.55,
+        m: 1.0,
+        l: 1.9,
+        xl: 3.2
+      };
+
+      const DEFAULT_BURN_PER_M = {
+        codex: { five_hour_pct: 5.0, weekly_pct: 2.0 },
+        claude: { five_hour_pct: 6.0, weekly_pct: 2.5 },
+        gemini: { five_hour_pct: 4.5, weekly_pct: 1.8 },
+        deepseek: { five_hour_pct: 2.0, weekly_pct: 1.0 },
+        _default: { five_hour_pct: 5.0, weekly_pct: 2.0 }
+      };
+
+      const CALIBRATION_PROFILES = {
+        cold: { id: "cold", samples: 0, safetyMargin: 1.40, burnScale: 1.0, maxRatio: null },
+        standard: { id: "standard", samples: 4, safetyMargin: 1.20, burnScale: 1.0, maxRatio: 1.20 },
+        heavy: { id: "heavy", samples: 4, safetyMargin: 1.20, burnScale: 1.4, maxRatio: 1.20 },
+        max: { id: "max", samples: 5, safetyMargin: 1.15, burnScale: 0.5, maxRatio: 1.15 }
+      };
 
       const POOLS = [
         { id: "codex", label: "Codex", provider: "OpenAI", family: "openai" },
@@ -1662,13 +1819,13 @@
           navEstimator: "Runway Estimator",
           navInstall: "Quick Install",
           heroTitle: "Keep your agents working when a model hits its quota.",
-          heroSubtitle: "Test the exact deterministic routing engine behind resolve_lanes.py directly in your browser — live subscription quota sliders, ±3-point equivalence, cross-family review priority, restricted-data gates, and transparent runway estimates.",
+          heroSubtitle: "Test the exact deterministic routing engine behind resolve_lanes.py directly in your browser — unified 90%/95% quota sliders, self-calibrating pre-dispatch overflow guard, ±3-point equivalence, cross-family review priority, restricted-data gates, and transparent runway estimates.",
           chipEq: "±3-pt equivalence",
           chipEqSub: "headroom breaks ties",
-          chipWeekly: "Weekly 85% / 90%",
-          chipWeeklySub: "move / stop",
-          chip5h: "5-Hour 90% / 95%",
-          chip5hSub: "move / stop",
+          chipUnified: "Unified 90% / 95%",
+          chipUnifiedSub: "5-hour & weekly move / stop",
+          chipGuard: "Pre-dispatch guard",
+          chipGuardSub: "projected ≥95% blocked",
           chipCross: "Cross-family review",
           chipCrossSub: "independent verifier",
           chipZero: "Zero proxy / Zero daemon",
@@ -1679,7 +1836,8 @@
           simSub: "Mirrors skills/update-orchestration-skills/scripts/resolve_lanes.py and the bundled Nov 2026 benchmark reference.",
           scenarioLabel: "Scenarios:",
           scNormal: "Normal Day",
-          scCodex87: "Codex 87% Weekly Cap",
+          scCodex91: "Codex 91% Weekly Cap",
+          scProjectedOverflow: "5h 89% + Large Unit (Projected Overflow)",
           scClaudeOutage: "Claude Outage",
           scPdfSprint: "Heavy PDF Sprint",
           scRestrictedReview: "Restricted Data + Cross-Family Review",
@@ -1701,15 +1859,26 @@
           reviewFormulaNote: "Review score = 0.5×accuracy + 0.3×reasoning + 0.2×knowledge. Cross-family reviewers always rank ahead of same-family lanes.",
           lblRestricted: "Restricted / PII Data Mode",
           lblRestrictedDesc: "Only lanes with \"restricted_data\": true remain eligible (--restricted-data).",
+          lblUnitSize: "Pre-Dispatch Unit Size",
+          unitNone: "None",
+          unitNoneSub: "Current %",
+          unitCurrentOnly: "Current % only",
+          lblCalibration: "Plan Calibration (EWMA)",
+          calibCold: "Cold Start (1.40× safety)",
+          calibStandard: "Calibrated — Standard / Pro (1.20×, 1.0× burn)",
+          calibHeavy: "Calibrated — Heavy / Small Plan (1.20×, 1.4× burn)",
+          calibMax: "Calibrated — High-Allowance / Max (1.15×, 0.5× burn)",
+          calibSafetyTag: "{m}× safety",
+          guardFormulaNote: "Projects post-unit usage: current + est_burn × safety_margin. Blocks projected ≥95% (projected-overflow) and deprioritizes ≥90% before dispatch.",
           lblQuotas: "Live Subscription Pool Quotas",
-          lblQuotasHint: "85%/90% wk · 90%/95% 5h",
+          lblQuotasHint: "90%/95% wk & 5h",
 
           poolWeekly: "Weekly",
           poolFiveHour: "5-Hour",
           poolOutage: "Outage / Down",
           poolHeadroom: "Headroom",
           poolDownText: "Down",
-          tickMoveStopWk: "Move 85% · Stop 90%",
+          tickMoveStopWk: "Move 90% · Stop 95%",
           tickMoveStop5h: "Move 90% · Stop 95%",
 
           presetManager: "Manager",
@@ -1722,6 +1891,7 @@
           recRunner: "Runner",
           recScore: "Score",
           recHeadroom: "Headroom",
+          recProjHeadroom: "Proj. Headroom",
           recDelta: "Δ Top",
           recUnknown: "N/A",
           recWhyPrefix: "Why it won:",
@@ -1738,8 +1908,11 @@
           thPool: "Pool / Family",
           thScore: "Score",
           thDelta: "Δ Top",
+          thEstBurn: "Est. Burn",
+          thProjected: "Projected (5h / Wk)",
           thStatus: "Status Badges",
           thHeadroom: "Headroom",
+          thProjHeadroom: "Proj. Headroom",
           showUnauth: "Show {n} role-unauthorized bundled models",
           hideUnauth: "Hide {n} role-unauthorized bundled models",
           unauthNote: "Role-unauthorized lanes are excluded by the active project-profile.md.",
@@ -1747,7 +1920,9 @@
           badgeHealthy: "healthy",
           badgeEquivalent: "equivalent",
           badgeDeprioritized: "deprioritized",
+          badgeProjectedDeprio: "projected-deprioritized",
           badgeBlocked: "blocked",
+          badgeProjectedOverflow: "projected-overflow",
           badgeSameFamily: "same-family",
           badgeRestricted: "restricted-denied",
           badgeOutage: "outage",
@@ -1756,18 +1931,22 @@
           badgeUnmeasured: "unmeasured",
 
           cliHeader: "Equivalent deterministic CLI command",
+          recordBurnHeader: "Post-unit EWMA calibration command (--record-burn)",
           statePreviewSummary: "View equivalent .orchestration/provider-state.json snapshot",
           btnCopy: "Copy",
           btnCopied: "Copied!",
 
           warnAdvisory: "Advisory mode: no project-profile.md lane lock applied; resolve_lanes.py leaves recommendation empty without explicit authorization.",
           warnSameFamilyOnly: "No cross-family reviewer available for author family '{author}'; top lane is same-family (label review explicitly).",
-          warnDeprioritizedTop: "Top lane is past its proactive move threshold (85% weekly / 90% 5-hour); prepare a checkpoint handoff.",
+          warnDeprioritizedTop: "Top lane is past the unified 90% move threshold (90% move / 95% stop on 5-hour or weekly); prepare a checkpoint handoff.",
+          warnProjectedDeprioTop: "Top lane is projected to cross the 90% move threshold after this {unit} unit (projected-deprioritized); prepare a checkpoint handoff or split the unit.",
           warnNoEligible: "No eligible lanes available for role '{role}' under current profile and pool states.",
 
           whyRestrictedCross: "Cleared for restricted data and provides independent cross-family review (author: {author}); {rest}.",
           whyCrossPriority: "Prioritized as an independent cross-family reviewer (family '{fam}' ≠ author '{author}') with score {score} and {hr}% headroom.",
           whyEquivHeadroom: "Within the ±3-pt equivalence band of top score {top} (Δ {delta}) and wins on higher remaining headroom ({hr}% vs {rivalHr}% on {rival}).",
+          whyProjectedOverflowBeat: "{rival} is blocked pre-dispatch by projected-overflow for unit '{unit}' ({detail}), routing cleanly to {model} ({hr}% projected headroom) before work starts.",
+          whyProjectedDeprioBeat: "Top scorer {rival} hits projected-deprioritized for unit '{unit}' ({detail}), so healthy equivalent lane {model} wins at {hr}% projected headroom.",
           whyDeprioBeat: "Top scorer {rival} is deprioritized ({rivalReason}), so healthy equivalent lane wins cleanly at {hr}% headroom.",
           whyOutageBeat: "Higher-scoring or rival pool ({rivalPool}) is excluded due to {rivalExcludeReason}, routing seamlessly to {model} ({hr}% headroom).",
           whyClearTop: "Highest eligible {role} score ({score}) in a healthy pool with {hr}% remaining headroom.",
@@ -1806,7 +1985,7 @@
           kpiTokensLbl: "Total Session Token Savings",
           kpiContextLbl: "Upfront Skill Context Saved",
           kpiRunwayNote1: "Single pool: within-pool lighter-tier offloading + concise briefs only",
-          kpiRunwayNoteMulti: "Estimated {mult}× longer before hitting the 85%/90% flagship cap across {pools} pools",
+          kpiRunwayNoteMulti: "Estimated {mult}× longer before hitting the 90%/95% flagship cap across {pools} pools",
           kpiFlagshipNote: "~{pct}% of workload offloaded from the scarce coordinator model",
           kpiTokensNote: "Scoped worker briefs + right-sized effort vs monolithic max-effort loop",
           kpiContextNote: "{skillKb} KB SKILL.md upfront vs {refKb} KB deferred references/ ({preset})",
@@ -1852,13 +2031,13 @@
           navEstimator: "Kota & Tasarruf Hesaplayıcı",
           navInstall: "Hızlı Kurulum",
           heroTitle: "Bir modelin kotası dolduğunda ajanların çalışmaya devam etsin.",
-          heroSubtitle: "resolve_lanes.py arkasındaki deterministik yönlendirme motorunu tarayıcında canlı dene — anlık abonelik kota kaydırıcıları, ±3 puan eşdeğerlik bandı, çapraz aile inceleme önceliği, kısıtlı veri kapıları ve şeffaf kota ömrü tahmini.",
+          heroSubtitle: "resolve_lanes.py arkasındaki deterministik yönlendirme motorunu tarayıcında canlı dene — birleşik %90/%95 kota kaydırıcıları, kendini kalibre eden iş öncesi taşma koruması, ±3 puan eşdeğerlik bandı, çapraz aile inceleme önceliği, kısıtlı veri kapıları ve şeffaf kota ömrü tahmini.",
           chipEq: "±3 puan eşdeğerlik",
           chipEqSub: "eşitlikte kalan kota seçilir",
-          chipWeekly: "Haftalık %85 / %90",
-          chipWeeklySub: "taşı / durdur",
-          chip5h: "5 Saatlik %90 / %95",
-          chip5hSub: "taşı / durdur",
+          chipUnified: "Birleşik %90 / %95",
+          chipUnifiedSub: "5 saatlik ve haftalık taşı / dur",
+          chipGuard: "İş öncesi koruma",
+          chipGuardSub: "öngörü ≥%95 ise engeller",
           chipCross: "Çapraz aile incelemesi",
           chipCrossSub: "bağımsız doğrulayıcı",
           chipZero: "Sıfır proxy / Sıfır servis",
@@ -1869,7 +2048,8 @@
           simSub: "skills/update-orchestration-skills/scripts/resolve_lanes.py kurallarını ve paketli Kasım 2026 benchmark referansını birebir uygular.",
           scenarioLabel: "Senaryolar:",
           scNormal: "Normal Gün",
-          scCodex87: "Codex %87 Haftalık Eşik",
+          scCodex91: "Codex %91 Haftalık Eşik",
+          scProjectedOverflow: "5s %89 + Büyük İş (Taşma Koruması)",
           scClaudeOutage: "Claude Kesintisi",
           scPdfSprint: "Yoğun PDF Sprinti",
           scRestrictedReview: "Kısıtlı Veri + Çapraz Aile İnceleme",
@@ -1891,15 +2071,26 @@
           reviewFormulaNote: "İnceleme skoru = 0.5×doğruluk + 0.3×muhakeme + 0.2×bilgi. Çapraz aile inceleyiciler her zaman aynı aileden önce sıralanır.",
           lblRestricted: "Kısıtlı / PII Veri Modu",
           lblRestrictedDesc: "Yalnızca \"restricted_data\": true yetkili hatlar uygun kalır (--restricted-data).",
+          lblUnitSize: "İş Öncesi Birim Boyutu",
+          unitNone: "Yok",
+          unitNoneSub: "Anlık %",
+          unitCurrentOnly: "Yalnızca anlık %",
+          lblCalibration: "Plan Kalibrasyonu (EWMA)",
+          calibCold: "Soğuk Başlangıç (1,40× güvenlik)",
+          calibStandard: "Kalibre — Standart / Pro (1,20×, 1,0× tüketim)",
+          calibHeavy: "Kalibre — Yoğun / Küçük Plan (1,20×, 1,4× tüketim)",
+          calibMax: "Kalibre — Yüksek Kota / Max (1,15×, 0,5× tüketim)",
+          calibSafetyTag: "{m}× güvenlik",
+          guardFormulaNote: "İş sonrası kullanımı öngörür: anlık + tahmini_tüketim × güvenlik_marjı. Öngörü ≥%95 ise engeller (projected-overflow), ≥%90 ise öncelik düşürür.",
           lblQuotas: "Canlı Abonelik Havuzu Kotaları",
-          lblQuotasHint: "%85/%90 hft · %90/%95 5s",
+          lblQuotasHint: "%90/%95 hft & 5s",
 
           poolWeekly: "Haftalık",
           poolFiveHour: "5 Saatlik",
           poolOutage: "Kesinti / Kapalı",
           poolHeadroom: "Kalan Kota",
           poolDownText: "Kapalı",
-          tickMoveStopWk: "Taşı %85 · Dur %90",
+          tickMoveStopWk: "Taşı %90 · Dur %95",
           tickMoveStop5h: "Taşı %90 · Dur %95",
 
           presetManager: "Yönetici",
@@ -1912,6 +2103,7 @@
           recRunner: "Çalıştırıcı",
           recScore: "Skor",
           recHeadroom: "Kalan Kota",
+          recProjHeadroom: "Öngörü Kalan",
           recDelta: "Δ Zirve",
           recUnknown: "Yok",
           recWhyPrefix: "Neden kazandı:",
@@ -1928,8 +2120,11 @@
           thPool: "Havuz / Aile",
           thScore: "Skor",
           thDelta: "Δ Zirve",
+          thEstBurn: "Tah. Tüketim",
+          thProjected: "Öngörü (5s / Hft)",
           thStatus: "Durum Rozetleri",
           thHeadroom: "Kalan Kota",
+          thProjHeadroom: "Öngörü Kalan",
           showUnauth: "Bu rol için yetkisiz {n} paketli modeli göster",
           hideUnauth: "Bu rol için yetkisiz {n} paketli modeli gizle",
           unauthNote: "Rol yetkisi olmayan hatlar aktif project-profile.md tarafından dışlanır.",
@@ -1937,7 +2132,9 @@
           badgeHealthy: "sağlıklı",
           badgeEquivalent: "eşdeğer",
           badgeDeprioritized: "önceliği düştü",
+          badgeProjectedDeprio: "projected-deprioritized",
           badgeBlocked: "engellendi",
+          badgeProjectedOverflow: "projected-overflow",
           badgeSameFamily: "aynı aile",
           badgeRestricted: "kısıtlı veri reddi",
           badgeOutage: "kesinti",
@@ -1946,18 +2143,22 @@
           badgeUnmeasured: "ölçümsüz",
 
           cliHeader: "Eşdeğer deterministik CLI komutu",
+          recordBurnHeader: "İş sonrası EWMA kalibrasyon komutu (--record-burn)",
           statePreviewSummary: "Eşdeğer .orchestration/provider-state.json çıktısını görüntüle",
           btnCopy: "Kopyala",
           btnCopied: "Kopyalandı!",
 
           warnAdvisory: "Bilgi amaçlı mod: project-profile.md hat kilidi yok; resolve_lanes.py açık yetki olmadan öneri alanını boş bırakır.",
           warnSameFamilyOnly: "'{author}' yazar ailesi için çapraz aile inceleyici yok; en üst hat aynı aileden (incelemeyi açıkça etiketle).",
-          warnDeprioritizedTop: "En üst hat proaktif taşıma eşiğini geçti (haftalık %85 / 5 saatlik %90); devir kaydı hazırlamaya başla.",
+          warnDeprioritizedTop: "En üst hat birleşik %90 taşıma eşiğini geçti (5 saatlik veya haftalık %90 taşı / %95 dur); devir kaydı hazırlamaya başla.",
+          warnProjectedDeprioTop: "En üst hattın bu '{unit}' birimi sonunda %90 taşıma eşiğini geçmesi öngörülüyor (projected-deprioritized); devir kaydı hazırla veya işi böl.",
           warnNoEligible: "Mevcut profil ve havuz durumlarında '{role}' rolü için uygun hat bulunmuyor.",
 
           whyRestrictedCross: "Kısıtlı veri iznine sahip ve bağımsız çapraz aile incelemesi sağlıyor (yazar: {author}); {rest}.",
           whyCrossPriority: "Bağımsız çapraz aile inceleyici olarak önceliklendirildi (aile '{fam}' ≠ yazar '{author}'); skor {score}, kalan kota %{hr}.",
           whyEquivHeadroom: "Zirve skor {top} ile ±3 puan eşdeğerlik bandında (Δ {delta}) ve daha yüksek kalan kota ile kazandı (%{hr} vs {rival} %{rivalHr}).",
+          whyProjectedOverflowBeat: "{rival} hattı '{unit}' birimi için iş öncesi projected-overflow ile engellendi ({detail}); iş başlamadan sorunsuzca {model} hattına yönlendi (%{hr} öngörü kalan kota).",
+          whyProjectedDeprioBeat: "En yüksek skorlu {rival} '{unit}' birimi için projected-deprioritized oldu ({detail}); sağlıklı eşdeğer {model} hattı %{hr} öngörü kalan kota ile kazandı.",
           whyDeprioBeat: "En yüksek skorlu {rival} öncelik düşürdü ({rivalReason}); bu yüzden sağlıklı eşdeğer hat %{hr} kalan kota ile temiz biçimde kazandı.",
           whyOutageBeat: "Yüksek skorlu/rakip havuz ({rivalPool}) {rivalExcludeReason} nedeniyle dışlandı; görev sorunsuzca {model} hattına yönlendi (%{hr} kalan kota).",
           whyClearTop: "Sağlıklı bir havuzda en yüksek uygun {role} skoru ({score}) ve %{hr} kalan kota.",
@@ -1996,7 +2197,7 @@
           kpiTokensLbl: "Toplam Oturum Token Tasarrufu",
           kpiContextLbl: "Başlangıç Skill Bağlam Tasarrufu",
           kpiRunwayNote1: "Tek havuz: yalnızca havuz içi hafif kademe + odaklı özet kazanımı",
-          kpiRunwayNoteMulti: "{pools} havuzla %85/%90 amiral gemisi eşiğine ulaşma süresi tahmini {mult}× uzar",
+          kpiRunwayNoteMulti: "{pools} havuzla %90/%95 amiral gemisi eşiğine ulaşma süresi tahmini {mult}× uzar",
           kpiFlagshipNote: "İş yükünün ~%{pct} kısmı kısıtlı koordinatör modelinden devredilir",
           kpiTokensNote: "Tek parça max-efor döngü yerine odaklı işçi özetleri + doğru efor",
           kpiContextNote: "{skillKb} KB başlangıç SKILL.md vs {refKb} KB isteğe bağlı references/ ({preset})",
@@ -2048,6 +2249,8 @@
         role: "coding",
         authorFamily: "openai",
         restrictedData: false,
+        unitSize: "none", // "none" | "xs" | "s" | "m" | "l" | "xl"
+        calibration: "cold", // "cold" | "standard" | "heavy" | "max"
         showUnauthorized: false,
         pools: {
           codex: { weekly: 34, fiveHour: 20, down: false },
@@ -2070,6 +2273,7 @@
       const SCENARIOS = {
         normal: {
           preset: "sol", scope: "profile", role: "coding", authorFamily: "openai", restrictedData: false,
+          unitSize: "none", calibration: "cold",
           pools: {
             codex: { weekly: 34, fiveHour: 20, down: false },
             claude: { weekly: 22, fiveHour: 15, down: false },
@@ -2077,17 +2281,29 @@
             deepseek: { weekly: 8, fiveHour: 5, down: false }
           }
         },
-        codex87: {
+        codex91: {
           preset: "sol", scope: "profile", role: "coding", authorFamily: "openai", restrictedData: false,
+          unitSize: "none", calibration: "cold",
           pools: {
-            codex: { weekly: 87, fiveHour: 64, down: false },
+            codex: { weekly: 91, fiveHour: 64, down: false },
             claude: { weekly: 40, fiveHour: 28, down: false },
+            gemini: { weekly: 25, fiveHour: 15, down: false },
+            deepseek: { weekly: 10, fiveHour: 5, down: false }
+          }
+        },
+        projectedOverflow: {
+          preset: "sol", scope: "profile", role: "coding", authorFamily: "openai", restrictedData: false,
+          unitSize: "l", calibration: "standard",
+          pools: {
+            codex: { weekly: 45, fiveHour: 89, down: false },
+            claude: { weekly: 35, fiveHour: 22, down: false },
             gemini: { weekly: 25, fiveHour: 15, down: false },
             deepseek: { weekly: 10, fiveHour: 5, down: false }
           }
         },
         claudeOutage: {
           preset: "opus", scope: "profile", role: "coding", authorFamily: "claude", restrictedData: false,
+          unitSize: "none", calibration: "cold",
           pools: {
             codex: { weekly: 45, fiveHour: 30, down: false },
             claude: { weekly: 38, fiveHour: 25, down: true },
@@ -2097,6 +2313,7 @@
         },
         pdfSprint: {
           preset: "neon", scope: "profile", role: "knowledge", authorFamily: "google", restrictedData: false,
+          unitSize: "none", calibration: "cold",
           pools: {
             codex: { weekly: 62, fiveHour: 45, down: false },
             claude: { weekly: 55, fiveHour: 30, down: false },
@@ -2106,6 +2323,7 @@
         },
         restrictedReview: {
           preset: "sol", scope: "profile", role: "review", authorFamily: "openai", restrictedData: true,
+          unitSize: "none", calibration: "cold",
           pools: {
             codex: { weekly: 30, fiveHour: 18, down: false },
             claude: { weekly: 36, fiveHour: 22, down: false },
@@ -2125,7 +2343,15 @@
        * 4. EXACT DETERMINISTIC RESOLVER (PORT OF resolve_lanes.py)
        * ===================================================================== */
       function round2(v) {
-        return Math.round(v * 100) / 100;
+        if (!Number.isFinite(v)) return v;
+        const abs8 = Math.abs(v) * 8;
+        if (Number.isInteger(abs8) && abs8 % 2 === 1) {
+          const f = Math.floor(Math.abs(v) * 100);
+          const even = (f % 2 === 0 ? f : f + 1) / 100;
+          return v < 0 ? -even : even;
+        }
+        const r = Number(v.toFixed(2));
+        return Object.is(r, -0) ? 0 : r;
       }
 
       function fmtNum(val) {
@@ -2142,6 +2368,170 @@
 
       function laneKey(model, effort, pool) {
         return model.toLowerCase() + "|" + effort.toLowerCase() + "|" + pool.toLowerCase();
+      }
+
+      function modelBurnWeight(model, effort) {
+        const lowModel = String(model || "").trim().toLowerCase();
+        const lowEffort = String(effort || "medium").trim().toLowerCase();
+        const tokens = new Set(lowModel.match(/[a-z0-9]+/g) || []);
+        if (tokens.has("mythos") || tokens.has("fable")) return 1.7;
+        if (tokens.has("astra")) return 1.6;
+        if (tokens.has("opus") && (lowEffort === "high" || lowEffort === "xhigh" || lowEffort === "max")) return 1.2;
+        if (tokens.has("sol") && (lowEffort === "xhigh" || lowEffort === "max")) return 1.2;
+        if (tokens.has("sonnet")) return 0.65;
+        if (tokens.has("hydrogen")) return 0.55;
+        if (tokens.has("terra") || tokens.has("luna")) return 0.5;
+        if (tokens.has("haiku") || tokens.has("flash")) return 0.25;
+        return 1.0;
+      }
+
+      function buildCalibrationObject(calibId, nowIso) {
+        const prof = CALIBRATION_PROFILES[calibId] || CALIBRATION_PROFILES.cold;
+        if (prof.samples === 0) return null;
+        const pools = {};
+        for (const p of POOLS) {
+          const base = DEFAULT_BURN_PER_M[p.id] || DEFAULT_BURN_PER_M._default;
+          pools[p.id] = {
+            samples: prof.samples,
+            five_hour_per_m: round2(base.five_hour_pct * prof.burnScale),
+            weekly_per_m: round2(base.weekly_pct * prof.burnScale),
+            max_ratio: prof.maxRatio,
+            updated_at: nowIso
+          };
+        }
+        return {
+          version: 1,
+          alpha: 0.35,
+          lanes: {},
+          pools: pools
+        };
+      }
+
+      function autoSafetyMargin(samples, maxRatio) {
+        if (!samples || samples <= 0) return 1.4;
+        if (samples < 3) return 1.25;
+        const mr = (maxRatio !== null && maxRatio !== undefined) ? Number(maxRatio) : 1.2;
+        return round2(Math.min(1.5, Math.max(1.15, mr)));
+      }
+
+      function estimateUnitBurn(provider, model, effort, unitSize, calibration, safetyMarginOverride) {
+        if (!unitSize || unitSize === "none" || !UNIT_SIZE_MULTIPLIERS[unitSize]) return null;
+        const p = String(provider || "").toLowerCase();
+        const m = String(model || "").toLowerCase();
+        const e = String(effort || "medium").toLowerCase();
+        const mult = UNIT_SIZE_MULTIPLIERS[unitSize];
+        const weight = modelBurnWeight(m, e);
+        const cKey = p + "/" + m + "/" + e;
+
+        let fiveHour = null;
+        let weekly = null;
+        let source = "cold_start";
+        let samples = 0;
+        let maxRatio = null;
+
+        const lanesMap = calibration && calibration.lanes ? calibration.lanes : null;
+        const poolsMap = calibration && calibration.pools ? calibration.pools : null;
+        const laneRec = lanesMap && lanesMap[cKey] ? lanesMap[cKey] : null;
+        const poolRec = poolsMap && poolsMap[p] ? poolsMap[p] : null;
+
+        if (laneRec && laneRec.samples > 0) {
+          samples = laneRec.samples;
+          maxRatio = laneRec.max_ratio;
+          const bySize = laneRec.by_size && laneRec.by_size[unitSize] ? laneRec.by_size[unitSize] : null;
+          const scaled5h = laneRec.five_hour_per_m != null ? laneRec.five_hour_per_m * mult : null;
+          const scaledWk = laneRec.weekly_per_m != null ? laneRec.weekly_per_m * mult : null;
+
+          if (bySize && bySize.samples >= 2) {
+            fiveHour = bySize.five_hour_pct != null ? bySize.five_hour_pct : scaled5h;
+            weekly = bySize.weekly_pct != null ? bySize.weekly_pct : scaledWk;
+            source = "lane_exact";
+          } else if (bySize && bySize.samples === 1) {
+            fiveHour = bySize.five_hour_pct != null
+              ? (scaled5h != null ? 0.65 * bySize.five_hour_pct + 0.35 * scaled5h : bySize.five_hour_pct)
+              : scaled5h;
+            weekly = bySize.weekly_pct != null
+              ? (scaledWk != null ? 0.65 * bySize.weekly_pct + 0.35 * scaledWk : bySize.weekly_pct)
+              : scaledWk;
+            source = "lane_exact";
+          } else {
+            fiveHour = scaled5h;
+            weekly = scaledWk;
+            source = "lane_scaled";
+          }
+        } else if (poolRec && poolRec.samples > 0) {
+          samples = poolRec.samples;
+          maxRatio = poolRec.max_ratio;
+          fiveHour = poolRec.five_hour_per_m != null ? poolRec.five_hour_per_m * weight * mult : null;
+          weekly = poolRec.weekly_per_m != null ? poolRec.weekly_per_m * weight * mult : null;
+          source = "pool_scaled";
+        }
+
+        const base = DEFAULT_BURN_PER_M[p] || DEFAULT_BURN_PER_M._default;
+        if (fiveHour === null || fiveHour === undefined) fiveHour = base.five_hour_pct * weight * mult;
+        if (weekly === null || weekly === undefined) weekly = base.weekly_pct * weight * mult;
+
+        const margin = (safetyMarginOverride !== null && safetyMarginOverride !== undefined)
+          ? round2(Number(safetyMarginOverride))
+          : autoSafetyMargin(samples, maxRatio);
+
+        return {
+          unit_size: unitSize,
+          five_hour_pct: round2(fiveHour),
+          weekly_pct: round2(weekly),
+          safety_margin: margin,
+          source: source,
+          samples: samples
+        };
+      }
+
+      function computeProjection(pstate, est) {
+        if (!est || !pstate || pstate.effective_state === "down") {
+          return {
+            estimated_burn: est,
+            projected_five_hour_pct: null,
+            projected_weekly_pct: null,
+            projected_overflow: false,
+            projected_deprioritized: false,
+            projected_headroom_pct: null,
+            projection_reasons: []
+          };
+        }
+        const cur5h = pstate.five_hour_pct;
+        const curWk = pstate.weekly_pct;
+        const proj5h = cur5h != null ? round2(cur5h + est.five_hour_pct * est.safety_margin) : null;
+        const projWk = curWk != null ? round2(curWk + est.weekly_pct * est.safety_margin) : null;
+
+        const stopDetails = [];
+        const moveDetails = [];
+        if (proj5h !== null && proj5h >= FIVE_HOUR_STOP_PCT) {
+          stopDetails.push("projected five_hour_pct " + fmtNum(proj5h) + "% >= " + FIVE_HOUR_STOP_PCT + "% stop (" + fmtNum(cur5h) + "% + " + fmtNum(est.five_hour_pct) + "% × " + fmtNum(est.safety_margin) + ")");
+        }
+        if (projWk !== null && projWk >= WEEKLY_STOP_PCT) {
+          stopDetails.push("projected weekly_pct " + fmtNum(projWk) + "% >= " + WEEKLY_STOP_PCT + "% stop (" + fmtNum(curWk) + "% + " + fmtNum(est.weekly_pct) + "% × " + fmtNum(est.safety_margin) + ")");
+        }
+        if (stopDetails.length === 0) {
+          if (proj5h !== null && proj5h >= FIVE_HOUR_MOVE_PCT) {
+            moveDetails.push("projected five_hour_pct " + fmtNum(proj5h) + "% >= " + FIVE_HOUR_MOVE_PCT + "% move (" + fmtNum(cur5h) + "% + " + fmtNum(est.five_hour_pct) + "% × " + fmtNum(est.safety_margin) + ")");
+          }
+          if (projWk !== null && projWk >= WEEKLY_MOVE_PCT) {
+            moveDetails.push("projected weekly_pct " + fmtNum(projWk) + "% >= " + WEEKLY_MOVE_PCT + "% move (" + fmtNum(curWk) + "% + " + fmtNum(est.weekly_pct) + "% × " + fmtNum(est.safety_margin) + ")");
+          }
+        }
+
+        const projVals = [];
+        if (proj5h !== null) projVals.push(proj5h);
+        if (projWk !== null) projVals.push(projWk);
+        const projHr = projVals.length > 0 ? Math.max(0.0, round2(100.0 - Math.max(...projVals))) : pstate.headroom;
+
+        return {
+          estimated_burn: est,
+          projected_five_hour_pct: proj5h,
+          projected_weekly_pct: projWk,
+          projected_overflow: stopDetails.length > 0,
+          projected_deprioritized: stopDetails.length === 0 && moveDetails.length > 0,
+          projected_headroom_pct: projHr,
+          projection_reasons: stopDetails.length > 0 ? stopDetails : moveDetails
+        };
       }
 
       function evaluateProviderStates(poolInputs) {
@@ -2262,6 +2652,9 @@
         const authorFamily = role === "review" ? opts.authorFamily : null;
         const restrictedData = Boolean(opts.restrictedData);
         const authorizedMap = opts.authorizedMap; // Map or null
+        const unitSize = opts.unitSize && opts.unitSize !== "none" ? opts.unitSize : null;
+        const calibration = opts.calibration || null;
+        const safetyMarginOverride = opts.safetyMargin != null ? opts.safetyMargin : null;
         const providerStates = evaluateProviderStates(opts.pools);
 
         const eligible = [];
@@ -2271,6 +2664,10 @@
           const key = laneKey(cand.model, cand.effort, cand.pool);
           const lane = authorizedMap ? authorizedMap.get(key) || null : null;
           const pstate = providerStates[cand.pool];
+
+          const est = unitSize
+            ? estimateUnitBurn(cand.pool, cand.model, cand.effort, unitSize, calibration, safetyMarginOverride)
+            : null;
 
           const exclusionTypes = [];
           const exclusionReasons = [];
@@ -2299,6 +2696,12 @@
               runner: lane ? lane.runner : null,
               score: null,
               headroom: pstate ? pstate.headroom : null,
+              projected_headroom_pct: null,
+              estimated_burn: est,
+              projected_five_hour_pct: null,
+              projected_weekly_pct: null,
+              projected_overflow: false,
+              projected_deprioritized: false,
               roleAuthorized: roleAuthorized,
               exclusionTypes: exclusionTypes,
               reasons: exclusionReasons,
@@ -2307,7 +2710,43 @@
             continue;
           }
 
+          const proj = computeProjection(pstate, est);
+          if (unitSize && proj.projected_overflow) {
+            excluded.push({
+              model: lane ? lane.model : cand.model,
+              display: cand.display,
+              effort: cand.effort,
+              pool: cand.pool,
+              family: cand.family,
+              runner: lane ? lane.runner : null,
+              score: null,
+              status: "blocked",
+              pool_state: "blocked",
+              headroom: pstate ? pstate.headroom : null,
+              projected_headroom_pct: proj.projected_headroom_pct,
+              estimated_burn: proj.estimated_burn,
+              projected_five_hour_pct: proj.projected_five_hour_pct,
+              projected_weekly_pct: proj.projected_weekly_pct,
+              projected_overflow: true,
+              projected_deprioritized: false,
+              roleAuthorized: roleAuthorized,
+              exclusionTypes: ["projected-overflow"],
+              reasons: proj.projection_reasons,
+              _cand: cand
+            });
+            continue;
+          }
+
           const sameFamily = Boolean(role === "review" && authorFamily && cand.family === authorFamily);
+          const isDeprio = Boolean(pstate.deprioritized || (unitSize && proj.projected_deprioritized));
+          const stateReasons = pstate.reasons.slice();
+          if (unitSize && proj.projected_deprioritized) {
+            stateReasons.push(...proj.projection_reasons);
+          }
+          const effectiveHeadroom = (unitSize && proj.projected_headroom_pct !== null)
+            ? proj.projected_headroom_pct
+            : pstate.headroom;
+
           eligible.push({
             model: lane ? lane.model : cand.model,
             display: cand.display,
@@ -2318,12 +2757,20 @@
             score: null,
             latency_s: cand.latency_s,
             latency_kind: cand.latency_kind,
-            pool_state: pstate.effective_state,
-            deprioritized: pstate.deprioritized,
+            pool_state: isDeprio ? "deprioritized" : pstate.effective_state,
+            deprioritized: isDeprio,
+            current_deprioritized: pstate.deprioritized,
             headroom: pstate.headroom,
+            effective_headroom: effectiveHeadroom,
+            projected_headroom_pct: proj.projected_headroom_pct,
+            estimated_burn: proj.estimated_burn,
+            projected_five_hour_pct: proj.projected_five_hour_pct,
+            projected_weekly_pct: proj.projected_weekly_pct,
+            projected_overflow: false,
+            projected_deprioritized: Boolean(unitSize && proj.projected_deprioritized),
             stale: false,
             same_family: sameFamily,
-            state_reasons: pstate.reasons.slice(),
+            state_reasons: stateReasons,
             _cand: cand
           });
         }
@@ -2349,7 +2796,7 @@
         // Shared latencies tie-break (measured-only when tied on pre-latency keys)
         const tiedGroups = new Map();
         for (const item of eligible) {
-          const tkey = JSON.stringify([item.same_family, item.deprioritized, item.stale, item.headroom, item.score]);
+          const tkey = JSON.stringify([item.same_family, item.deprioritized, item.stale, item.effective_headroom, item.score]);
           if (!tiedGroups.has(tkey)) tiedGroups.set(tkey, []);
           tiedGroups.get(tkey).push(item);
         }
@@ -2392,6 +2839,7 @@
           }
           if (item.same_family) flags.push("same-family");
           if (item.deprioritized) flags.push("deprioritized");
+          if (item.projected_deprioritized) flags.push("projected-deprioritized");
           item.flags = flags;
         }
 
@@ -2399,7 +2847,7 @@
           const isUnmeasured = item.score === null;
           const isSameFamily = item.same_family;
           const isBelow = item.tier !== "equivalent";
-          const headroomRank = item.headroom !== null ? item.headroom : 0.0;
+          const headroomRank = item.effective_headroom !== null ? item.effective_headroom : 0.0;
           const scoreRank = item.score !== null ? item.score : -1.0;
           const latencyRank = item._comparable_latency;
 
@@ -2460,6 +2908,7 @@
           role: role,
           authorFamily: authorFamily,
           restrictedData: restrictedData,
+          unitSize: unitSize,
           advisory: authorizedMap === null,
           topScore: topScore,
           crossFamilyAnchored: crossFamilyAnchored,
@@ -2513,6 +2962,7 @@
             const uniqueTypes = [...new Set(relevantExcluded.flatMap((x) => x.exclusionTypes))];
             const reasonLabels = uniqueTypes.map((tp) => {
               if (tp === "outage") return t("badgeOutage");
+              if (tp === "projected-overflow") return t("badgeProjectedOverflow");
               if (tp === "blocked") return t("badgeBlocked");
               if (tp === "restricted-denied") return t("badgeRestricted");
               return tp;
@@ -2522,20 +2972,31 @@
           return t("emptyReasonNoRole", { preset: PRESETS[state.preset].name, role: roleLabel });
         }
 
+        const recHr = rec.effective_headroom !== null ? rec.effective_headroom : rec.headroom;
+
         if (rec.same_family && res.role === "review") {
           return t("whySameFamilyFallback", { fam: rec.family, score: fmtNum(rec.score) });
         }
 
         if (res.restrictedData && res.role === "review" && !rec.same_family) {
           const rest = state.lang === "tr"
-            ? "skor " + fmtNum(rec.score) + ", kalan kota %" + fmtNum(rec.headroom)
-            : "score " + fmtNum(rec.score) + ", " + fmtNum(rec.headroom) + "% headroom";
+            ? "skor " + fmtNum(rec.score) + ", kalan kota %" + fmtNum(recHr)
+            : "score " + fmtNum(rec.score) + ", " + fmtNum(recHr) + "% headroom";
           return t("whyRestrictedCross", { author: res.authorFamily, rest: rest });
         }
 
-        // Check if a higher-scoring authorized lane was excluded due to outage/blocked/restricted
+        // Check if a higher-scoring authorized lane was excluded due to projected-overflow / outage / blocked / restricted
         const higherExcluded = relevantExcluded.find((x) => x.score !== null && x.score >= rec.score);
         if (higherExcluded && res.role !== "review") {
+          if (higherExcluded.exclusionTypes.includes("projected-overflow")) {
+            return t("whyProjectedOverflowBeat", {
+              rival: higherExcluded.model + " (" + higherExcluded.effort + ")",
+              unit: String(res.unitSize || "").toUpperCase(),
+              detail: higherExcluded.reasons[0] || t("badgeProjectedOverflow"),
+              model: rec.model + " (" + rec.effort + ")",
+              hr: fmtNum(recHr)
+            });
+          }
           const reasonBadge = higherExcluded.exclusionTypes.includes("outage")
             ? t("badgeOutage")
             : higherExcluded.exclusionTypes.includes("restricted-denied")
@@ -2545,20 +3006,29 @@
             rivalPool: higherExcluded.pool,
             rivalExcludeReason: reasonBadge,
             model: rec.model + " (" + rec.effort + ")",
-            hr: fmtNum(rec.headroom)
+            hr: fmtNum(recHr)
           });
         }
 
-        // Check if an equivalent rival was deprioritized
+        // Check if an equivalent rival was deprioritized (projected or current)
         const deprioHigher = res.ranked.find(
           (x) => x !== rec && x.tier === "equivalent" && x.deprioritized && x.score >= rec.score && (!x.same_family || rec.same_family)
         );
         if (deprioHigher && !rec.deprioritized) {
+          if (deprioHigher.projected_deprioritized && !deprioHigher.current_deprioritized) {
+            return t("whyProjectedDeprioBeat", {
+              rival: deprioHigher.model + " (" + deprioHigher.effort + ")",
+              unit: String(res.unitSize || "").toUpperCase(),
+              detail: deprioHigher.state_reasons[0] || t("badgeProjectedDeprio"),
+              model: rec.model + " (" + rec.effort + ")",
+              hr: fmtNum(recHr)
+            });
+          }
           const rReason = deprioHigher.state_reasons[0] || t("badgeDeprioritized");
           return t("whyDeprioBeat", {
             rival: deprioHigher.model + " (" + deprioHigher.effort + ")",
             rivalReason: rReason,
-            hr: fmtNum(rec.headroom)
+            hr: fmtNum(recHr)
           });
         }
 
@@ -2567,11 +3037,12 @@
           (x) => x !== rec && x.tier === "equivalent" && !x.deprioritized && x.score > rec.score && (!x.same_family || rec.same_family)
         );
         if (higherScoreEquivRival) {
+          const rivalHr = higherScoreEquivRival.effective_headroom !== null ? higherScoreEquivRival.effective_headroom : higherScoreEquivRival.headroom;
           return t("whyEquivHeadroom", {
             top: fmtNum(res.topScore),
             delta: fmtDelta(rec.delta),
-            hr: fmtNum(rec.headroom),
-            rivalHr: fmtNum(higherScoreEquivRival.headroom),
+            hr: fmtNum(recHr),
+            rivalHr: fmtNum(rivalHr),
             rival: higherScoreEquivRival.model + " (" + higherScoreEquivRival.effort + ")"
           });
         }
@@ -2581,7 +3052,7 @@
             fam: rec.family,
             author: res.authorFamily,
             score: fmtNum(rec.score),
-            hr: fmtNum(rec.headroom)
+            hr: fmtNum(recHr)
           });
         }
 
@@ -2589,21 +3060,21 @@
           return t("whySoleEligible", {
             role: roleLabel,
             score: fmtNum(rec.score),
-            hr: fmtNum(rec.headroom)
+            hr: fmtNum(recHr)
           });
         }
 
         if (rec.deprioritized || rec.tier !== "equivalent") {
           return t("whyBelowDeprio", {
             score: fmtNum(rec.score),
-            hr: fmtNum(rec.headroom)
+            hr: fmtNum(recHr)
           });
         }
 
         return t("whyClearTop", {
           role: roleLabel,
           score: fmtNum(rec.score),
-          hr: fmtNum(rec.headroom)
+          hr: fmtNum(recHr)
         });
       }
 
@@ -2672,8 +3143,8 @@
           }
 
           const hrText = st.headroom !== null ? (t("poolHeadroom") + ": " + fmtNum(st.headroom) + "%") : t("poolDownText");
-          const wkColor = val.down ? "var(--text-muted)" : (val.weekly >= 90 ? "var(--rose)" : (val.weekly >= 85 ? "var(--amber)" : "var(--text)"));
-          const fhColor = val.down ? "var(--text-muted)" : (val.fiveHour >= 95 ? "var(--rose)" : (val.fiveHour >= 90 ? "var(--amber)" : "var(--text)"));
+          const wkColor = val.down ? "var(--text-muted)" : (val.weekly >= WEEKLY_STOP_PCT ? "var(--rose)" : (val.weekly >= WEEKLY_MOVE_PCT ? "var(--amber)" : "var(--text)"));
+          const fhColor = val.down ? "var(--text-muted)" : (val.fiveHour >= FIVE_HOUR_STOP_PCT ? "var(--rose)" : (val.fiveHour >= FIVE_HOUR_MOVE_PCT ? "var(--amber)" : "var(--text)"));
 
           const card = container.querySelector('[data-pool-card="' + p.id + '"]');
           card.className = "pool-card state-" + st.effective_state;
@@ -2707,13 +3178,27 @@
         }
       }
 
+      function projPctClass(val) {
+        if (val === null || val === undefined) return "";
+        if (val >= 95.0) return "proj-val-stop";
+        if (val >= 90.0) return "proj-val-warn";
+        return "proj-val-ok";
+      }
+
       function renderSimulator() {
         const preset = PRESETS[state.preset];
         const authMap = getAuthorizedLanesMap(state.preset, state.scope);
+        const nowIso = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+        const calibrationObj = buildCalibrationObject(state.calibration, nowIso);
+        const hasUnit = state.unitSize !== "none";
+        const calibProf = CALIBRATION_PROFILES[state.calibration] || CALIBRATION_PROFILES.cold;
+
         const res = resolveLanesJS({
           role: state.role,
           authorFamily: state.authorFamily,
           restrictedData: state.restrictedData,
+          unitSize: hasUnit ? state.unitSize : null,
+          calibration: calibrationObj,
           authorizedMap: authMap,
           pools: state.pools
         });
@@ -2739,6 +3224,20 @@
         restrictedCard.classList.toggle("active", state.restrictedData);
         document.getElementById("restrictedToggle").checked = state.restrictedData;
 
+        // Pre-dispatch quota guard controls
+        const guardBox = document.getElementById("quotaGuardBox");
+        guardBox.classList.toggle("is-active", hasUnit);
+        document.getElementById("unitSizeCliFlag").textContent = hasUnit ? ("--unit-size " + state.unitSize) : t("unitCurrentOnly");
+        const calibSel = document.getElementById("calibrationSelect");
+        calibSel.value = state.calibration;
+        calibSel.disabled = !hasUnit;
+        document.getElementById("calibSafetyHint").textContent = t("calibSafetyTag", { m: calibProf.safetyMargin.toFixed(2) });
+
+        // Toggle projected table columns & headroom label
+        document.getElementById("thEstBurn").classList.toggle("proj-col-hidden", !hasUnit);
+        document.getElementById("thProjected").classList.toggle("proj-col-hidden", !hasUnit);
+        document.getElementById("thHeadroom").textContent = hasUnit ? t("thProjHeadroom") : t("thHeadroom");
+
         // Render Recommended Card
         const recCard = document.getElementById("recommendedCard");
         const rec = res.recommended;
@@ -2749,7 +3248,11 @@
           warnings.push(t("warnNoEligible", { role: roleDisplayName(res.role) }));
         } else {
           if (rec.same_family) warnings.push(t("warnSameFamilyOnly", { author: res.authorFamily }));
-          if (rec.deprioritized) warnings.push(t("warnDeprioritizedTop"));
+          if (rec.projected_deprioritized && !rec.current_deprioritized) {
+            warnings.push(t("warnProjectedDeprioTop", { unit: state.unitSize.toUpperCase() }));
+          } else if (rec.deprioritized) {
+            warnings.push(t("warnDeprioritizedTop"));
+          }
         }
 
         recCard.className = "rec-card" + (!rec ? " is-empty" : (warnings.length > 0 ? " is-warn" : ""));
@@ -2760,11 +3263,21 @@
             : (warnings.length > 0 ? t("recKickerWarn") : t("recKickerHealthy"));
 
           const recBadges = [];
-          if (!rec.deprioritized) recBadges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
-          else recBadges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+          if (!rec.deprioritized) {
+            recBadges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
+          } else {
+            if (rec.current_deprioritized) recBadges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+            if (rec.projected_deprioritized) recBadges.push(`<span class="badge b-deprioritized">${esc(t("badgeProjectedDeprio"))}</span>`);
+          }
           if (rec.tier === "equivalent") recBadges.push(`<span class="badge b-equivalent">${esc(t("badgeEquivalent"))}</span>`);
           else recBadges.push(`<span class="badge b-below">${esc(t("badgeBelow"))}</span>`);
           if (rec.same_family) recBadges.push(`<span class="badge b-same-family">${esc(t("badgeSameFamily"))}</span>`);
+
+          const recDisplayHr = hasUnit && rec.projected_headroom_pct !== null ? rec.projected_headroom_pct : rec.headroom;
+          const recHrLabel = hasUnit ? t("recProjHeadroom") : t("recHeadroom");
+          const projMetaHtml = hasUnit && rec.projected_five_hour_pct !== null
+            ? `<span>· ${esc(t("thProjected"))}: <strong class="mono">${esc(fmtNum(rec.projected_five_hour_pct))}% / ${esc(fmtNum(rec.projected_weekly_pct))}%</strong></span>`
+            : "";
 
           recCard.innerHTML = `
             <div class="rec-top">
@@ -2777,6 +3290,7 @@
                 <div class="rec-meta-row">
                   <span>Pool: <strong class="mono">${esc(rec.pool)}</strong> (${esc(rec.family)})</span>
                   ${rec.runner ? `<span>· ${esc(t("recRunner"))}: <code style="color:var(--text)">${esc(rec.runner)}</code></span>` : ""}
+                  ${projMetaHtml}
                   <span class="badges-wrap">${recBadges.join("")}</span>
                 </div>
               </div>
@@ -2786,8 +3300,8 @@
                   <span class="rec-stat-lbl">${esc(t("recScore"))}</span>
                 </div>
                 <div class="rec-stat-box">
-                  <span class="rec-stat-val num">${rec.headroom !== null ? esc(fmtNum(rec.headroom)) + "%" : esc(t("recUnknown"))}</span>
-                  <span class="rec-stat-lbl">${esc(t("recHeadroom"))}</span>
+                  <span class="rec-stat-val num">${recDisplayHr !== null ? esc(fmtNum(recDisplayHr)) + "%" : esc(t("recUnknown"))}</span>
+                  <span class="rec-stat-lbl">${esc(recHrLabel)}</span>
                 </div>
                 <div class="rec-stat-box">
                   <span class="rec-stat-val num" style="color:var(--cyan)">${esc(fmtDelta(rec.delta))}</span>
@@ -2841,15 +3355,37 @@
         for (const item of res.ranked) {
           const isWinner = rec && item === rec;
           const badges = [];
-          if (!item.deprioritized) badges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
-          else badges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+          if (!item.deprioritized) {
+            badges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
+          } else {
+            if (item.current_deprioritized) badges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+            if (item.projected_deprioritized) badges.push(`<span class="badge b-deprioritized">${esc(t("badgeProjectedDeprio"))}</span>`);
+          }
           if (item.tier === "equivalent") badges.push(`<span class="badge b-equivalent">${esc(t("badgeEquivalent"))}</span>`);
           else if (item.tier === "unmeasured") badges.push(`<span class="badge b-below">${esc(t("badgeUnmeasured"))}</span>`);
           else badges.push(`<span class="badge b-below">${esc(t("badgeBelow"))}</span>`);
           if (item.same_family) badges.push(`<span class="badge b-same-family">${esc(t("badgeSameFamily"))}</span>`);
 
-          const hr = item.headroom !== null ? item.headroom : 0;
+          const dispHr = hasUnit && item.projected_headroom_pct !== null ? item.projected_headroom_pct : item.headroom;
+          const hr = dispHr !== null ? dispHr : 0;
           const hrColor = item.deprioritized ? "var(--amber)" : "var(--emerald)";
+
+          const burnTd = hasUnit
+            ? `<td class="num">
+                <div class="mono" style="font-size:0.76rem;">+${esc(fmtNum(item.estimated_burn.five_hour_pct))}% / +${esc(fmtNum(item.estimated_burn.weekly_pct))}%</div>
+                <div class="cell-sub-note mono">×${esc(fmtNum(item.estimated_burn.safety_margin))} (${esc(item.estimated_burn.source)})</div>
+              </td>`
+            : "";
+          const projTd = hasUnit
+            ? `<td class="num">
+                <div class="mono" style="font-size:0.78rem;">
+                  <span class="${projPctClass(item.projected_five_hour_pct)}">${esc(fmtNum(item.projected_five_hour_pct))}%</span>
+                  <span style="color:var(--text-muted)"> / </span>
+                  <span class="${projPctClass(item.projected_weekly_pct)}">${esc(fmtNum(item.projected_weekly_pct))}%</span>
+                </div>
+              </td>`
+            : "";
+
           rows.push(`
             <tr class="${isWinner ? "row-winner" : ""}">
               <td class="rank-num num">#${item.rank}</td>
@@ -2863,11 +3399,13 @@
               </td>
               <td class="num" style="font-weight:700;">${esc(fmtNum(item.score))}</td>
               <td class="num" style="color:${item.delta === 0 ? "var(--emerald)" : "var(--text-dim)"}">${esc(fmtDelta(item.delta))}</td>
+              ${burnTd}
+              ${projTd}
               <td><div class="badges-wrap">${badges.join("")}</div></td>
               <td>
                 <div class="hr-bar-wrap num">
                   <div class="hr-track"><div class="hr-fill" style="width:${Math.max(0, Math.min(100, hr))}%;background:${hrColor}"></div></div>
-                  <span>${item.headroom !== null ? esc(fmtNum(item.headroom)) + "%" : "—"}</span>
+                  <span>${dispHr !== null ? esc(fmtNum(dispHr)) + "%" : "—"}</span>
                 </div>
               </td>
             </tr>
@@ -2878,13 +3416,37 @@
         for (const item of excludedToShow) {
           const badges = [];
           if (item.exclusionTypes.includes("outage")) badges.push(`<span class="badge b-outage">${esc(t("badgeOutage"))}</span>`);
+          if (item.exclusionTypes.includes("projected-overflow")) badges.push(`<span class="badge b-blocked">${esc(t("badgeProjectedOverflow"))}</span>`);
           if (item.exclusionTypes.includes("blocked")) badges.push(`<span class="badge b-blocked">${esc(t("badgeBlocked"))}</span>`);
           if (item.exclusionTypes.includes("restricted-denied")) badges.push(`<span class="badge b-restricted">${esc(t("badgeRestricted"))}</span>`);
           if (item.exclusionTypes.includes("unauthorized")) badges.push(`<span class="badge b-below">${esc(t("badgeUnauth"))}</span>`);
 
           const deltaVal = (item.score !== null && res.topScore !== null) ? round2(item.score - res.topScore) : null;
-          const hr = item.headroom !== null ? item.headroom : 0;
-          const hrText = item.exclusionTypes.includes("outage") ? t("poolDownText") : (item.headroom !== null ? fmtNum(item.headroom) + "%" : "—");
+          const isOutage = item.exclusionTypes.includes("outage");
+          const dispHr = hasUnit && item.projected_headroom_pct !== null ? item.projected_headroom_pct : item.headroom;
+          const hr = dispHr !== null ? dispHr : 0;
+          const hrText = isOutage ? t("poolDownText") : (dispHr !== null ? fmtNum(dispHr) + "%" : "—");
+
+          const burnTd = hasUnit
+            ? `<td class="num">
+                ${item.estimated_burn
+                  ? `<div class="mono" style="font-size:0.76rem;">+${esc(fmtNum(item.estimated_burn.five_hour_pct))}% / +${esc(fmtNum(item.estimated_burn.weekly_pct))}%</div>
+                     <div class="cell-sub-note mono">×${esc(fmtNum(item.estimated_burn.safety_margin))} (${esc(item.estimated_burn.source)})</div>`
+                  : "—"}
+              </td>`
+            : "";
+          const projTd = hasUnit
+            ? `<td class="num">
+                ${item.projected_five_hour_pct !== null
+                  ? `<div class="mono" style="font-size:0.78rem;">
+                       <span class="${projPctClass(item.projected_five_hour_pct)}">${esc(fmtNum(item.projected_five_hour_pct))}%</span>
+                       <span style="color:var(--text-muted)"> / </span>
+                       <span class="${projPctClass(item.projected_weekly_pct)}">${esc(fmtNum(item.projected_weekly_pct))}%</span>
+                     </div>`
+                  : (isOutage ? esc(t("poolDownText")) : "—")}
+              </td>`
+            : "";
+
           rows.push(`
             <tr class="row-excluded">
               <td class="rank-num num">—</td>
@@ -2898,10 +3460,12 @@
               </td>
               <td class="num">${esc(fmtNum(item.score))}</td>
               <td class="num" style="color:var(--text-muted)">${esc(fmtDelta(deltaVal))}</td>
+              ${burnTd}
+              ${projTd}
               <td><div class="badges-wrap">${badges.join("")}</div></td>
               <td>
                 <div class="hr-bar-wrap num">
-                  <div class="hr-track"><div class="hr-fill" style="width:${item.exclusionTypes.includes("outage") ? 0 : Math.max(0, Math.min(100, hr))}%;background:var(--rose)"></div></div>
+                  <div class="hr-track"><div class="hr-fill" style="width:${isOutage ? 0 : Math.max(0, Math.min(100, hr))}%;background:var(--rose)"></div></div>
                   <span>${esc(hrText)}</span>
                 </div>
               </td>
@@ -2941,10 +3505,29 @@
         if (state.restrictedData) {
           cliParts.push("  --restricted-data");
         }
+        if (hasUnit) {
+          cliParts.push("  --unit-size " + state.unitSize);
+        }
         document.getElementById("cliCommand").textContent = cliParts.join(" \\\n");
 
+        // Post-unit --record-burn calibration command example
+        const targetLane = rec || policyExcluded[0] || { pool: "codex", model: "gpt-6.2-sol", effort: "high" };
+        const recUnit = hasUnit ? state.unitSize : "m";
+        const sampleEst = estimateUnitBurn(targetLane.pool, targetLane.model, targetLane.effort, recUnit, calibrationObj, null);
+        const poolCur = state.pools[targetLane.pool] || { fiveHour: 20, weekly: 30 };
+        const before5h = poolCur.down ? 20 : poolCur.fiveHour;
+        const beforeWk = poolCur.down ? 30 : poolCur.weekly;
+        const after5h = Math.min(100, round2(before5h + (sampleEst ? sampleEst.five_hour_pct : 5.0)));
+        const afterWk = Math.min(100, round2(beforeWk + (sampleEst ? sampleEst.weekly_pct : 2.0)));
+        const recordBurnParts = [
+          "python3 skills/update-orchestration-skills/scripts/resolve_lanes.py --record-burn",
+          "  --state .orchestration/provider-state.json",
+          "  --burn-provider " + targetLane.pool + " --burn-model " + targetLane.model + " --burn-effort " + targetLane.effort,
+          "  --unit-size " + recUnit + " --before-5h " + fmtNum(before5h) + " --after-5h " + fmtNum(after5h) + " --before-weekly " + fmtNum(beforeWk) + " --after-weekly " + fmtNum(afterWk)
+        ];
+        document.getElementById("recordBurnCommand").textContent = recordBurnParts.join(" \\\n");
+
         // Equivalent provider-state.json preview
-        const nowIso = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
         const downUntilIso = new Date(Date.now() + 30 * 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
         const stateObj = {};
         for (const p of POOLS) {
@@ -2958,6 +3541,9 @@
             resets_at: null,
             observed_at: nowIso
           };
+        }
+        if (calibrationObj) {
+          stateObj._calibration = calibrationObj;
         }
         document.getElementById("stateJsonPreview").textContent = JSON.stringify(stateObj, null, 2);
 
@@ -3149,6 +3735,9 @@
         document.querySelectorAll("#authorButtons .seg-btn").forEach((b) => {
           b.classList.toggle("active", b.dataset.author === state.authorFamily);
         });
+        document.querySelectorAll("#unitSizeButtons .unit-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.unit === state.unitSize);
+        });
       }
 
       function syncEstimatorButtons() {
@@ -3172,6 +3761,8 @@
         state.role = sc.role;
         state.authorFamily = sc.authorFamily;
         state.restrictedData = sc.restrictedData;
+        state.unitSize = sc.unitSize || "none";
+        state.calibration = sc.calibration || "cold";
         for (const p of POOLS) {
           state.pools[p.id] = { ...sc.pools[p.id] };
         }
@@ -3260,6 +3851,20 @@
         renderSimulator();
       });
 
+      document.getElementById("unitSizeButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".unit-btn");
+        if (!btn) return;
+        state.scenario = null;
+        state.unitSize = btn.dataset.unit;
+        renderSimulator();
+      });
+
+      document.getElementById("calibrationSelect").addEventListener("change", (e) => {
+        state.scenario = null;
+        state.calibration = e.target.value;
+        renderSimulator();
+      });
+
       document.getElementById("poolSliders").addEventListener("input", (e) => {
         const wk = e.target.dataset.poolWeekly;
         const fh = e.target.dataset.poolFive;
@@ -3313,6 +3918,10 @@
 
       document.getElementById("copyCliBtn").addEventListener("click", (e) => {
         copyText(document.getElementById("cliCommand").textContent, e.target);
+      });
+
+      document.getElementById("copyRecordBurnBtn").addEventListener("click", (e) => {
+        copyText(document.getElementById("recordBurnCommand").textContent, e.target);
       });
 
       document.getElementById("copyStateBtn").addEventListener("click", (e) => {

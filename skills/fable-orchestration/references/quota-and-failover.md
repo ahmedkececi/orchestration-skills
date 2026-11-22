@@ -24,23 +24,68 @@
 The aim is to keep working as long as possible with no drop in quality, and
 as fast as possible within that. Act **before** a pool runs dry, not after.
 
-1. **Read live usage, not estimates.** Claude: `/usage` (or `.orchestration/provider-state.json`);
-   Codex: `/status`; Gemini/agy: Gemini runner usage logs and quota errors; DeepSeek: provider quota or balance. Price-per-task figures do not measure subscription burn.
-2. **Thresholds.** Past the "move" mark, new
-   delegated units go to the equivalent lane (the 1st fallback in the
-   ladder below) instead of queuing on the pool; past the "stop" mark, no
-   new large job starts there and running units finish. The main loop keeps
+1. **Read live usage right before dispatch and right after each unit, not
+   estimates.** Claude: `/usage` (or `.orchestration/provider-state.json`);
+   Codex: `/status`; Gemini/agy: Gemini runner usage logs and quota errors;
+   DeepSeek: provider quota or balance. Price-per-task figures do not measure
+   subscription burn. Treat the 5-minute TTL as the upper bound for idle
+   readings only — always re-check live pool usage right before dispatching a
+   delegated unit and right after it finishes.
+2. **Unified thresholds (90 % move / 95 % stop for both five-hour and weekly
+   windows).** Past the "move" mark (**90 %**, `deprioritized`), new delegated
+   units go to the equivalent lane (the 1st fallback in the ladder below)
+   instead of queuing on the pool; past the "stop" mark (**95 %**, `blocked`),
+   no new large job starts there and running units finish. The main loop keeps
    working past both.
 
-   | Pool | Move delegated units | Stop large jobs, write the checkpoint |
+   | Pool | Move delegated units (`deprioritized`) | Stop large jobs, write the checkpoint (`blocked`) |
    |---|---|---|
-   | Claude five-hour window | **90 %** | **95 %** (keep the checkpoint current from 90 %) |
-   | Claude weekly limit | **85 %** | **90 %** (keep the checkpoint current from 85 %) |
-   | Codex, agy: weekly | **85 %** | **90 %** |
-   | Codex/Neon five-hour, Hydrogen daily | **90 %** | **95 %** |
+   | Claude five-hour & weekly | **90 %** | **95 %** (keep the checkpoint current from 90 %) |
+   | Codex five-hour & weekly | **90 %** | **95 %** |
+   | Gemini/Neon five-hour & weekly, Hydrogen daily | **90 %** | **95 %** |
 
-   The five-hour window resets within hours, so it is used later; the weekly
-   limit costs days when it runs out, so delegated work leaves it earlier.
+   Both five-hour/daily and weekly windows share the same **90 % move / 95 %
+   stop** thresholds, paired with the self-calibrating pre-dispatch guard below
+   so a large unit cannot push an active window past 95 % mid-work.
+
+   **Pre-dispatch projected overflow guard & self-calibration (`_calibration`):**
+   Before dispatching each unit, classify its size and run
+   `resolve_lanes.py --unit-size <xs|s|m|l|xl>` against fresh live readings in
+   `.orchestration/provider-state.json`. The resolver computes
+   `projected = current + estimated_burn × safety_margin` for each known fresh
+   window:
+
+   | Unit size | Multiplier | Typical scope |
+   |---|---|---|
+   | `xs` | `0.25×` | One-line fix, single lookup, tiny config edit |
+   | `s` | `0.55×` | Small scoped edit, targeted test or quick check |
+   | `m` | `1.00×` | Standard single-module implementation, test suite or review |
+   | `l` | `1.90×` | Multi-file feature, refactor, migration or heavy cross-family review |
+   | `xl` | `3.20×` | Large multi-module sweep or migration (split into smaller units when headroom is tight) |
+
+   - **`projected-overflow` (`projected >= 95 %` stop):** The lane is marked
+     `blocked` and **must not receive the unit** (for example, Codex at 89 %
+     five-hour with an ~11 % `l` unit projects `89 % + 11 % × 1.2 = 102.2 % >= 95 %`).
+     Route to a healthy equivalent fallback or split the unit into smaller
+     pieces that fit safely below 95 %.
+   - **`projected-deprioritized` (`90 % <= projected < 95 %`):** The lane is
+     deprioritized so healthy equivalent lanes with headroom rank ahead of it.
+   - **Cold-start & automatic EWMA plan calibration:** On cold start (`0`
+     samples), `resolve_lanes.py` uses conservative medium-unit baselines
+     (`codex` 5.0%/2.0%, `claude` 6.0%/2.5%, `gemini` 4.5%/1.8%, `deepseek`
+     2.0%/1.0% for 5h/weekly, scaled by model weight) with `safety_margin = 1.40`
+     (dropping to `1.25` at 1–2 samples and adaptive
+     `min(1.50, max(1.15, max_ratio))` at 3+ samples; optional override
+     `--safety-margin <1.0..3.0>`). Right after each unit finishes, read live
+     usage again and run `resolve_lanes.py --record-burn` to update the EWMA
+     (`alpha = 0.35`) under `_calibration` in `.orchestration/provider-state.json`
+     (lane-specific `lanes["<provider>/<model>/<effort>"]` with `by_size` plus
+     pool-level `pools["<provider>"]`), so estimates automatically adapt to the
+     operator's exact subscription plan (Pro / Plus / Max / Team).
+   - **Window-reset guard:** If a window resets during a unit (`after < before`,
+     or `--reset-occurred` is passed), `resolve_lanes.py --record-burn`
+     automatically skips the EWMA update for that window while still recording
+     the fresh `after` percentage.
 3. **Spread by headroom.** When a fan-out has several equivalent lanes,
    split units in proportion to each pool's remaining allowance, not evenly.
    Available free capacity takes bulk first.
@@ -53,10 +98,10 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
    speed only breaks a tie**; that is what keeps use even across pools.
 5. **Protect Gemini's media and review lanes at the standard threshold.**
    Hydrogen covers media, wide reading and search, and Neon covers second-eye
-   work, independent review and media fallback. Gemini uses the same standard
-   thresholds as every other pool (**90 %** move / **95 %** stop on the
-   five-hour or daily window, **85 %** move / **90 %** stop weekly). When
-   Gemini nears 90 % (five-hour/daily) or 85 % (weekly), prioritize media first.
+   work, independent review and media fallback. Gemini uses the same unified
+   thresholds as every other pool (**90 %** move / **95 %** stop across both
+   five-hour/daily and weekly windows). When Gemini nears 90 % on either
+   window, prioritize media first.
 6. **Raise verification for weaker fallbacks.** For Hydrogen's
    accuracy-heavy reading, Astra `medium` is **below** on accuracy. For
    Neon `high` review, Astra `medium` is **below** on accuracy, knowledge
@@ -156,7 +201,7 @@ The operator talks to the main loop through the Claude app, and the app
 stops answering when the Claude pool is down, so the main loop cannot hand
 over at that moment. The handover is prepared **before** it is needed:
 
-1. **At 90 % of the Claude five-hour window (stop mark 95 %) or 85 % of the weekly limit (stop mark 90 %)**, the main loop
+1. **At 90 % of either the Claude five-hour or weekly window (stop mark 95 %, or earlier on `projected-overflow`)**, the main loop
    brings `.orchestration/orchestration-checkpoint.md` and the handover note up to date
    (goal, decisions, units with status, outputs, decisions still open), and
    commits, so a successor needs nothing from Claude.
@@ -187,7 +232,7 @@ A fallback lane starts from files, never from another model's memory.
   goal, decisions made and why, the unit list with a status per
   unit (todo, running, done, verified), where each output lives, and open
   questions. Write it before any fan-out, update it lightly after each accepted
-  unit (not only at 85%/90% quota or before fan-outs), and update it whenever a
+  unit (not only at 90%/95% quota or before fan-outs), and update it whenever a
   unit changes state.
 - **Compaction recovery.** Whenever context compaction or session resume occurs,
   re-read `.orchestration/orchestration-checkpoint.md`,
@@ -223,10 +268,14 @@ that is down instead of rediscovering it.
 }
 ```
 
-- Check it before every spawn.
-- **Staleness / TTL rule:** Readings with `observed_at` older than **5 minutes**
-  (or `null`) are `stale` — do not assume full headroom from a stale reading;
-  re-check live usage or route conservatively before a fan-out.
+- **Pre-dispatch & post-unit checks + 5-minute TTL:** Check live usage right
+  before dispatching each unit (`resolve_lanes.py --unit-size <xs|s|m|l|xl>`)
+  and right after it finishes (`resolve_lanes.py --record-burn`, which updates
+  live `after` percentages and the reserved `_calibration` EWMA key inside
+  `.orchestration/provider-state.json`; `_calibration` is never treated as a
+  provider entry). Readings with `observed_at` older than **5 minutes** (or
+  `null`) are `stale` — the 5-minute TTL is the upper bound for idle readings,
+  not permission to skip pre-dispatch or post-unit checks.
 - **Single-writer invariant:** Only the coordinator writes `.orchestration/*`
   state files (`provider-state.json`, `orchestration-checkpoint.md`,
   `orchestration-ledger.md`); workers write only to their scoped deliverable or

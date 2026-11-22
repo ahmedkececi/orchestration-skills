@@ -77,7 +77,14 @@ V120_INVARIANT_PATTERNS = (
     ("resolve_lanes.py", re.compile(r"resolve_lanes\.py")),
     ("scope_drift", re.compile(r"scope_drift")),
     ("first_pass_ok", re.compile(r"first_pass_ok")),
+    ("--unit-size", re.compile(r"--unit-size")),
+    ("--record-burn", re.compile(r"--record-burn")),
+    ("projected-overflow", re.compile(r"projected-overflow")),
+    ("90% move threshold", re.compile(r"90\s*%")),
+    ("95% stop threshold", re.compile(r"95\s*%")),
 )
+
+LEGACY_WEEKLY_85_RE = re.compile(r"(?:\b85\s*%|%85\b)")
 
 
 def parse_frontmatter(text):
@@ -379,7 +386,20 @@ class SkillIntegrityTests(unittest.TestCase):
                 with self.subTest(preset=preset, invariant=label):
                     self.assertIsNotNone(
                         pattern.search(combined_text),
-                        f"{preset} is missing v1.2.0 invariant {label!r}",
+                        f"{preset} is missing invariant {label!r}",
+                    )
+
+            for rel_doc in (
+                "SKILL.md",
+                "references/quota-and-failover.md",
+                "references/cli-lanes-and-ledger.md",
+                "project-profile.example.md",
+            ):
+                doc_text = (preset_dir / rel_doc).read_text(encoding="utf-8")
+                with self.subTest(preset=preset, doc=rel_doc, invariant="no-legacy-85pct"):
+                    self.assertIsNone(
+                        LEGACY_WEEKLY_85_RE.search(doc_text),
+                        f"{preset}/{rel_doc} still contains a legacy 85% threshold reference",
                     )
 
     def test_example_project_profiles_authorize_valid_lanes(self):

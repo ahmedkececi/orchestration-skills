@@ -5,10 +5,13 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import statistics
 import sys
+from tempfile import NamedTemporaryFile
 
 from refresh import normalize
 
@@ -22,11 +25,39 @@ WORKSPACE_PROFILE = Path(".orchestration/project-profile.md")
 ROLES = ("coding", "reasoning", "accuracy", "knowledge", "review")
 AUTHOR_FAMILIES = ("claude", "openai", "google", "deepseek")
 EQUIVALENCE_POINTS = 3.0
-WEEKLY_MOVE_PCT = 85.0
-WEEKLY_STOP_PCT = 90.0
+WEEKLY_MOVE_PCT = 90.0
+WEEKLY_STOP_PCT = 95.0
 FIVE_HOUR_MOVE_PCT = 90.0
 FIVE_HOUR_STOP_PCT = 95.0
 DEFAULT_STALE_MINUTES = 5
+
+UNIT_SIZES = ("xs", "s", "m", "l", "xl")
+UNIT_SIZE_MULTIPLIERS = {
+    "xs": 0.25,
+    "s": 0.55,
+    "m": 1.0,
+    "l": 1.9,
+    "xl": 3.2,
+}
+DEFAULT_BURN_PER_M = {
+    "codex": {"five_hour_pct": 5.0, "weekly_pct": 2.0},
+    "claude": {"five_hour_pct": 6.0, "weekly_pct": 2.5},
+    "gemini": {"five_hour_pct": 4.5, "weekly_pct": 1.8},
+    "deepseek": {"five_hour_pct": 2.0, "weekly_pct": 1.0},
+}
+FALLBACK_BURN_PER_M = {"five_hour_pct": 5.0, "weekly_pct": 2.0}
+
+CALIBRATION_KEY = "_calibration"
+CALIBRATION_VERSION = 1
+CALIBRATION_ALPHA = 0.35
+SAFETY_MARGIN_COLD = 1.40
+SAFETY_MARGIN_LOW_SAMPLES = 1.25
+SAFETY_MARGIN_MIN_AUTO = 1.15
+SAFETY_MARGIN_MAX_AUTO = 1.50
+SAFETY_MARGIN_MIN_OVERRIDE = 1.0
+SAFETY_MARGIN_MAX_OVERRIDE = 3.0
+MAX_RATIO_MIN = 1.0
+MAX_RATIO_MAX = 2.0
 
 POOL_ALIASES = {
     "anthropic": "claude",
@@ -912,6 +943,12 @@ def _score_excluded(excluded, role, score_basis, score_cohort, score_meta):
             item["score"] = role_score(cand, role, ignore_knowledge=score_meta["drop_knowledge"])
 
 
+def _effective_headroom(item):
+    if item.get("unit_size") is not None:
+        return item.get("projected_headroom_pct")
+    return item.get("headroom")
+
+
 def _shared_latencies(eligible):
     """Use timings only when the lanes tied on pre-latency sort keys all have matched measurements."""
     tied = defaultdict(list)
@@ -920,7 +957,7 @@ def _shared_latencies(eligible):
             item.get("same_family", False),
             item.get("deprioritized", False),
             item.get("stale", False),
-            item.get("headroom"),
+            _effective_headroom(item),
             item["score"],
         )
         tied[key].append(item)
@@ -973,10 +1010,816 @@ def _fmt_pct(pct):
     return str(int(val)) if val.is_integer() else str(val)
 
 
+def _fmt_proj_num(val):
+    num = float(val)
+    if num == 0.0:
+        num = 0.0
+    if round(num, 1) == num:
+        return f"{num:.1f}"
+    return f"{num:.2f}".rstrip("0").rstrip(".")
+
+
 def _validate_stale_minutes(stale_minutes):
     if type(stale_minutes) is not int or stale_minutes < 0:
         raise ValueError(f"stale_minutes must be a non-negative integer (got {stale_minutes!r}).")
     return stale_minutes
+
+
+def _validate_unit_size(unit_size):
+    if not isinstance(unit_size, str):
+        raise ValueError(f"unit_size must be one of {', '.join(UNIT_SIZES)} (got {unit_size!r}).")
+    norm = unit_size.strip().lower()
+    if norm not in UNIT_SIZE_MULTIPLIERS:
+        raise ValueError(f"unit_size must be one of {', '.join(UNIT_SIZES)} (got {unit_size!r}).")
+    return norm
+
+
+def _validate_safety_margin(safety_margin):
+    if type(safety_margin) not in (int, float):
+        raise ValueError(
+            f"safety_margin must be a finite number between {SAFETY_MARGIN_MIN_OVERRIDE:g} "
+            f"and {SAFETY_MARGIN_MAX_OVERRIDE:g} (got {safety_margin!r})."
+        )
+    try:
+        val = float(safety_margin)
+    except OverflowError as err:
+        raise ValueError(f"safety_margin is out of range: {safety_margin!r}") from err
+    if not math.isfinite(val) or val < SAFETY_MARGIN_MIN_OVERRIDE or val > SAFETY_MARGIN_MAX_OVERRIDE:
+        raise ValueError(
+            f"safety_margin must be between {SAFETY_MARGIN_MIN_OVERRIDE:g} "
+            f"and {SAFETY_MARGIN_MAX_OVERRIDE:g} (got {safety_margin!r})."
+        )
+    return round(val, 4)
+
+
+def _validate_pct_value(value, field_name):
+    if type(value) not in (int, float):
+        raise ValueError(f"{field_name} must be a finite number between 0 and 100 (got {value!r}).")
+    try:
+        num = float(value)
+    except OverflowError as err:
+        raise ValueError(f"{field_name} is out of range: {value!r}") from err
+    if not math.isfinite(num) or num < 0.0 or num > 100.0:
+        raise ValueError(f"{field_name} must be between 0 and 100 (got {value!r}).")
+    return 0.0 if num == 0.0 else num
+
+
+def _validate_nonneg_float(value, field_name, *, max_value=None):
+    if type(value) not in (int, float):
+        raise ValueError(f"{field_name} must be a finite non-negative number (got {value!r}).")
+    try:
+        num = float(value)
+    except OverflowError as err:
+        raise ValueError(f"{field_name} is out of range: {value!r}") from err
+    if not math.isfinite(num) or num < 0.0:
+        raise ValueError(f"{field_name} must be a finite non-negative number (got {value!r}).")
+    if max_value is not None and num > max_value:
+        raise ValueError(f"{field_name} must be <= {max_value} (got {value!r}).")
+    return 0.0 if num == 0.0 else num
+
+
+def _validate_nonneg_int(value, field_name):
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer (got {value!r}).")
+    return value
+
+
+def model_burn_weight(model, effort="medium"):
+    """Deterministic burn multiplier for cold-start and pool-level estimation."""
+    low_model = (model or "").strip().lower()
+    low_effort = (effort or "medium").strip().lower()
+    tokens = set(re.findall(r"[a-z0-9]+", low_model))
+    if "mythos" in tokens or "fable" in tokens:
+        return 1.7
+    if "astra" in tokens:
+        return 1.6
+    if "opus" in tokens and low_effort in ("high", "xhigh", "max"):
+        return 1.2
+    if "sol" in tokens and low_effort in ("xhigh", "max"):
+        return 1.2
+    if "sonnet" in tokens:
+        return 0.65
+    if "hydrogen" in tokens:
+        return 0.55
+    if "terra" in tokens or "luna" in tokens:
+        return 0.5
+    if "haiku" in tokens or "flash" in tokens:
+        return 0.25
+    return 1.0
+
+
+def calibration_lane_key(provider, model, effort="medium"):
+    """Canonical lowercased calibration lane key '<provider>/<model>/<effort>'."""
+    pool = normalize_pool(provider)
+    canon_model = canonical_model_id(str(model)).lower()
+    norm_effort = str(effort or "medium").strip().lower() or "medium"
+    return f"{pool}/{canon_model}/{norm_effort}"
+
+
+def _parse_calibration_lane_key(raw_key):
+    if not isinstance(raw_key, str) or not raw_key.strip():
+        raise ValueError(f"Invalid calibration lane key: {raw_key!r}.")
+    text = raw_key.strip()
+    first = text.find("/")
+    last = text.rfind("/")
+    if first <= 0 or last <= first + 1 or last >= len(text) - 1:
+        raise ValueError(
+            f"Calibration lane key {raw_key!r} must use '<provider>/<model>/<effort>' format."
+        )
+    provider_part = text[:first].strip()
+    model_part = text[first + 1 : last].strip()
+    effort_part = text[last + 1 :].strip()
+    if not provider_part or not model_part or not effort_part:
+        raise ValueError(
+            f"Calibration lane key {raw_key!r} must use '<provider>/<model>/<effort>' format."
+        )
+    return calibration_lane_key(provider_part, model_part, effort_part)
+
+
+def empty_calibration():
+    """Return a fresh empty calibration structure."""
+    return {
+        "version": CALIBRATION_VERSION,
+        "alpha": CALIBRATION_ALPHA,
+        "lanes": {},
+        "pools": {},
+    }
+
+
+def parse_calibration(raw_state):
+    """Extract and validate optional '_calibration' section from raw provider-state dict."""
+    if raw_state is None:
+        return empty_calibration()
+    if not isinstance(raw_state, dict):
+        raise ValueError("provider-state.json must contain a JSON object.")
+    raw_cal = raw_state.get(CALIBRATION_KEY)
+    if raw_cal is None:
+        return empty_calibration()
+    if not isinstance(raw_cal, dict):
+        raise ValueError(f"'{CALIBRATION_KEY}' must be a JSON object.")
+
+    version = raw_cal.get("version", CALIBRATION_VERSION)
+    if type(version) is not int or version != CALIBRATION_VERSION:
+        raise ValueError(
+            f"'{CALIBRATION_KEY}.version' must be integer {CALIBRATION_VERSION} (got {version!r})."
+        )
+
+    alpha_raw = raw_cal.get("alpha", CALIBRATION_ALPHA)
+    if type(alpha_raw) not in (int, float) or not math.isfinite(float(alpha_raw)):
+        raise ValueError(f"'{CALIBRATION_KEY}.alpha' must be a finite number in (0, 1].")
+    alpha = float(alpha_raw)
+    if alpha <= 0.0 or alpha > 1.0:
+        raise ValueError(f"'{CALIBRATION_KEY}.alpha' must be in (0, 1] (got {alpha_raw!r}).")
+
+    raw_lanes = raw_cal.get("lanes", {})
+    if not isinstance(raw_lanes, dict):
+        raise ValueError(f"'{CALIBRATION_KEY}.lanes' must be a JSON object.")
+
+    lanes = {}
+    for raw_key, entry in raw_lanes.items():
+        if not isinstance(entry, dict):
+            raise ValueError(f"Calibration lane entry for {raw_key!r} must be a JSON object.")
+        norm_key = _parse_calibration_lane_key(raw_key)
+        if norm_key in lanes:
+            raise ValueError(f"Conflicting calibration lane entries normalize to '{norm_key}'.")
+
+        samples = _validate_nonneg_int(entry.get("samples", 0), f"{CALIBRATION_KEY}.lanes[{raw_key}].samples")
+        five_hour_per_m = (
+            _validate_nonneg_float(
+                entry["five_hour_per_m"], f"{CALIBRATION_KEY}.lanes[{raw_key}].five_hour_per_m"
+            )
+            if entry.get("five_hour_per_m") is not None
+            else None
+        )
+        weekly_per_m = (
+            _validate_nonneg_float(
+                entry["weekly_per_m"], f"{CALIBRATION_KEY}.lanes[{raw_key}].weekly_per_m"
+            )
+            if entry.get("weekly_per_m") is not None
+            else None
+        )
+        max_ratio_raw = entry.get("max_ratio", 1.0)
+        max_ratio = (
+            _validate_nonneg_float(max_ratio_raw, f"{CALIBRATION_KEY}.lanes[{raw_key}].max_ratio")
+            if max_ratio_raw is not None
+            else 1.0
+        )
+
+        raw_by_size = entry.get("by_size", {})
+        if not isinstance(raw_by_size, dict):
+            raise ValueError(f"'{CALIBRATION_KEY}.lanes[{raw_key}].by_size' must be a JSON object.")
+        by_size = {}
+        for raw_size, size_entry in raw_by_size.items():
+            norm_size = _validate_unit_size(raw_size)
+            if norm_size in by_size:
+                raise ValueError(f"Duplicate by_size key '{norm_size}' in calibration lane '{norm_key}'.")
+            if not isinstance(size_entry, dict):
+                raise ValueError(
+                    f"'{CALIBRATION_KEY}.lanes[{raw_key}].by_size[{raw_size}]' must be a JSON object."
+                )
+            bs_samples = _validate_nonneg_int(
+                size_entry.get("samples", 0),
+                f"{CALIBRATION_KEY}.lanes[{raw_key}].by_size[{raw_size}].samples",
+            )
+            bs_5h = (
+                _validate_pct_value(
+                    size_entry["five_hour_pct"],
+                    f"{CALIBRATION_KEY}.lanes[{raw_key}].by_size[{raw_size}].five_hour_pct",
+                )
+                if size_entry.get("five_hour_pct") is not None
+                else None
+            )
+            bs_wk = (
+                _validate_pct_value(
+                    size_entry["weekly_pct"],
+                    f"{CALIBRATION_KEY}.lanes[{raw_key}].by_size[{raw_size}].weekly_pct",
+                )
+                if size_entry.get("weekly_pct") is not None
+                else None
+            )
+            by_size[norm_size] = {
+                "samples": bs_samples,
+                "five_hour_pct": bs_5h,
+                "weekly_pct": bs_wk,
+            }
+
+        updated_at = entry.get("updated_at")
+        if updated_at is not None:
+            updated_at = format_iso_utc(
+                parse_iso_utc(updated_at, f"{CALIBRATION_KEY}.lanes[{raw_key}].updated_at")
+            )
+
+        lanes[norm_key] = {
+            "samples": samples,
+            "five_hour_per_m": five_hour_per_m,
+            "weekly_per_m": weekly_per_m,
+            "max_ratio": max_ratio,
+            "by_size": by_size,
+            "updated_at": updated_at,
+        }
+
+    raw_pools = raw_cal.get("pools", {})
+    if not isinstance(raw_pools, dict):
+        raise ValueError(f"'{CALIBRATION_KEY}.pools' must be a JSON object.")
+
+    pools = {}
+    for raw_pool, entry in raw_pools.items():
+        if not isinstance(raw_pool, str) or not raw_pool.strip() or not isinstance(entry, dict):
+            raise ValueError(f"Calibration pool entry for {raw_pool!r} must be a JSON object.")
+        norm_pool = normalize_pool(raw_pool)
+        if norm_pool == "unknown":
+            raise ValueError(f"Invalid calibration pool key: {raw_pool!r}.")
+        if norm_pool in pools:
+            raise ValueError(f"Conflicting calibration pool entries normalize to '{norm_pool}'.")
+
+        samples = _validate_nonneg_int(entry.get("samples", 0), f"{CALIBRATION_KEY}.pools[{raw_pool}].samples")
+        five_hour_per_m = (
+            _validate_nonneg_float(
+                entry["five_hour_per_m"], f"{CALIBRATION_KEY}.pools[{raw_pool}].five_hour_per_m"
+            )
+            if entry.get("five_hour_per_m") is not None
+            else None
+        )
+        weekly_per_m = (
+            _validate_nonneg_float(
+                entry["weekly_per_m"], f"{CALIBRATION_KEY}.pools[{raw_pool}].weekly_per_m"
+            )
+            if entry.get("weekly_per_m") is not None
+            else None
+        )
+        max_ratio_raw = entry.get("max_ratio", 1.0)
+        max_ratio = (
+            _validate_nonneg_float(max_ratio_raw, f"{CALIBRATION_KEY}.pools[{raw_pool}].max_ratio")
+            if max_ratio_raw is not None
+            else 1.0
+        )
+        updated_at = entry.get("updated_at")
+        if updated_at is not None:
+            updated_at = format_iso_utc(
+                parse_iso_utc(updated_at, f"{CALIBRATION_KEY}.pools[{raw_pool}].updated_at")
+            )
+
+        pools[norm_pool] = {
+            "samples": samples,
+            "five_hour_per_m": five_hour_per_m,
+            "weekly_per_m": weekly_per_m,
+            "max_ratio": max_ratio,
+            "updated_at": updated_at,
+        }
+
+    return {
+        "version": version,
+        "alpha": alpha,
+        "lanes": lanes,
+        "pools": pools,
+    }
+
+
+def _auto_safety_margin(samples, max_ratio):
+    if samples <= 0:
+        return SAFETY_MARGIN_COLD
+    if samples < 3:
+        return SAFETY_MARGIN_LOW_SAMPLES
+    bounded = min(SAFETY_MARGIN_MAX_AUTO, max(SAFETY_MARGIN_MIN_AUTO, float(max_ratio or 1.0)))
+    return round(bounded, 2)
+
+
+def estimate_burn(
+    provider,
+    model,
+    effort,
+    unit_size,
+    *,
+    calibration=None,
+    safety_margin=None,
+):
+    """Estimate five-hour and weekly quota burn for one unit using calibration or cold-start priors."""
+    norm_size = _validate_unit_size(unit_size)
+    margin_override = _validate_safety_margin(safety_margin) if safety_margin is not None else None
+    pool = normalize_pool(provider)
+    mult = UNIT_SIZE_MULTIPLIERS[norm_size]
+    weight = model_burn_weight(model, effort)
+    defaults = DEFAULT_BURN_PER_M.get(pool, FALLBACK_BURN_PER_M)
+    cold = {
+        "five_hour_pct": defaults["five_hour_pct"] * weight * mult,
+        "weekly_pct": defaults["weekly_pct"] * weight * mult,
+    }
+
+    cal = calibration if isinstance(calibration, dict) else empty_calibration()
+    cal_lanes = cal.get("lanes") or {}
+    cal_pools = cal.get("pools") or {}
+
+    lkey = calibration_lane_key(pool, model, effort)
+    lane_entry = cal_lanes.get(lkey)
+    pool_entry = cal_pools.get(pool)
+
+    has_pool = bool(
+        isinstance(pool_entry, dict)
+        and pool_entry.get("samples", 0) > 0
+        and (
+            pool_entry.get("five_hour_per_m") is not None
+            or pool_entry.get("weekly_per_m") is not None
+        )
+    )
+
+    def pool_or_cold(pct_field, per_m_field):
+        if has_pool and pool_entry.get(per_m_field) is not None:
+            return pool_entry[per_m_field] * weight * mult
+        return cold[pct_field]
+
+    by_size_entry = (
+        (lane_entry.get("by_size") or {}).get(norm_size)
+        if isinstance(lane_entry, dict)
+        else None
+    )
+    has_by_size = bool(
+        isinstance(by_size_entry, dict)
+        and by_size_entry.get("samples", 0) > 0
+        and (
+            by_size_entry.get("five_hour_pct") is not None
+            or by_size_entry.get("weekly_pct") is not None
+        )
+    )
+    has_lane = bool(
+        isinstance(lane_entry, dict)
+        and lane_entry.get("samples", 0) > 0
+        and (
+            has_by_size
+            or lane_entry.get("five_hour_per_m") is not None
+            or lane_entry.get("weekly_per_m") is not None
+        )
+    )
+
+    if has_lane:
+        samples = int(lane_entry["samples"])
+        max_ratio = lane_entry.get("max_ratio", 1.0)
+        if has_by_size:
+            source = "lane_exact"
+            bs_samples = int(by_size_entry["samples"])
+            estimates = {}
+            for pct_field, per_m_field in (
+                ("five_hour_pct", "five_hour_per_m"),
+                ("weekly_pct", "weekly_per_m"),
+            ):
+                bs_val = by_size_entry.get(pct_field)
+                per_m_val = lane_entry.get(per_m_field)
+                scaled_val = per_m_val * mult if per_m_val is not None else None
+                if bs_samples >= 2:
+                    if bs_val is not None:
+                        estimates[pct_field] = bs_val
+                    elif scaled_val is not None:
+                        estimates[pct_field] = scaled_val
+                    else:
+                        estimates[pct_field] = pool_or_cold(pct_field, per_m_field)
+                else:
+                    if bs_val is not None and scaled_val is not None:
+                        estimates[pct_field] = 0.65 * bs_val + 0.35 * scaled_val
+                    elif bs_val is not None:
+                        estimates[pct_field] = bs_val
+                    elif scaled_val is not None:
+                        estimates[pct_field] = scaled_val
+                    else:
+                        estimates[pct_field] = pool_or_cold(pct_field, per_m_field)
+            est_5h = estimates["five_hour_pct"]
+            est_weekly = estimates["weekly_pct"]
+        else:
+            source = "lane_scaled"
+            est_5h = (
+                lane_entry["five_hour_per_m"] * mult
+                if lane_entry.get("five_hour_per_m") is not None
+                else pool_or_cold("five_hour_pct", "five_hour_per_m")
+            )
+            est_weekly = (
+                lane_entry["weekly_per_m"] * mult
+                if lane_entry.get("weekly_per_m") is not None
+                else pool_or_cold("weekly_pct", "weekly_per_m")
+            )
+    elif has_pool:
+        source = "pool_scaled"
+        samples = int(pool_entry["samples"])
+        max_ratio = pool_entry.get("max_ratio", 1.0)
+        est_5h = (
+            pool_entry["five_hour_per_m"] * weight * mult
+            if pool_entry.get("five_hour_per_m") is not None
+            else cold["five_hour_pct"]
+        )
+        est_weekly = (
+            pool_entry["weekly_per_m"] * weight * mult
+            if pool_entry.get("weekly_per_m") is not None
+            else cold["weekly_pct"]
+        )
+    else:
+        source = "cold_start"
+        samples = 0
+        max_ratio = 1.0
+        est_5h = cold["five_hour_pct"]
+        est_weekly = cold["weekly_pct"]
+
+    margin = margin_override if margin_override is not None else _auto_safety_margin(samples, max_ratio)
+    out_5h = round(float(est_5h), 2)
+    out_weekly = round(float(est_weekly), 2)
+    return {
+        "unit_size": norm_size,
+        "five_hour_pct": 0.0 if out_5h == 0.0 else out_5h,
+        "weekly_pct": 0.0 if out_weekly == 0.0 else out_weekly,
+        "safety_margin": margin,
+        "source": source,
+        "samples": samples,
+    }
+
+
+def _default_file_mode():
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
+def _write_json_atomic(path, payload):
+    """Atomically write JSON to path, preserving mode/umask and rejecting symlinks."""
+    target = Path(path)
+    if target.is_symlink() or target.parent.is_symlink():
+        raise ValueError(f"Refusing to write provider state through symlink: {target}")
+    if target.exists() and target.is_dir():
+        raise ValueError(f"Provider state path is a directory: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.parent.is_symlink():
+        raise ValueError(f"Refusing to write provider state through symlink parent: {target.parent}")
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else _default_file_mode()
+    contents = json.dumps(payload, indent=2, ensure_ascii=True, allow_nan=False) + "\n"
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, delete=False) as handle:
+        temp = Path(handle.name)
+        try:
+            handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+            handle.close()
+            os.chmod(temp, mode)
+            if target.is_symlink():
+                raise ValueError(f"Refusing to overwrite symlink: {target}")
+            os.replace(temp, target)
+        finally:
+            temp.unlink(missing_ok=True)
+
+
+def record_burn(
+    state_path,
+    *,
+    provider,
+    model,
+    effort="medium",
+    unit_size,
+    before_5h=None,
+    after_5h=None,
+    before_weekly=None,
+    after_weekly=None,
+    reset_occurred=False,
+    now=None,
+    alpha=None,
+):
+    """Record an observed post-unit burn sample into provider-state.json atomically."""
+    if not isinstance(provider, str) or not provider.strip():
+        raise ValueError("provider must be a non-empty string.")
+    pool = normalize_pool(provider)
+    if pool == "unknown" or not POOL_ID.fullmatch(pool):
+        raise ValueError(f"Invalid provider ID: {provider!r}.")
+
+    if not isinstance(model, str) or not model.strip() or any(
+        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in model
+    ):
+        raise ValueError(f"Invalid model ID: {model!r}.")
+    clean_model = model.strip()
+
+    if not isinstance(effort, str) or not effort.strip() or any(
+        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in effort
+    ):
+        raise ValueError(f"Invalid effort value: {effort!r}.")
+    norm_effort = effort.strip().lower()
+
+    norm_size = _validate_unit_size(unit_size)
+
+    if type(reset_occurred) is not bool:
+        raise ValueError("reset_occurred must be a boolean.")
+
+    if (before_5h is None) != (after_5h is None):
+        raise ValueError("Both before_5h and after_5h must be provided together.")
+    if (before_weekly is None) != (after_weekly is None):
+        raise ValueError("Both before_weekly and after_weekly must be provided together.")
+    if before_5h is None and before_weekly is None:
+        raise ValueError("At least one metric pair (before_5h/after_5h or before_weekly/after_weekly) is required.")
+
+    b5 = _validate_pct_value(before_5h, "before_5h") if before_5h is not None else None
+    a5 = _validate_pct_value(after_5h, "after_5h") if after_5h is not None else None
+    bw = _validate_pct_value(before_weekly, "before_weekly") if before_weekly is not None else None
+    aw = _validate_pct_value(after_weekly, "after_weekly") if after_weekly is not None else None
+
+    if now is None:
+        eval_now = datetime.now(timezone.utc)
+    elif isinstance(now, str):
+        eval_now = parse_iso_utc(now, "now")
+    elif isinstance(now, datetime):
+        eval_now = now.astimezone(timezone.utc) if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    else:
+        raise ValueError(f"Invalid now timestamp: {now!r}.")
+    now_iso = format_iso_utc(eval_now)
+
+    s_path = Path(state_path)
+    if s_path.is_symlink() or s_path.parent.is_symlink():
+        raise ValueError(f"Refusing to read or write provider state through symlink: {s_path}")
+    if s_path.exists():
+        if s_path.is_dir():
+            raise ValueError(f"Provider state path is a directory: {s_path}")
+        try:
+            raw_state = json.loads(s_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, RecursionError) as err:
+            raise ValueError(f"Invalid JSON in {s_path}: {err}") from err
+        if not isinstance(raw_state, dict):
+            raise ValueError("provider-state.json must contain a JSON object keyed by pool name.")
+    else:
+        raw_state = {}
+
+    # Validate existing provider keys for alias collisions and find matching live entry key.
+    seen_keys = {}
+    target_provider_key = None
+    for raw_key, entry in raw_state.items():
+        if raw_key == CALIBRATION_KEY:
+            continue
+        if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(entry, dict):
+            raise ValueError(f"Invalid provider-state entry for key {raw_key!r}.")
+        norm_key = normalize_state_key(raw_key)
+        if norm_key in seen_keys:
+            raise ValueError(
+                f"Conflicting provider-state entries for '{norm_key}': "
+                f"{seen_keys[norm_key]!r} and {raw_key!r} normalize to the same key."
+            )
+        seen_keys[norm_key] = raw_key
+        if norm_key == pool:
+            target_provider_key = raw_key
+
+    had_calibration = CALIBRATION_KEY in raw_state and raw_state[CALIBRATION_KEY] is not None
+    cal = parse_calibration(raw_state)
+    if alpha is not None:
+        if type(alpha) not in (int, float) or not math.isfinite(float(alpha)):
+            raise ValueError("alpha must be a finite number in (0, 1].")
+        eff_alpha = float(alpha)
+        if eff_alpha <= 0.0 or eff_alpha > 1.0:
+            raise ValueError(f"alpha must be in (0, 1] (got {alpha!r}).")
+        cal["alpha"] = eff_alpha
+    else:
+        eff_alpha = cal["alpha"]
+
+    mult = UNIT_SIZE_MULTIPLIERS[norm_size]
+    weight = model_burn_weight(clean_model, norm_effort)
+    lkey = calibration_lane_key(pool, clean_model, norm_effort)
+
+    # Capture prior estimates before updating calibration so max_ratio compares actual vs prior.
+    prev_lane_est = estimate_burn(pool, clean_model, norm_effort, norm_size, calibration=cal)
+    prev_pool_entry = cal["pools"].get(pool)
+    defaults = DEFAULT_BURN_PER_M.get(pool, FALLBACK_BURN_PER_M)
+    prev_pool_est = {}
+    for pct_field, per_m_field in (
+        ("five_hour_pct", "five_hour_per_m"),
+        ("weekly_pct", "weekly_per_m"),
+    ):
+        if isinstance(prev_pool_entry, dict) and prev_pool_entry.get(per_m_field) is not None:
+            prev_pool_est[pct_field] = prev_pool_entry[per_m_field] * weight * mult
+        else:
+            prev_pool_est[pct_field] = defaults[pct_field] * weight * mult
+
+    warnings = []
+    skipped_windows = []
+    valid_deltas = {}
+    deltas_report = {"five_hour_pct": None, "weekly_pct": None}
+
+    for pct_field, before_val, after_val in (
+        ("five_hour_pct", b5, a5),
+        ("weekly_pct", bw, aw),
+    ):
+        if before_val is None:
+            continue
+        if reset_occurred:
+            skipped_windows.append(pct_field)
+            warnings.append(
+                f"reset_occurred set; skipped calibration update for {pct_field} "
+                f"(live state updated to {_fmt_num(after_val)}%)."
+            )
+            continue
+        if after_val < before_val:
+            skipped_windows.append(pct_field)
+            warnings.append(
+                f"window reset detected; skipped calibration update for {pct_field} "
+                f"(before={_fmt_num(before_val)}%, after={_fmt_num(after_val)}%; live state updated)."
+            )
+            continue
+        delta = round(after_val - before_val, 4)
+        if delta == 0.0:
+            delta = 0.0
+        valid_deltas[pct_field] = delta
+        deltas_report[pct_field] = delta
+
+    if valid_deltas:
+        lane = cal["lanes"].get(lkey)
+        if lane is None:
+            lane = {
+                "samples": 0,
+                "five_hour_per_m": None,
+                "weekly_per_m": None,
+                "max_ratio": 1.0,
+                "by_size": {},
+                "updated_at": now_iso,
+            }
+        lane["samples"] += 1
+        lane["updated_at"] = now_iso
+        size_bucket = lane["by_size"].get(norm_size)
+        if size_bucket is None:
+            size_bucket = {"samples": 0, "five_hour_pct": None, "weekly_pct": None}
+            lane["by_size"][norm_size] = size_bucket
+        size_bucket["samples"] += 1
+
+        pool_cal = cal["pools"].get(pool)
+        if pool_cal is None:
+            pool_cal = {
+                "samples": 0,
+                "five_hour_per_m": None,
+                "weekly_per_m": None,
+                "max_ratio": 1.0,
+                "updated_at": now_iso,
+            }
+        pool_cal["samples"] += 1
+        pool_cal["updated_at"] = now_iso
+
+        for pct_field, per_m_field in (
+            ("five_hour_pct", "five_hour_per_m"),
+            ("weekly_pct", "weekly_per_m"),
+        ):
+            if pct_field not in valid_deltas:
+                continue
+            delta = valid_deltas[pct_field]
+
+            obs_lane_per_m = delta / mult
+            prev_lane_per_m = lane.get(per_m_field)
+            new_lane_per_m = (
+                obs_lane_per_m
+                if prev_lane_per_m is None
+                else eff_alpha * obs_lane_per_m + (1.0 - eff_alpha) * prev_lane_per_m
+            )
+            new_lane_per_m = round(new_lane_per_m, 4)
+            lane[per_m_field] = 0.0 if new_lane_per_m == 0.0 else new_lane_per_m
+
+            prev_bs = size_bucket.get(pct_field)
+            new_bs = delta if prev_bs is None else eff_alpha * delta + (1.0 - eff_alpha) * prev_bs
+            new_bs = round(new_bs, 4)
+            size_bucket[pct_field] = 0.0 if new_bs == 0.0 else new_bs
+
+            prev_est_val = prev_lane_est.get(pct_field)
+            if prev_est_val is not None and prev_est_val > 0.0:
+                ratio = min(MAX_RATIO_MAX, max(MAX_RATIO_MIN, delta / prev_est_val))
+                lane["max_ratio"] = round(max(float(lane.get("max_ratio", 1.0)), ratio), 4)
+
+            obs_pool_per_m = delta / (mult * weight)
+            prev_pool_per_m = pool_cal.get(per_m_field)
+            new_pool_per_m = (
+                obs_pool_per_m
+                if prev_pool_per_m is None
+                else eff_alpha * obs_pool_per_m + (1.0 - eff_alpha) * prev_pool_per_m
+            )
+            new_pool_per_m = round(new_pool_per_m, 4)
+            pool_cal[per_m_field] = 0.0 if new_pool_per_m == 0.0 else new_pool_per_m
+
+            prev_pool_est_val = prev_pool_est.get(pct_field)
+            if prev_pool_est_val is not None and prev_pool_est_val > 0.0:
+                pool_ratio = min(MAX_RATIO_MAX, max(MAX_RATIO_MIN, delta / prev_pool_est_val))
+                pool_cal["max_ratio"] = round(max(float(pool_cal.get("max_ratio", 1.0)), pool_ratio), 4)
+
+        cal["lanes"][lkey] = lane
+        cal["pools"][pool] = pool_cal
+
+    updated_state = dict(raw_state)
+    if target_provider_key is None:
+        target_provider_key = pool
+        live_entry = {
+            "status": "up",
+            "down_until": None,
+            "limit": None,
+            "five_hour_pct": None,
+            "weekly_pct": None,
+            "resets_at": None,
+            "observed_at": now_iso,
+        }
+    else:
+        live_entry = dict(raw_state[target_provider_key])
+
+    if a5 is not None:
+        live_entry["five_hour_pct"] = a5
+    if aw is not None:
+        live_entry["weekly_pct"] = aw
+    live_entry["observed_at"] = now_iso
+    updated_state[target_provider_key] = live_entry
+
+    if valid_deltas or had_calibration:
+        updated_state[CALIBRATION_KEY] = cal
+
+    _write_json_atomic(s_path, updated_state)
+
+    updated_est = estimate_burn(pool, clean_model, norm_effort, norm_size, calibration=cal)
+    return {
+        "mode": "record_burn",
+        "state_path": str(s_path),
+        "provider": pool,
+        "model": canonical_model_id(clean_model),
+        "effort": norm_effort,
+        "lane_key": lkey,
+        "unit_size": norm_size,
+        "recorded_at": now_iso,
+        "calibration_updated": bool(valid_deltas),
+        "deltas": deltas_report,
+        "skipped_windows": skipped_windows,
+        "warnings": warnings,
+        "estimated_burn": updated_est,
+        "lane_calibration": cal["lanes"].get(lkey),
+        "pool_calibration": cal["pools"].get(pool),
+        "provider_state": live_entry,
+    }
+
+
+def render_record_burn_markdown(summary):
+    """Render --record-burn output as concise GitHub-flavored Markdown."""
+    deltas = summary["deltas"]
+    est = summary["estimated_burn"]
+    pstate = summary["provider_state"]
+    delta_parts = []
+    if deltas["five_hour_pct"] is not None:
+        delta_parts.append(f"5h `+{_fmt_num(deltas['five_hour_pct'])}%`")
+    if deltas["weekly_pct"] is not None:
+        delta_parts.append(f"weekly `+{_fmt_num(deltas['weekly_pct'])}%`")
+    delta_str = ", ".join(delta_parts) if delta_parts else "none (calibration skipped due to window reset)"
+
+    lines = [
+        f"# Burn calibration recorded · `{_md_cell(summary['lane_key'])}`",
+        "",
+        f"- **State file:** `{summary['state_path']}`",
+        f"- **Lane:** `{_md_cell(summary['lane_key'])}` (unit size `{summary['unit_size']}`)",
+        f"- **Recorded at:** `{summary['recorded_at']}`",
+        f"- **Observed delta:** {delta_str}",
+        f"- **Calibration updated:** `{'yes' if summary['calibration_updated'] else 'no'}`",
+        (
+            f"- **Updated estimate (`{est['unit_size']}`):** "
+            f"5h `+{_fmt_num(est['five_hour_pct'])}%`, weekly `+{_fmt_num(est['weekly_pct'])}%` "
+            f"(safety margin `{_fmt_num(est['safety_margin'])}x`, source `{est['source']}`, samples `{est['samples']}`)"
+        ),
+        (
+            f"- **Updated provider state (`{summary['provider']}`):** "
+            f"status `{_md_cell(pstate.get('status', 'up'))}`, "
+            f"5h `{_fmt_num(pstate.get('five_hour_pct'))}%`, "
+            f"weekly `{_fmt_num(pstate.get('weekly_pct'))}%`, "
+            f"observed_at `{_md_cell(pstate.get('observed_at'))}`"
+        ),
+    ]
+    if summary["warnings"]:
+        lines.extend(["", "## Warnings", ""])
+        for warning in summary["warnings"]:
+            clean_warning = str(warning).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+            lines.append(f"- {clean_warning}")
+    return "\n".join(lines) + "\n"
 
 
 def parse_provider_state(raw_state, now, stale_minutes):
@@ -985,9 +1828,14 @@ def parse_provider_state(raw_state, now, stale_minutes):
     if not isinstance(raw_state, dict):
         raise ValueError("provider-state.json must contain a JSON object keyed by pool name.")
 
+    if CALIBRATION_KEY in raw_state:
+        parse_calibration(raw_state)
+
     normalized_entries = {}
     seen_raw_keys = {}
     for raw_key, entry in raw_state.items():
+        if raw_key == CALIBRATION_KEY:
+            continue
         if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(entry, dict):
             raise ValueError(f"Invalid provider-state entry for key {raw_key!r}.")
         pool_key = normalize_state_key(raw_key)
@@ -1201,11 +2049,20 @@ def resolve_lanes(
     state_loaded=False,
     state_warnings=None,
     cohort=None,
+    unit_size=None,
+    safety_margin=None,
+    calibration=None,
 ):
     """Filter, score, classify (±3-pt equivalence), and deterministically rank lanes."""
     warnings = list(state_warnings or [])
     eligible = []
     excluded = []
+
+    norm_unit_size = _validate_unit_size(unit_size) if unit_size is not None else None
+    norm_safety_margin = _validate_safety_margin(safety_margin) if safety_margin is not None else None
+    if norm_safety_margin is not None and norm_unit_size is None:
+        warnings.append("--safety-margin is ignored when --unit-size is not specified.")
+    cal = parse_calibration({CALIBRATION_KEY: calibration}) if calibration is not None else empty_calibration()
 
     allowed_set = {normalize_pool(p) for p in allowed_providers} if allowed_providers is not None else None
     norm_author = normalize_family(author_family) if author_family else None
@@ -1227,6 +2084,20 @@ def resolve_lanes(
         if lane is not None:
             matched_authorized_keys.add(key)
 
+        model_name = lane["model"] if lane else cand["model"]
+        est = (
+            estimate_burn(
+                pool,
+                model_name,
+                cand["effort"],
+                norm_unit_size,
+                calibration=cal,
+                safety_margin=norm_safety_margin,
+            )
+            if norm_unit_size is not None
+            else None
+        )
+
         exclusion_reasons = []
         if authorized_lanes is not None and (lane is None or role not in lane["roles"]):
             exclusion_reasons.append("model, effort and pool are not authorized for this role")
@@ -1247,12 +2118,19 @@ def resolve_lanes(
         if exclusion_reasons:
             excluded.append(
                 {
-                    "model": lane["model"] if lane else cand["model"],
+                    "model": model_name,
                     "effort": cand["effort"],
                     "pool": pool,
                     "family": family,
                     "score": score,
                     "source": cand["source"],
+                    "unit_size": norm_unit_size,
+                    "estimated_burn": est,
+                    "projected_five_hour_pct": None,
+                    "projected_weekly_pct": None,
+                    "projected_overflow": False,
+                    "projected_deprioritized": False,
+                    "projected_headroom_pct": None,
                     "reasons": exclusion_reasons,
                     "_candidate": cand,
                 }
@@ -1272,30 +2150,131 @@ def resolve_lanes(
             stale = pstate["stale"]
             state_reasons = list(pstate["reasons"])
 
-        if mstate is not None and not (
-            pstate is not None
-            and not pstate["stale"]
-            and pstate["status"] == "up"
-            and _is_unconfigured_placeholder(mstate)
-        ):
-            if mstate["deprioritized"]:
+        active_mstate = (
+            mstate
+            if mstate is not None
+            and not (
+                pstate is not None
+                and not pstate["stale"]
+                and pstate["status"] == "up"
+                and _is_unconfigured_placeholder(mstate)
+            )
+            else None
+        )
+        if active_mstate is not None:
+            if active_mstate["deprioritized"]:
                 deprioritized = True
                 effective_state = "deprioritized"
-                state_reasons.extend(f"model {r}" for r in mstate["reasons"])
-            if mstate["headroom"] is not None:
-                headroom = mstate["headroom"] if headroom is None else min(headroom, mstate["headroom"])
-            stale = stale or mstate["stale"]
+                state_reasons.extend(f"model {r}" for r in active_mstate["reasons"])
+            if active_mstate["headroom"] is not None:
+                headroom = (
+                    active_mstate["headroom"]
+                    if headroom is None
+                    else min(headroom, active_mstate["headroom"])
+                )
+            stale = stale or active_mstate["stale"]
 
         if stale:
             headroom = None
             if effective_state == "up":
                 effective_state = "stale"
 
+        projected_five_hour_pct = None
+        projected_weekly_pct = None
+        projected_overflow = False
+        projected_deprioritized = False
+        projected_headroom_pct = None
+
+        if norm_unit_size is not None and not stale:
+            cur_5h_vals = [
+                st["five_hour_pct"]
+                for st in (pstate, active_mstate)
+                if st is not None and not st["stale"] and st["five_hour_pct"] is not None
+            ]
+            cur_wk_vals = [
+                st["weekly_pct"]
+                for st in (pstate, active_mstate)
+                if st is not None and not st["stale"] and st["weekly_pct"] is not None
+            ]
+            current_5h = max(cur_5h_vals) if cur_5h_vals else None
+            current_weekly = max(cur_wk_vals) if cur_wk_vals else None
+            margin = est["safety_margin"]
+
+            if current_5h is not None:
+                proj_5h = round(current_5h + est["five_hour_pct"] * margin, 2)
+                projected_five_hour_pct = 0.0 if proj_5h == 0.0 else proj_5h
+            if current_weekly is not None:
+                proj_wk = round(current_weekly + est["weekly_pct"] * margin, 2)
+                projected_weekly_pct = 0.0 if proj_wk == 0.0 else proj_wk
+
+            projected_vals = [v for v in (projected_five_hour_pct, projected_weekly_pct) if v is not None]
+            if projected_vals:
+                proj_hr = max(0.0, round(100.0 - max(projected_vals), 2))
+                projected_headroom_pct = 0.0 if proj_hr == 0.0 else proj_hr
+
+            overflow_reasons = []
+            if projected_five_hour_pct is not None and projected_five_hour_pct >= FIVE_HOUR_STOP_PCT:
+                overflow_reasons.append(
+                    f"projected five_hour_pct {_fmt_proj_num(projected_five_hour_pct)}% >= "
+                    f"{_fmt_pct(FIVE_HOUR_STOP_PCT)}% stop "
+                    f"({_fmt_proj_num(current_5h)}% + {_fmt_proj_num(est['five_hour_pct'])}% x {_fmt_proj_num(margin)})"
+                )
+            if projected_weekly_pct is not None and projected_weekly_pct >= WEEKLY_STOP_PCT:
+                overflow_reasons.append(
+                    f"projected weekly_pct {_fmt_proj_num(projected_weekly_pct)}% >= "
+                    f"{_fmt_pct(WEEKLY_STOP_PCT)}% stop "
+                    f"({_fmt_proj_num(current_weekly)}% + {_fmt_proj_num(est['weekly_pct'])}% x {_fmt_proj_num(margin)})"
+                )
+
+            if overflow_reasons:
+                excluded.append(
+                    {
+                        "model": model_name,
+                        "effort": cand["effort"],
+                        "pool": pool,
+                        "family": family,
+                        "score": score,
+                        "source": cand["source"],
+                        "status": "blocked",
+                        "pool_state": "blocked",
+                        "unit_size": norm_unit_size,
+                        "estimated_burn": est,
+                        "projected_five_hour_pct": projected_five_hour_pct,
+                        "projected_weekly_pct": projected_weekly_pct,
+                        "projected_overflow": True,
+                        "projected_deprioritized": False,
+                        "projected_headroom_pct": projected_headroom_pct,
+                        "reasons": overflow_reasons,
+                        "_candidate": cand,
+                    }
+                )
+                continue
+
+            proj_move_reasons = []
+            if projected_five_hour_pct is not None and projected_five_hour_pct >= FIVE_HOUR_MOVE_PCT:
+                proj_move_reasons.append(
+                    f"projected five_hour_pct {_fmt_proj_num(projected_five_hour_pct)}% >= "
+                    f"{_fmt_pct(FIVE_HOUR_MOVE_PCT)}% move "
+                    f"({_fmt_proj_num(current_5h)}% + {_fmt_proj_num(est['five_hour_pct'])}% x {_fmt_proj_num(margin)})"
+                )
+            if projected_weekly_pct is not None and projected_weekly_pct >= WEEKLY_MOVE_PCT:
+                proj_move_reasons.append(
+                    f"projected weekly_pct {_fmt_proj_num(projected_weekly_pct)}% >= "
+                    f"{_fmt_pct(WEEKLY_MOVE_PCT)}% move "
+                    f"({_fmt_proj_num(current_weekly)}% + {_fmt_proj_num(est['weekly_pct'])}% x {_fmt_proj_num(margin)})"
+                )
+            if proj_move_reasons:
+                projected_deprioritized = True
+                deprioritized = True
+                if effective_state == "up":
+                    effective_state = "deprioritized"
+                state_reasons.extend(proj_move_reasons)
+
         same_family = bool(role == "review" and norm_author and family == norm_author)
 
         eligible.append(
             {
-                "model": lane["model"] if lane else cand["model"],
+                "model": model_name,
                 "runner": lane["runner"] if lane else None,
                 "effort": cand["effort"],
                 "pool": pool,
@@ -1311,6 +2290,13 @@ def resolve_lanes(
                 "stale": stale,
                 "same_family": same_family,
                 "state_reasons": state_reasons,
+                "unit_size": norm_unit_size,
+                "estimated_burn": est,
+                "projected_five_hour_pct": projected_five_hour_pct,
+                "projected_weekly_pct": projected_weekly_pct,
+                "projected_overflow": projected_overflow,
+                "projected_deprioritized": projected_deprioritized,
+                "projected_headroom_pct": projected_headroom_pct,
                 "_candidate": cand,
             }
         )
@@ -1372,6 +2358,8 @@ def resolve_lanes(
             flags.append("same-family")
         if item["deprioritized"]:
             flags.append("deprioritized")
+        if item["projected_deprioritized"]:
+            flags.append("projected-deprioritized")
         if item["stale"]:
             flags.append("stale")
         item["flags"] = flags
@@ -1381,7 +2369,8 @@ def resolve_lanes(
         is_same_family = item["same_family"]
         is_below = item["tier"] != "equivalent"
         # Known positive headroom is preferred over unknown (conservative neutral tie-break: 0.0).
-        headroom_rank = item["headroom"] if item["headroom"] is not None else 0.0
+        eff_headroom = _effective_headroom(item)
+        headroom_rank = eff_headroom if eff_headroom is not None else 0.0
         score_rank = item["score"] if item["score"] is not None else -1.0
         latency_rank = item["_comparable_latency"]
 
@@ -1471,6 +2460,8 @@ def resolve_lanes(
         "score_basis": score_basis,
         "score_cohort": score_cohort,
         "cross_family_anchored": cross_family_anchored,
+        "unit_size": norm_unit_size,
+        "safety_margin": norm_safety_margin,
         "recommended": top_lane if authorized_lanes is not None else None,
         "ranked": eligible,
         "excluded": excluded,
@@ -1500,15 +2491,42 @@ def _md_cell(val):
     return text.replace("|", "\\|")
 
 
+def _fmt_projected_cell(row):
+    parts = []
+    if row.get("projected_five_hour_pct") is not None:
+        parts.append(f"5h {_fmt_proj_num(row['projected_five_hour_pct'])}%")
+    if row.get("projected_weekly_pct") is not None:
+        parts.append(f"wk {_fmt_proj_num(row['projected_weekly_pct'])}%")
+    return ", ".join(parts) if parts else "-"
+
+
+def _fmt_burn_cell(row):
+    est = row.get("estimated_burn")
+    if not isinstance(est, dict):
+        return "-"
+    return (
+        f"+{_fmt_num(est.get('five_hour_pct'))}% / +{_fmt_num(est.get('weekly_pct'))}% "
+        f"(x{_fmt_num(est.get('safety_margin'))}, {est.get('source', '-')})"
+    )
+
+
 def render_markdown(report):
     """Render lane resolution report as concise GitHub-flavored Markdown."""
     anchor_label = "top eligible cross-family score" if report.get("cross_family_anchored") else "top eligible score"
+    unit_size = report.get("unit_size")
     lines = [
         f"# Lane resolution · {report['role']}",
         "",
         f"- **Role:** `{report['role']}` ({report['scoring_method']})",
         f"- **Equivalence band:** within ±{report['equivalence_threshold_points']:g} pts of {anchor_label} `{_fmt_num(report['top_score'])}`",
     ]
+    if unit_size:
+        margin_note = (
+            f"safety margin override `{_fmt_num(report['safety_margin'])}x`"
+            if report.get("safety_margin") is not None
+            else "auto safety margin"
+        )
+        lines.append(f"- **Unit size:** `{unit_size}` ({margin_note})")
     if report["score_basis"] == "workspace" and report["score_cohort"] is not None:
         lines.append(f"- **Score cohort:** live `{report['score_cohort']}` (matched normalized points)")
     elif report["score_basis"] == "historical":
@@ -1556,11 +2574,32 @@ def render_markdown(report):
     if rec:
         headroom_str = f"{_fmt_num(rec['headroom'])}%" if rec["headroom"] is not None else "unknown"
         flags_str = f" · flags: {', '.join(rec['flags'])}" if rec["flags"] else ""
-        lines.append(
-            f"- **Recommended lane:** `{rec['model']}` (`{rec['effort']}`) · "
-            f"pool `{rec['pool']}` · score `{_fmt_num(rec['score'])}` · "
-            f"headroom `{headroom_str}`{flags_str}"
-        )
+        if unit_size:
+            proj_hr = (
+                f"{_fmt_num(rec['projected_headroom_pct'])}%"
+                if rec.get("projected_headroom_pct") is not None
+                else "unknown"
+            )
+            proj_summary = _fmt_projected_cell(rec)
+            proj_extra = f" ({proj_summary})" if proj_summary != "-" else ""
+            est = rec.get("estimated_burn")
+            burn_extra = (
+                f" · est burn `+{_fmt_num(est['five_hour_pct'])}%` 5h / `+{_fmt_num(est['weekly_pct'])}%` wk "
+                f"× `{_fmt_num(est['safety_margin'])}` (`{est['source']}`)"
+                if isinstance(est, dict)
+                else ""
+            )
+            lines.append(
+                f"- **Recommended lane:** `{rec['model']}` (`{rec['effort']}`) · "
+                f"pool `{rec['pool']}` · score `{_fmt_num(rec['score'])}` · "
+                f"projected headroom `{proj_hr}`{proj_extra} (current `{headroom_str}`){burn_extra}{flags_str}"
+            )
+        else:
+            lines.append(
+                f"- **Recommended lane:** `{rec['model']}` (`{rec['effort']}`) · "
+                f"pool `{rec['pool']}` · score `{_fmt_num(rec['score'])}` · "
+                f"headroom `{headroom_str}`{flags_str}"
+            )
         lines.append(f"- **Authorized runner:** {_md_cell(rec['runner'])}")
     elif report["advisory"]:
         lines.append("- **Recommended lane:** none (advisory only)")
@@ -1575,45 +2614,86 @@ def render_markdown(report):
 
     lines.extend(["", "## Advisory candidates" if report["advisory"] else "## Ranked eligible lanes", ""])
     if report["ranked"]:
-        lines.extend(
-            [
-                "| Rank | Model | Effort | Pool | Family | Score | Delta | Tier | Pool state | Headroom | s/task | Flags | Source |",
-                "| ---: | --- | --- | --- | --- | ---: | ---: | --- | --- | ---: | ---: | --- | --- |",
-            ]
-        )
+        if unit_size:
+            lines.extend(
+                [
+                    "| Rank | Model | Effort | Pool | Family | Score | Delta | Tier | Pool state | Headroom | Est. burn (5h / wk) | Projected | Proj. headroom | s/task | Flags | Source |",
+                    "| ---: | --- | --- | --- | --- | ---: | ---: | --- | --- | ---: | --- | --- | ---: | ---: | --- | --- |",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "| Rank | Model | Effort | Pool | Family | Score | Delta | Tier | Pool state | Headroom | s/task | Flags | Source |",
+                    "| ---: | --- | --- | --- | --- | ---: | ---: | --- | --- | ---: | ---: | --- | --- |",
+                ]
+            )
         for row in report["ranked"]:
             headroom_cell = f"{_fmt_num(row['headroom'])}%" if row["headroom"] is not None else "unknown"
             flags_cell = _md_cell(", ".join(row["flags"]) if row["flags"] else "-")
             latency = _fmt_num(row["latency_s"])
             if row["latency_s"] is not None and row["latency_kind"] == "estimate":
                 latency += " (estimate)"
-            lines.append(
-                f"| {row['rank']} | `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
-                f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
-                f"{_fmt_num(row['score'])} | {_fmt_delta(row['delta'])} | {_md_cell(row['tier'])} | "
-                f"{_md_cell(row['pool_state'])} | {headroom_cell} | {latency} | {flags_cell} | "
-                f"{_md_cell(row['source'])} |"
-            )
+            if unit_size:
+                proj_hr_cell = (
+                    f"{_fmt_num(row['projected_headroom_pct'])}%"
+                    if row.get("projected_headroom_pct") is not None
+                    else "unknown"
+                )
+                lines.append(
+                    f"| {row['rank']} | `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
+                    f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
+                    f"{_fmt_num(row['score'])} | {_fmt_delta(row['delta'])} | {_md_cell(row['tier'])} | "
+                    f"{_md_cell(row['pool_state'])} | {headroom_cell} | {_md_cell(_fmt_burn_cell(row))} | "
+                    f"{_md_cell(_fmt_projected_cell(row))} | {proj_hr_cell} | {latency} | {flags_cell} | "
+                    f"{_md_cell(row['source'])} |"
+                )
+            else:
+                lines.append(
+                    f"| {row['rank']} | `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
+                    f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
+                    f"{_fmt_num(row['score'])} | {_fmt_delta(row['delta'])} | {_md_cell(row['tier'])} | "
+                    f"{_md_cell(row['pool_state'])} | {headroom_cell} | {latency} | {flags_cell} | "
+                    f"{_md_cell(row['source'])} |"
+                )
     else:
         lines.append("_No ranked lanes._")
 
     if report["excluded"]:
-        lines.extend(
-            [
-                "",
-                "## Excluded lanes",
-                "",
-                "| Model | Effort | Pool | Family | Score | Reason |",
-                "| --- | --- | --- | --- | ---: | --- |",
-            ]
-        )
+        if unit_size:
+            lines.extend(
+                [
+                    "",
+                    "## Excluded lanes",
+                    "",
+                    "| Model | Effort | Pool | Family | Score | Projected | Reason |",
+                    "| --- | --- | --- | --- | ---: | --- | --- |",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    "## Excluded lanes",
+                    "",
+                    "| Model | Effort | Pool | Family | Score | Reason |",
+                    "| --- | --- | --- | --- | ---: | --- |",
+                ]
+            )
         for row in report["excluded"]:
             reason_cell = _md_cell("; ".join(row["reasons"]))
-            lines.append(
-                f"| `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
-                f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
-                f"{_fmt_num(row['score'])} | {reason_cell} |"
-            )
+            if unit_size:
+                lines.append(
+                    f"| `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
+                    f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
+                    f"{_fmt_num(row['score'])} | {_md_cell(_fmt_projected_cell(row))} | {reason_cell} |"
+                )
+            else:
+                lines.append(
+                    f"| `{_md_cell(row['model'])}` | `{_md_cell(row['effort'])}` | "
+                    f"`{_md_cell(row['pool'])}` | `{_md_cell(row['family'])}` | "
+                    f"{_fmt_num(row['score'])} | {reason_cell} |"
+                )
 
     return "\n".join(lines) + "\n"
 
@@ -1652,11 +2732,41 @@ def _parse_non_negative_int(raw):
     return value
 
 
+def _parse_unit_size_arg(raw):
+    try:
+        return _validate_unit_size(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
+
+
+def _parse_safety_margin_arg(raw):
+    try:
+        value = float(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"invalid float: {raw!r}") from err
+    try:
+        return _validate_safety_margin(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
+
+
+def _parse_pct_arg(raw):
+    try:
+        value = float(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"invalid percentage: {raw!r}") from err
+    try:
+        return _validate_pct_value(value, "percentage")
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Deterministically rank eligible orchestration lanes from model measurements and "
-            "live provider-state.json using the +/-3-point equivalence rubric. "
+            "live provider-state.json using the +/-3-point equivalence rubric, with optional "
+            "pre-dispatch projected quota guard and self-calibrating burn recording. "
             "For --role review, candidates are scored by 0.5*accuracy + 0.3*reasoning + 0.2*knowledge "
             "(falling back to 0.6*accuracy + 0.4*reasoning when knowledge is absent; requires accuracy and reasoning), "
             "prioritizing cross-family reviewers first when --author-family is supplied."
@@ -1721,6 +2831,79 @@ def build_parser():
         help="Restrict eligible lanes to those explicitly authorized for restricted data in the project profile.",
     )
     parser.add_argument(
+        "--unit-size",
+        type=_parse_unit_size_arg,
+        default=None,
+        metavar="SIZE",
+        help=f"Work unit size ({'|'.join(UNIT_SIZES)}) for pre-dispatch projected quota guard or --record-burn.",
+    )
+    parser.add_argument(
+        "--safety-margin",
+        type=_parse_safety_margin_arg,
+        default=None,
+        metavar="FLOAT",
+        help=(
+            f"Override automatic burn safety margin ({SAFETY_MARGIN_MIN_OVERRIDE:g} to "
+            f"{SAFETY_MARGIN_MAX_OVERRIDE:g}) when --unit-size is specified."
+        ),
+    )
+    parser.add_argument(
+        "--record-burn",
+        action="store_true",
+        help="Record observed post-unit quota burn into provider-state.json (_calibration + live percentages).",
+    )
+    parser.add_argument(
+        "--burn-provider",
+        default=None,
+        metavar="PROVIDER",
+        help="Provider/pool for --record-burn (e.g. codex, claude, gemini, deepseek).",
+    )
+    parser.add_argument(
+        "--burn-model",
+        default=None,
+        metavar="MODEL",
+        help="Model ID for --record-burn (e.g. gpt-6.2-sol, claude-opus-5-5).",
+    )
+    parser.add_argument(
+        "--burn-effort",
+        default="medium",
+        metavar="EFFORT",
+        help="Effort level for --record-burn (default: medium).",
+    )
+    parser.add_argument(
+        "--before-5h",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Observed five_hour_pct before running the unit (paired with --after-5h).",
+    )
+    parser.add_argument(
+        "--after-5h",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Observed five_hour_pct after running the unit (paired with --before-5h).",
+    )
+    parser.add_argument(
+        "--before-weekly",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Observed weekly_pct before running the unit (paired with --after-weekly).",
+    )
+    parser.add_argument(
+        "--after-weekly",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Observed weekly_pct after running the unit (paired with --before-weekly).",
+    )
+    parser.add_argument(
+        "--reset-occurred",
+        action="store_true",
+        help="Indicate a quota window reset occurred during the unit; skip EWMA update while still writing live after percentages.",
+    )
+    parser.add_argument(
         "--now",
         default=None,
         metavar="ISO_TIMESTAMP",
@@ -1755,9 +2938,13 @@ def resolve_from_paths(
     now=None,
     stale_minutes=DEFAULT_STALE_MINUTES,
     cohort=None,
+    unit_size=None,
+    safety_margin=None,
 ):
     """Load files from disk and return the structured lane resolution report dict."""
     _validate_stale_minutes(stale_minutes)
+    norm_unit_size = _validate_unit_size(unit_size) if unit_size is not None else None
+    norm_safety_margin = _validate_safety_margin(safety_margin) if safety_margin is not None else None
     ws = Path(workspace)
     if not ws.exists() or not ws.is_dir():
         raise ValueError(f"Workspace directory does not exist: {ws}")
@@ -1783,6 +2970,7 @@ def resolve_from_paths(
     resolved_state_path = None
     provider_states = {}
     state_warnings = []
+    calibration = empty_calibration()
 
     if state_path is not None:
         s_path = Path(state_path)
@@ -1800,6 +2988,7 @@ def resolve_from_paths(
         except (json.JSONDecodeError, RecursionError) as err:
             raise ValueError(f"Invalid JSON in {resolved_state_path}: {err}") from err
         provider_states, state_warnings = parse_provider_state(raw_state, eval_now, stale_minutes)
+        calibration = parse_calibration(raw_state)
         state_loaded = True
     else:
         state_warnings.append(
@@ -1828,6 +3017,9 @@ def resolve_from_paths(
         state_loaded=state_loaded,
         state_warnings=state_warnings,
         cohort=cohort,
+        unit_size=norm_unit_size,
+        safety_margin=norm_safety_margin,
+        calibration=calibration,
     )
 
     return {
@@ -1838,6 +3030,8 @@ def resolve_from_paths(
         "score_basis": result["score_basis"],
         "score_cohort": result["score_cohort"],
         "cross_family_anchored": result["cross_family_anchored"],
+        "unit_size": result["unit_size"],
+        "safety_margin": result["safety_margin"],
         "author_family": normalize_family(author_family) if author_family else None,
         "restricted_data": bool(restricted_data),
         "allowed_providers": norm_allowed,
@@ -1871,6 +3065,65 @@ def main(argv=None):
         except ValueError as err:
             parser.error(str(err))
 
+    if args.record_burn:
+        if not args.burn_provider:
+            parser.error("--burn-provider is required with --record-burn.")
+        if not args.burn_model:
+            parser.error("--burn-model is required with --record-burn.")
+        if args.unit_size is None:
+            parser.error("--unit-size is required with --record-burn.")
+        if (args.before_5h is None) != (args.after_5h is None):
+            parser.error("--before-5h and --after-5h must be provided together.")
+        if (args.before_weekly is None) != (args.after_weekly is None):
+            parser.error("--before-weekly and --after-weekly must be provided together.")
+        if args.before_5h is None and args.before_weekly is None:
+            parser.error(
+                "--record-burn requires at least one metric pair "
+                "(--before-5h/--after-5h or --before-weekly/--after-weekly)."
+            )
+
+        if args.state is not None:
+            target_state = args.state
+        else:
+            ws = Path(args.workspace)
+            if not ws.exists() or not ws.is_dir():
+                parser.exit(1, f"Burn recording failed: Workspace directory does not exist: {ws}\n")
+            target_state = ws / WORKSPACE_STATE
+
+        try:
+            summary = record_burn(
+                target_state,
+                provider=args.burn_provider,
+                model=args.burn_model,
+                effort=args.burn_effort,
+                unit_size=args.unit_size,
+                before_5h=args.before_5h,
+                after_5h=args.after_5h,
+                before_weekly=args.before_weekly,
+                after_weekly=args.after_weekly,
+                reset_occurred=args.reset_occurred,
+                now=eval_now,
+            )
+        except (ValueError, OSError, OverflowError, RecursionError) as err:
+            parser.exit(1, f"Burn recording failed: {err}\n")
+
+        if args.format == "json":
+            print(json.dumps(summary, indent=2, ensure_ascii=True))
+        else:
+            print(render_record_burn_markdown(summary), end="")
+        return 0
+
+    if (
+        args.burn_provider is not None
+        or args.burn_model is not None
+        or args.before_5h is not None
+        or args.after_5h is not None
+        or args.before_weekly is not None
+        or args.after_weekly is not None
+        or args.reset_occurred
+    ):
+        parser.error("--burn-provider, --burn-model, --before-*, --after-*, and --reset-occurred require --record-burn.")
+
     try:
         report = resolve_from_paths(
             workspace=args.workspace,
@@ -1884,6 +3137,8 @@ def main(argv=None):
             now=eval_now,
             stale_minutes=args.stale_minutes,
             cohort=args.cohort,
+            unit_size=args.unit_size,
+            safety_margin=args.safety_margin,
         )
     except (ValueError, OSError, OverflowError, RecursionError) as err:
         parser.exit(1, f"Lane resolution failed: {err}\n")

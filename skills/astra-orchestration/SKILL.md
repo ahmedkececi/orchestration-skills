@@ -160,9 +160,16 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
      test files, the Astra main loop runs read-only verification tests.
    - **Gemini lanes (`Hydrogen` `high`, `Neon` `high`/`medium`)** run via
      the Gemini runner configured in the project profile.
-6. **Pre-delegation gate.** Check live quota, split independent work,
-   choose the eligible lane and effort, and prepare a bounded brief. Record
-   the pool usage, unit, lane, and reason in the brief and checkpoint.
+6. **Pre-dispatch & post-unit quota gate.** Read live pool usage right before
+   dispatching each unit and right after it finishes (the 5-minute TTL is only
+   the upper bound for idle readings). Classify the unit size (`xs|s|m|l|xl`)
+   and run `resolve_lanes.py --unit-size <size>` — if a lane hits
+   `projected-overflow` (`projected >= 95%` stop on either the five-hour or
+   weekly window), **do not dispatch** to that lane; route to a healthy
+   fallback or split into smaller units. After completion, record real burn
+   with `resolve_lanes.py --record-burn` into `.orchestration/provider-state.json`
+   (`_calibration` EWMA, skipped automatically on window resets) and update the
+   brief/checkpoint with the pool usage, unit, lane, and reason.
 
 ## The four pools
 
@@ -340,7 +347,7 @@ Read the applicable reference file before executing any of the procedures below:
 | Reference | Mandatory trigger |
 |---|---|
 | [references/delegation-and-verification.md](references/delegation-and-verification.md) | Read before writing a worker brief, splitting parallel units, or running cross-family verification (`BLOCKER`/`NIT`, review circuit breaker, test integrity). |
-| [references/quota-and-failover.md](references/quota-and-failover.md) | Read when any pool nears thresholds (**85% weekly / 90% five-hour move; 90% weekly / 95% five-hour stop**), hits a rate/quota limit, times out/hangs, fails mid-edit, requires a handoff checkpoint, or recovers after context compaction / session resume. |
+| [references/quota-and-failover.md](references/quota-and-failover.md) | Read when checking pre-dispatch/post-unit quota, nearing unified thresholds (**90% move / 95% stop** for both five-hour and weekly windows) or `projected-overflow` (`--unit-size`), calibrating burn (`--record-burn`), handling rate/quota limits or timeouts/hangs, failing mid-edit, writing a handoff checkpoint, or recovering after context compaction / session resume. |
 | [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Read before invoking external runner CLIs (`codex exec`, `claude -p`, configured Gemini runner, DeepSeek), running `resolve_lanes.py` or reading benchmark snapshots, or recording `.orchestration/orchestration-ledger.md` entries. |
 
 **Mandatory worker return contract:** Every brief on every lane must end by requiring the 4-line return block: `STATUS: done | partial | blocked`, `RESULT`, `EVIDENCE`, and `NOT DONE`.

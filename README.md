@@ -89,6 +89,7 @@ flowchart LR
 | Resume from artifacts | The handoff records ownership, accepted decisions, remaining units and the next check. A new coordinator can pick up from the checkpoint when a quota window closes. |
 | Refresh without waiting for a release | The updater verifies model releases and measurements from their sources and refreshes the current workspace. The next routing decision can use that data immediately. |
 | Deterministic routing & safety guardrails | Rank authorized models offline with `resolve_lanes.py` from live measurements and quota state, while enforcing `BLOCKER`/`NIT` review circuit breakers (max 2 rounds), hung-lane timeout and compaction recovery, test integrity, and an external action gate (`git push`/publish forbidden for workers). |
+| Self-calibrating pre-dispatch quota guard | Checks live usage right before dispatching each unit and right after it finishes, projects consumption with `resolve_lanes.py --unit-size <xs\|s\|m\|l\|xl>` (`current + est_burn × safety_margin`), blocks `projected-overflow` units (e.g. an ~11% `l` task at 89% five-hour) before they hit a cap mid-work, and adapts automatically to your exact plan (Pro / Plus / Max / Team) via EWMA (`--record-burn`). |
 
 ### Why this instead of a framework or proxy?
 
@@ -103,7 +104,7 @@ flowchart LR
 > **How it stands out from open-source local proxies like OmniRoute:**
 > - **Zero daemon, zero proxy, zero token vault:** Never runs a local server or SQLite token store and never intercepts CLI OAuth traffic. `claude`, `codex`, and `agy` stay on their official native sign-ins and tool sandboxes.
 > - **Task-level orchestration, not HTTP request swapping:** Splits work into owned units with writable-path boundaries and routes each unit across 4 separate benchmark profiles (coding, reasoning, factual accuracy, knowledge/PDF) — instead of blindly rerouting a mid-session HTTP call after a `429`.
-> - **Proactive quota balancing & clean client handoffs:** Moves new units *before* exhaustion (85% weekly / 90% 5-hour) and transfers full manager ownership to another client via `.orchestration/orchestration-checkpoint.md` when a window closes.
+> - **Self-calibrating pre-dispatch quota guard & clean client handoffs:** Uses unified **90% move / 95% stop** thresholds for both 5-hour and weekly windows, checks live quota pre-dispatch and post-unit, projects unit burn via `resolve_lanes.py --unit-size` to block `projected-overflow` units (like an ~11% `l` task at 89% 5-hour) *before* they stall mid-work, auto-calibrates per-plan burn via EWMA (`--record-burn`), and transfers full manager ownership to another client via `.orchestration/orchestration-checkpoint.md` when a window closes.
 > - **Independent cross-family review & safety guardrails:** Verifies deliverables with a fresh reviewer from another model family, enforces a 2-round `BLOCKER`/`NIT` circuit breaker and test-integrity checks, blocks workers from external actions (`git push`/publish), and ranks lanes deterministically offline with `resolve_lanes.py` plus live benchmark updates.
 
 ### Choose a coordinator
@@ -187,7 +188,7 @@ All runtime artifacts live under `.orchestration/`:
 | `.orchestration/project-profile.md` | **Commit** | Authorized runners, data policy, writable paths, budget and verification commands (no secret values) |
 | `.orchestration/model-measurements.md` | **Commit** | Verified benchmark snapshot refreshed for this workspace |
 | `.orchestration/provider-catalogs.json` | **Commit** | Registered provider catalog sources added via `add-provider-orchestration-skills` |
-| `.orchestration/provider-state.json` | **Ignore** | Local account quota readings and reset windows |
+| `.orchestration/provider-state.json` | **Ignore** | Local account quota readings, reset windows, and self-calibrating EWMA burn history (`_calibration`) |
 | `.orchestration/orchestration-checkpoint.md` | **Ignore** | Active session handoff state |
 | `.orchestration/orchestration-ledger.md` | **Ignore** | Sanitized local routing history |
 
@@ -203,7 +204,8 @@ Add the ephemeral local state files to your repository's `.gitignore`:
 **FAQ**
 
 - **Do I need all four model providers?** Start with 1–2 pools and record the permitted model, effort, pool and roles for each worker in `.orchestration/project-profile.md`. Without the authorization block, the offline resolver shows an advisory ranking and leaves its recommendation empty.
-- **Can I use metered API keys instead of subscriptions?** Yes. The default thresholds (weekly 85% move / 90% stop; 5-hour 90% move / 95% stop) are tuned for rolling subscription pools, and you can record explicit API spending caps in `.orchestration/project-profile.md`.
+- **Can I use metered API keys instead of subscriptions?** Yes. The default unified thresholds (**90% move / 95% stop** for both 5-hour and weekly windows) are tuned for rolling subscription pools, and you can record explicit API spending caps in `.orchestration/project-profile.md`.
+- **How does the self-calibrating pre-dispatch quota guard adapt to my plan (Pro / Plus / Max / Team)?** Before each unit, the coordinator reads live quota and runs `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`projected = current + est_burn × safety_margin`), blocking any `projected-overflow` (`>= 95%`, such as an ~11% `l` unit at 89% five-hour) before work starts. After each unit finishes, it logs real before/after usage with `--record-burn` into `.orchestration/provider-state.json` (`_calibration` EWMA, automatically skipping EWMA updates on window resets), so burn estimates quickly converge to your exact subscription plan.
 - **Why didn't my client detect the skill?** Verify the folder name was kept intact (`sol-orchestration`, `opus-orchestration`, etc.) inside `.claude/skills/` (Claude Code) or `.agents/skills/` (Codex / Antigravity), then start a fresh session.
 
 Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
@@ -287,6 +289,7 @@ flowchart LR
 | Dosyalardan devam etme | Devir kaydı, sorumluları, alınan kararları, kalan işleri ve sıradaki kontrolü içerir. Kota penceresi dolduğunda yeni koordinatör kaldığı yerden devam edebilir. |
 | Yeni sürüm beklemeden güncelleme | Yenileme skill’i yeni çıkan modelleri ve ölçümlerini kaynaklarından doğrular. Bir sonraki yönlendirme kararı, çalışma alanındaki güncel veriyi kullanabilir. |
 | Deterministik yönlendirme ve güvenlik kuralları | Canlı ölçümler ve kota durumundan `resolve_lanes.py` ile yetkili modelleri çevrimdışı sıralar; `BLOCKER`/`NIT` inceleme devre kesicisini (en fazla 2 tur), zaman aşımı ve sıkıştırma kurtarmasını, test bütünlüğünü ve harici işlem kapısını (ajanlar için `git push`/yayınlama yasak) uygular. |
+| Kendini kalibre eden iş öncesi kota koruması | Her iş birimini başlatmadan hemen önce ve bitince canlı kotayı okur, `resolve_lanes.py --unit-size <xs\|s\|m\|l\|xl>` ile öngörülen tüketimi (`mevcut + tahmini_tüketim × güvenlik_payı`) hesaplar, `projected-overflow` birimlerini (örn. 5 saatlik %89’dayken ~%11 harcayan bir `l` görevi) yarıda limite takılmadan engeller ve EWMA (`--record-burn`) ile aboneliğinin gerçek hızına (Pro / Plus / Max / Team) otomatik uyum sağlar. |
 
 ### Neden bir framework veya proxy yerine bu?
 
@@ -301,7 +304,7 @@ flowchart LR
 > **OmniRoute gibi açık kaynaklı yerel proxy’lerden nasıl ayrışır?**
 > - **Sıfır arka plan servisi, sıfır proxy, sıfır token deposu:** Yerel sunucu veya SQLite token kasası çalıştırmaz, CLI OAuth trafiğini araya girerek yönlendirmez. `claude`, `codex` ve `agy` kendi resmî oturumları ve yerel araç/sandbox ortamlarıyla doğrudan çalışır.
 > - **Ham HTTP isteği değiştirme değil, görev düzeyinde orkestrasyon:** `429` hatası gelince oturum ortasında körü körüne API isteği yönlendirmek yerine, işi yazılabilir dosya sınırlarıyla birimlere böler ve her birimi 4 ayrı benchmark profiline (kodlama, muhakeme, olgusal doğruluk, bilgi/PDF) göre en uygun ajana verir.
-> - **Proaktif kota dengeleme ve temiz istemci devri:** Kota tükenmeden *önce* yeni birimleri taşır (haftalık %85 / 5 saatlik %90) ve pencere kapandığında koordinatörlüğü `.orchestration/orchestration-checkpoint.md` üzerinden başka bir istemciye kayıpsız devreder.
+> - **Kendini kalibre eden iş öncesi kota koruması ve temiz istemci devri:** Hem 5 saatlik hem haftalık pencerede birleşik **%90 taşıma / %95 durdurma** eşiklerini uygular; iş öncesi ve iş sonrası canlı kotayı okur, `resolve_lanes.py --unit-size` ile `projected-overflow` birimlerini (örn. 5 saatlik %89’dayken ~%11’lik bir `l` işini) yarıda durmadan *önce* engeller, EWMA (`--record-burn`) ile plana özel tüketimi otomatik kalibre eder ve pencere kapandığında koordinatörlüğü `.orchestration/orchestration-checkpoint.md` üzerinden başka bir istemciye kayıpsız devreder.
 > - **Farklı model ailesinden bağımsız inceleme ve güvenlik kapıları:** Çıktıyı başka bir model ailesinden taze bir inceleyiciye doğrulattırır, en fazla 2 turluk `BLOCKER`/`NIT` devre kesicisi ve test bütünlüğü kontrolü uygular, ajanların harici işlemlerini (`git push`/yayınlama) engeller ve `resolve_lanes.py` + canlı benchmark güncellemesiyle çevrimdışı deterministik sıralama yapar.
 
 ### Koordinatör seç
@@ -385,7 +388,7 @@ Tüm çalışma zamanı dosyaları `.orchestration/` altında tutulur:
 | `.orchestration/project-profile.md` | **Commit et** | Yetkili çalıştırıcılar, veri politikası, yazılabilir yollar, bütçe ve doğrulama komutları (gizli anahtar değerleri olmadan) |
 | `.orchestration/model-measurements.md` | **Commit et** | Bu çalışma alanı için yenilenmiş doğrulanmış benchmark özeti |
 | `.orchestration/provider-catalogs.json` | **Commit et** | `add-provider-orchestration-skills` ile kaydedilmiş sağlayıcı katalog kaynakları |
-| `.orchestration/provider-state.json` | **Yoksay** | Yerel hesap kota okumaları ve sıfırlanma pencereleri |
+| `.orchestration/provider-state.json` | **Yoksay** | Yerel hesap kota okumaları, sıfırlanma pencereleri ve kendini kalibre eden EWMA tüketim geçmişi (`_calibration`) |
 | `.orchestration/orchestration-checkpoint.md` | **Yoksay** | Aktif oturum devir kaydı |
 | `.orchestration/orchestration-ledger.md` | **Yoksay** | Temizlenmiş yerel yönlendirme geçmişi |
 
@@ -401,7 +404,8 @@ Geçici yerel durum dosyalarını deponun `.gitignore` dosyasına ekle:
 **SSS**
 
 - **Dört model sağlayıcısının hepsine ihtiyacım var mı?** 1–2 havuzla başlayabilir, her işçi için izin verdiğin model, efor, havuz ve rolleri `.orchestration/project-profile.md` dosyasına yazabilirsin. Yetki bloğu eksikse çevrimdışı yönlendirici bilgi amaçlı bir sıralama gösterir ve öneri alanını boş bırakır.
-- **Abonelik yerine ücretli API anahtarları kullanabilir miyim?** Evet. Varsayılan eşikler (haftalık %85 taşıma / %90 durdurma; 5 saatlik %90 taşıma / %95 durdurma) yenilenen abonelik havuzlarına göre ayarlanmıştır; `.orchestration/project-profile.md` içine açık API harcama sınırları da yazabilirsin.
+- **Abonelik yerine ücretli API anahtarları kullanabilir miyim?** Evet. Varsayılan birleşik eşikler (hem 5 saatlik hem haftalık pencereler için **%90 taşıma / %95 durdurma**) yenilenen abonelik havuzlarına göre ayarlanmıştır; `.orchestration/project-profile.md` içine açık API harcama sınırları da yazabilirsin.
+- **Kendini kalibre eden iş öncesi kota koruması benim planıma (Pro / Plus / Max / Team) nasıl uyum sağlar?** Koordinatör her iş biriminden önce canlı kotayı okur ve `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`öngörülen = mevcut + tahmini_tüketim × güvenlik_payı`) çalıştırarak `projected-overflow` (`>= %95`; örn. 5 saatlik %89’dayken ~%11’lik bir `l` işi) durumunu iş başlamadan engeller. Birim bitince gerçek önce/sonra kullanımını `--record-burn` ile `.orchestration/provider-state.json` (`_calibration` EWMA; pencere sıfırlanırsa EWMA güncellemesini otomatik atlar) içine kaydeder; böylece tahminler kendi abonelik planına hızla uyum sağlar.
 - **İstemcim skill’i neden görmüyor?** Klasör adının değiştirilmediğini (`sol-orchestration`, `opus-orchestration` vb.) ve Claude Code için `.claude/skills/`, Codex / Antigravity için `.agents/skills/` altında bulunduğunu doğrula, ardından yeni bir oturum başlat.
 
 İstemci belgeleri [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)

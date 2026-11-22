@@ -172,9 +172,16 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
      already leads the stack on Accuracy (84) and Knowledge work (92). Have
      `gemini-4-hydrogen` `high` extract or inspect wide batches, and have the
      Neon main loop spot-check key artifacts directly via `read_file`.
-5. **Pre-delegation gate.** Check live quota, split independent work,
-   choose the eligible lane and effort, and prepare a bounded brief. Record
-   the pool usage, unit, lane, and reason in the brief and checkpoint.
+5. **Pre-dispatch & post-unit quota gate.** Read live pool usage right before
+   dispatching each unit and right after it finishes (the 5-minute TTL is only
+   the upper bound for idle readings). Classify unit size (`xs|s|m|l|xl`) and
+   run `resolve_lanes.py --unit-size <size>` — if a lane hits
+   `projected-overflow` (`projected >= 95%` stop on either five-hour or weekly
+   window), **do not dispatch** to it; route to a healthy fallback or split
+   into smaller units. After completion, record real burn with
+   `resolve_lanes.py --record-burn` into `.orchestration/provider-state.json`
+   (`_calibration` EWMA, skipped automatically on window resets) and record the
+   pool usage, unit, lane, and reason in the brief and checkpoint.
 
 ## The four pools
 
@@ -363,7 +370,7 @@ Load the matching reference file before acting in any of these situations — do
 | Reference file | Load when | Mandatory reminder |
 |---|---|---|
 | [references/delegation-and-verification.md](references/delegation-and-verification.md) | Splitting work in parallel, shaping a delegate brief, or checking results on the verification ladder | Every brief on every lane must end with the 4-line return contract (`STATUS`, `RESULT`, `EVIDENCE`, `NOT DONE`); enforce `BLOCKER`/`NIT` review classification (max 2 rounds), high-stakes tie-breaker, and the Test Integrity Invariant. |
-| [references/quota-and-failover.md](references/quota-and-failover.md) | Checking pool headroom, approaching thresholds, handling rate/quota/timeout errors, failing over, recovering from compaction, or writing a checkpoint/handoff | Move delegated units at **85 %** weekly / **90 %** five-hour; stop new large jobs at **90 %** weekly / **95 %** five-hour; only the coordinator writes `.orchestration/*`; after compaction or resume, re-read `orchestration-checkpoint.md`, `provider-state.json`, and `git status --short` before spawning delegates. |
+| [references/quota-and-failover.md](references/quota-and-failover.md) | Checking pre-dispatch/post-unit quota, approaching thresholds or `projected-overflow`, calibrating burn, handling rate/quota/timeout errors, failing over, recovering from compaction, or writing a checkpoint/handoff | Unified thresholds for both five-hour and weekly windows: move delegated units at **90 %**, stop new large jobs at **95 %**; check live usage pre-dispatch (`resolve_lanes.py --unit-size`) and block `projected-overflow` (`>= 95 %`), then record burn post-unit (`--record-burn`); only the coordinator writes `.orchestration/*`; after compaction or resume, re-read `orchestration-checkpoint.md`, `provider-state.json`, and `git status --short` before spawning delegates. |
 | [references/cli-lanes-and-ledger.md](references/cli-lanes-and-ledger.md) | Launching Native Swarm, `claude -p`, `codex exec`, headless Gemini, or DeepSeek; resolving lanes deterministically; reading measurements; or logging to the routing ledger | Pin explicit `model` and `effort` on every call (non-interactive `< /dev/null`, `CI=true`), use `resolve_lanes.py` or `.orchestration/model-measurements.md` before the bundled archive, and log `scope_drift` / `first_pass_ok` to `.orchestration/orchestration-ledger.md`. |
 
 ## Exceptions

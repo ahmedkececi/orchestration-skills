@@ -220,9 +220,9 @@ class ProviderStateEvaluationTests(unittest.TestCase):
     def test_quota_move_and_stop_thresholds_and_headroom(self):
         raw = {
             "claude": fresh_state(five_hour_pct=90, weekly_pct=40),   # 5h move -> deprioritized, headroom 10
-            "codex": fresh_state(five_hour_pct=25, weekly_pct=85),    # weekly move -> deprioritized, headroom 15
+            "codex": fresh_state(five_hour_pct=25, weekly_pct=90),    # weekly move -> deprioritized, headroom 10
             "gemini": fresh_state(five_hour_pct=95, weekly_pct=40),   # 5h stop -> excluded
-            "deepseek": fresh_state(five_hour_pct=10, weekly_pct=90), # weekly stop -> excluded
+            "deepseek": fresh_state(five_hour_pct=10, weekly_pct=95), # weekly stop -> excluded
         }
         states, _ = resolve_lanes.parse_provider_state(raw, self.now, stale_minutes=45)
 
@@ -232,7 +232,7 @@ class ProviderStateEvaluationTests(unittest.TestCase):
 
         self.assertFalse(states["codex"]["excluded"])
         self.assertTrue(states["codex"]["deprioritized"])
-        self.assertEqual(states["codex"]["headroom"], 15.0)
+        self.assertEqual(states["codex"]["headroom"], 10.0)
 
         self.assertTrue(states["gemini"]["excluded"])
         self.assertEqual(states["gemini"]["effective_state"], "stopped")
@@ -287,7 +287,7 @@ class EquivalenceAndRankingTests(unittest.TestCase):
             make_candidate("unmeasured-lane", pool="deepseek", family="deepseek", coding=None, latency_s=100),
         ]
         raw_state = {
-            "codex": fresh_state(weekly_pct=87, five_hour_pct=20),   # deprioritized, headroom 13
+            "codex": fresh_state(weekly_pct=91, five_hour_pct=20),   # deprioritized, headroom 9
             "claude": fresh_state(weekly_pct=60, five_hour_pct=40),  # healthy, headroom 40
             "gemini": fresh_state(weekly_pct=30, five_hour_pct=20),  # healthy, headroom 70
             "deepseek": fresh_state(weekly_pct=None, five_hour_pct=None),  # healthy, unknown headroom
@@ -327,7 +327,7 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         ]
         raw_state = {
             "gemini": fresh_state(weekly_pct=40, five_hour_pct=30),
-            "codex": fresh_state(weekly_pct=87, five_hour_pct=25),   # deprioritized
+            "codex": fresh_state(weekly_pct=91, five_hour_pct=25),   # deprioritized
             "claude": fresh_state(weekly_pct=58, five_hour_pct=42),  # healthy
             "deepseek": fresh_state(weekly_pct=None, five_hour_pct=None),
         }
@@ -396,7 +396,7 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         raw_state = {
             "claude": fresh_state(weekly_pct=30, five_hour_pct=20),
             "Fable 5.2": fresh_state(status="down", down_until="2026-11-21T18:00:00Z", limit="model cap"),
-            "Opus 5.5": fresh_state(weekly_pct=87, five_hour_pct=20),
+            "Opus 5.5": fresh_state(weekly_pct=91, five_hour_pct=20),
         }
         states, _ = resolve_lanes.parse_provider_state(raw_state, self.now, 45)
         res = resolve_lanes.resolve_lanes(candidates, states, role="coding", state_loaded=True)
@@ -462,7 +462,7 @@ class EquivalenceAndRankingTests(unittest.TestCase):
         ]
         raw_state = {
             "gemini": fresh_state(weekly_pct=30, five_hour_pct=20),  # healthy, headroom 70
-            "codex": fresh_state(weekly_pct=87, five_hour_pct=20),   # deprioritized, headroom 13
+            "codex": fresh_state(weekly_pct=91, five_hour_pct=20),   # deprioritized, headroom 9
         }
         states, _ = resolve_lanes.parse_provider_state(raw_state, self.now, 45)
         res = resolve_lanes.resolve_lanes(candidates, states, role="coding", state_loaded=True)
@@ -629,7 +629,7 @@ class CliIntegrationTests(unittest.TestCase):
 
             state = {
                 "claude": fresh_state(five_hour_pct=20, weekly_pct=20),
-                "codex": fresh_state(five_hour_pct=20, weekly_pct=92),   # stopped!
+                "codex": fresh_state(five_hour_pct=20, weekly_pct=95),   # stopped!
                 "gemini": fresh_state(five_hour_pct=30, weekly_pct=40),
                 "deepseek": fresh_state(five_hour_pct=None, weekly_pct=None),
             }

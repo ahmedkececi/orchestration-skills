@@ -91,6 +91,29 @@ cohort when multiple live cohorts exist. Add `--author-family` for review and
 `--restricted-data` when the unit touches restricted data. The project still
 controls what each worker can access and which tools it can use.
 
+For pre-dispatch overflow protection and automatic plan calibration, pass
+`--unit-size <xs|s|m|l|xl>` (and optional `--safety-margin <1.0..3.0>`) before
+dispatching each unit, and run `--record-burn` right after the unit completes:
+
+```sh
+# 1. Pre-dispatch ranking with projected overflow guard (90% move / 95% stop)
+python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --role coding --unit-size l \
+  --state .orchestration/provider-state.json
+
+# 2. Post-unit burn calibration (updates live after-% and _calibration EWMA)
+python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --state .orchestration/provider-state.json \
+  --record-burn --burn-provider codex --burn-model gpt-6.2-sol --burn-effort high \
+  --unit-size l --before-5h 72 --after-5h 83 --before-weekly 40 --after-weekly 44
+```
+
+If a window resets mid-unit (`after < before`, or when `--reset-occurred` is
+passed), `--record-burn` skips the EWMA update for that reset window while
+still recording the live `after` percentage. Do not dispatch to any lane flagged
+`projected-overflow` (`projected >= 95%`); route to a healthy equivalent
+fallback or split the unit into smaller pieces.
+
 ## Routing ledger
 
 Append one line per delegation to `.orchestration/orchestration-ledger.md`: date, task type,

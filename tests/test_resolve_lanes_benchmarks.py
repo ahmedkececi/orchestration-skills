@@ -127,7 +127,7 @@ class BenchmarkProvenanceTests(unittest.TestCase):
         states, _ = resolve_lanes.parse_provider_state(
             {
                 "claude": {"weekly_pct": 20, "observed_at": "2026-11-21T15:59:00Z"},
-                "codex": {"weekly_pct": 88, "observed_at": "2026-11-21T15:59:00Z"},
+                "codex": {"weekly_pct": 91, "observed_at": "2026-11-21T15:59:00Z"},
             },
             now,
             5,
@@ -261,7 +261,7 @@ class BenchmarkProvenanceTests(unittest.TestCase):
         states, _ = resolve_lanes.parse_provider_state(
             {
                 "claude": {"weekly_pct": 20, "observed_at": "2026-11-21T15:59:00Z"},
-                "codex": {"weekly_pct": 92, "observed_at": "2026-11-21T15:59:00Z"},
+                "codex": {"weekly_pct": 96, "observed_at": "2026-11-21T15:59:00Z"},
             },
             now,
             5,

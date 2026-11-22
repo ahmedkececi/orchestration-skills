@@ -14,11 +14,11 @@ Reference companion to [SKILL.md](../SKILL.md).
   window too. Put code execution in Codex (`Sol`), large bulk in DeepSeek or
   `Luna`/`Terra`, and keep Gemini focused on media, visual inspection, wide
   source sweeps, and required cross-family reviews.
-- **Protect the main loop.** At 90 % of the five-hour window (or 85 % of the
-  weekly cap), move eligible delegated units off Gemini and keep
-  `.orchestration/orchestration-checkpoint.md` current; at 95 % of the
-  five-hour window (or 90 % of the weekly cap), stop starting new large Gemini
-  delegates, finish running units, update
+- **Protect the main loop.** At **90 %** of either the five-hour or weekly
+  window, move eligible delegated units off Gemini and keep
+  `.orchestration/orchestration-checkpoint.md` current; at **95 %** of either
+  window (or on pre-dispatch `projected-overflow`), stop starting new large
+  Gemini delegates, finish running units, update
   `.orchestration/orchestration-checkpoint.md` and the handover note, and
   switch cleanly if needed.
 - **Spend Astra last.** Astra drains the ChatGPT pool fastest; reserve it for
@@ -35,29 +35,70 @@ Reference companion to [SKILL.md](../SKILL.md).
 The aim is to keep working as long as possible with no drop in quality, and
 as fast as possible within that. Act **before** a pool runs dry, not after.
 
-1. **Read live usage, not estimates.** Gemini/Antigravity:
-   `swarm{action:"models"}` (`quotas`), Gemini runner usage logs, `/stats` if
-   Gemini CLI is present; Codex: `/status`; DeepSeek: provider quota or balance; Claude:
-   `.orchestration/provider-state.json` or operator `/usage`. Price-per-task figures do not
-   measure subscription burn.
-2. **Thresholds.** Past the "move" mark,
-   new delegated units go to the equivalent lane (the 1st fallback in the
-   ladder below) instead of queuing on the pool; past the "stop" mark, no
-   new large job starts there and running units finish. The main loop keeps
+1. **Read live usage right before dispatch and right after each unit, not
+   estimates.** Gemini/Antigravity: `swarm{action:"models"}` (`quotas`), Gemini
+   runner usage logs, `/stats` if Gemini CLI is present; Codex: `/status`;
+   DeepSeek: provider quota or balance; Claude:
+   `.orchestration/provider-state.json` or operator `/usage`. Price-per-task
+   figures do not measure subscription burn. Treat the 5-minute TTL as the upper
+   bound for idle readings only — always re-check live pool usage right before
+   dispatching a delegated unit and right after it finishes.
+2. **Unified thresholds (90 % move / 95 % stop for both five-hour and weekly
+   windows).** Past the "move" mark (**90 %**, `deprioritized`), new delegated
+   units go to the equivalent lane (the 1st fallback in the ladder below)
+   instead of queuing on the pool; past the "stop" mark (**95 %**, `blocked`),
+   no new large job starts there and running units finish. The main loop keeps
    working past both only as needed to finish checks and update the checkpoint.
 
-   | Pool | Move delegated units | Stop large jobs, write the checkpoint |
+   | Pool | Move delegated units (`deprioritized`) | Stop large jobs, write the checkpoint (`blocked`) |
    |---|---|---|
-   | Gemini/Neon five-hour, Hydrogen daily | **90 %** | **95 %** |
-   | Gemini/agy weekly | **85 %** | **90 %** |
-   | Codex weekly | **85 %** | **90 %** |
-   | Codex five-hour | **90 %** | **95 %** |
+   | Gemini/Neon five-hour & weekly, Hydrogen daily | **90 %** | **95 %** |
+   | Codex five-hour & weekly | **90 %** | **95 %** |
+   | Claude five-hour & weekly | **90 %** | **95 %** (keep the checkpoint current from 90 %) |
    | DeepSeek gateway daily, when applicable | **90 %** | **95 %** |
-   | Claude five-hour window | **90 %** | **95 %** (keep the checkpoint current from 90 %) |
-   | Claude weekly limit | **85 %** | **90 %** (keep the checkpoint current from 85 %) |
 
-   The five-hour window resets within hours, so it is used later; the weekly
-   limit costs days when it runs out, so delegated work leaves it earlier.
+   Both five-hour/daily and weekly windows share the same **90 % move / 95 %
+   stop** thresholds, paired with the self-calibrating pre-dispatch guard below
+   so a large unit cannot push an active window past 95 % mid-work.
+
+   **Pre-dispatch projected overflow guard & self-calibration (`_calibration`):**
+   Before dispatching each unit, classify its size and run
+   `resolve_lanes.py --unit-size <xs|s|m|l|xl>` against fresh live readings in
+   `.orchestration/provider-state.json`. The resolver computes
+   `projected = current + estimated_burn × safety_margin` for each known fresh
+   window:
+
+   | Unit size | Multiplier | Typical scope |
+   |---|---|---|
+   | `xs` | `0.25×` | One-line fix, single lookup, tiny config edit |
+   | `s` | `0.55×` | Small scoped edit, targeted test or quick check |
+   | `m` | `1.00×` | Standard single-module implementation, test suite or review |
+   | `l` | `1.90×` | Multi-file feature, refactor, migration or heavy cross-family review |
+   | `xl` | `3.20×` | Large multi-module sweep or migration (split into smaller units when headroom is tight) |
+
+   - **`projected-overflow` (`projected >= 95 %` stop):** The lane is marked
+     `blocked` and **must not receive the unit** (for example, Codex at 89 %
+     five-hour with an ~11 % `l` unit projects `89 % + 11 % × 1.2 = 102.2 % >= 95 %`).
+     Route to a healthy equivalent fallback or split the unit into smaller
+     pieces that fit safely below 95 %.
+   - **`projected-deprioritized` (`90 % <= projected < 95 %`):** The lane is
+     deprioritized so healthy equivalent lanes with headroom rank ahead of it.
+   - **Cold-start & automatic EWMA plan calibration:** On cold start (`0`
+     samples), `resolve_lanes.py` uses conservative medium-unit baselines
+     (`codex` 5.0%/2.0%, `claude` 6.0%/2.5%, `gemini` 4.5%/1.8%, `deepseek`
+     2.0%/1.0% for 5h/weekly, scaled by model weight) with `safety_margin = 1.40`
+     (dropping to `1.25` at 1–2 samples and adaptive
+     `min(1.50, max(1.15, max_ratio))` at 3+ samples; optional override
+     `--safety-margin <1.0..3.0>`). Right after each unit finishes, read live
+     usage again and run `resolve_lanes.py --record-burn` to update the EWMA
+     (`alpha = 0.35`) under `_calibration` in `.orchestration/provider-state.json`
+     (lane-specific `lanes["<provider>/<model>/<effort>"]` with `by_size` plus
+     pool-level `pools["<provider>"]`), so estimates automatically adapt to the
+     operator's exact subscription plan (Pro / Plus / Max / Team).
+   - **Window-reset guard:** If a window resets during a unit (`after < before`,
+     or `--reset-occurred` is passed), `resolve_lanes.py --record-burn`
+     automatically skips the EWMA update for that window while still recording
+     the fresh `after` percentage.
 3. **Spread by headroom.** When a fan-out has several equivalent lanes,
    split units in proportion to each pool's remaining allowance, not evenly.
    Available free capacity takes bulk first.
@@ -71,10 +112,10 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 5. **Gemini uses the standard pool thresholds.**
    Hydrogen covers media, wide reading and search, and Neon covers the main
    loop (here), second-eye work, independent review and media fallback.
-   Gemini follows the same **90 %** move / **95 %** stop (five-hour or daily)
-   and **85 %** move / **90 %** stop (weekly) thresholds as every other pool.
-   When Gemini nears 90 % (five-hour/daily) or 85 % (weekly), prioritize
-   main-loop turns, media and mandatory reviews.
+   Gemini follows the same **90 %** move / **95 %** stop thresholds across
+   both five-hour/daily and weekly windows as every other pool. When Gemini
+   nears 90 % on either window, prioritize main-loop turns, media and
+   mandatory reviews.
 6. **Raise verification for weaker fallbacks.** For Hydrogen's
    accuracy-heavy reading, Astra `medium` is **below** on accuracy. For
    Neon `high` review, Astra `medium` is **below** on accuracy, knowledge
@@ -181,13 +222,13 @@ Haiku together (a model-specific limit can leave the other Claude lanes availabl
 
 **When the Gemini / Antigravity pool runs low or goes down:**
 
-1. At **90 %** of the five-hour window or **85 %** of the weekly cap, move
+1. At **90 %** of either the five-hour or weekly window, move
    eligible delegated units off Gemini and keep
-   `.orchestration/orchestration-checkpoint.md` current; at **95 %** of the
-   five-hour window or **90 %** of the weekly cap, stop starting new large
-   Swarm/agy delegates, finish running units, update
-   `.orchestration/orchestration-checkpoint.md` and the handover note, and
-   switch cleanly before Antigravity refuses turns.
+   `.orchestration/orchestration-checkpoint.md` current; at **95 %** of either
+   window (or when pre-dispatch `resolve_lanes.py --unit-size` flags
+   `projected-overflow`), stop starting new large Swarm/agy delegates, finish
+   running units, update `.orchestration/orchestration-checkpoint.md` and the
+   handover note, and switch cleanly before Antigravity refuses turns.
 2. If the Gemini pool is exhausted and resets within ~30 minutes, wait rather
    than rebuilding the stack. Otherwise switch to **Claude
    (`fable-orchestration` / `opus-orchestration`)** or **Codex
@@ -237,11 +278,14 @@ pool that is down instead of rediscovering it.
 }
 ```
 
-- Check it before every spawn.
-- **Staleness / TTL (5 minutes).** Treat any entry whose `observed_at` is
-  `null` or older than **5 minutes** as `stale`. Never assume full headroom
-  from a stale reading; re-check live usage or route conservatively before
-  launching a fan-out.
+- **Pre-dispatch & post-unit checks + 5-minute TTL.** Check live usage right
+  before dispatching each unit (`resolve_lanes.py --unit-size <xs|s|m|l|xl>`)
+  and right after it finishes (`resolve_lanes.py --record-burn`, which updates
+  live `after` percentages and the reserved `_calibration` EWMA key inside
+  `.orchestration/provider-state.json`; `_calibration` is never treated as a
+  provider entry). Treat any entry whose `observed_at` is `null` or older than
+  **5 minutes** as `stale` — the 5-minute TTL is the upper bound for idle
+  readings, not permission to skip pre-dispatch or post-unit checks.
 - **Single-writer invariant.** Only the coordinator writes `.orchestration/*`
   state files (`provider-state.json`, `orchestration-checkpoint.md`,
   `orchestration-ledger.md`). Workers write only to their scoped deliverable
