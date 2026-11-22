@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-22
+
+### Added
+- **Self-calibrating pre-dispatch quota guard (`resolve_lanes.py` + all five coordinator presets):**
+  - Pre-dispatch projected usage protection via `--unit-size {xs,s,m,l,xl}` and optional `--safety-margin` — blocks lanes with `projected-overflow` (`projected >= 95%` stop, e.g., an ~11% `l` unit at `89%` five-hour usage) before dispatch and deprioritizes lanes at `projected >= 90%`.
+  - Post-unit EWMA burn calibration (`--record-burn`, `--burn-provider`, `--burn-model`, `--burn-effort`, `--before-5h`/`--after-5h`, `--before-weekly`/`--after-weekly`, `--reset-occurred`) stored under reserved key `_calibration` in `.orchestration/provider-state.json` (atomic writes with symlink guard and automatic window-reset skip when `after < before`), adapting automatically to each operator's subscription plan after 2–3 units.
+  - Mandatory pre-dispatch and post-unit quota checks across all five coordinator presets (retaining the 5-minute TTL as the upper bound for idle readings).
+- **Claude Code native plugin & marketplace support:** Added `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and 512×512 `.claude-plugin/icon.png` (passing `claude plugin validate` with zero warnings), enabling one-step installation via `/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills`.
+- **One-line zero-Node installer (`install.sh`):** POSIX `sh` installer supporting `--client codex|claude|antigravity`, `--preset`, `--with-provider`, `--dir`, `--ref`, `--source`, and `--dry-run`.
+- **Interactive browser Quota & Lane Simulator (`docs/index.html`, live on GitHub Pages):** Zero-dependency EN/TR simulator with 1:1 parity against `resolve_lanes.py`, featuring unified `90%`/`95%` thresholds, Unit Size (`XS–XL`), EWMA plan calibration profiles, a one-click `5h 89% + Large Unit (Projected Overflow)` scenario, and a modeled Quota Runway & Token Savings Estimator.
+- **Terminal demo GIF (`assets/demo.gif`)** embedded at the top of `README.md`, showcasing first-run CLI checks, deterministic quota routing, blind cross-family `BLOCKER` review, and checkpoint handoff.
+- **Concrete impact metrics & OmniRoute comparison (`README.md` EN/TR):** Added a clear comparison against open-source local AI gateways/proxies (such as OmniRoute and LiteLLM) and a transparent measured + modeled impact table.
+- **Live CLI model ID mapping in first-run bootstrap:** All five coordinator `SKILL.md` presets now detect and map reference model names to the live model IDs actually supported by the operator's installed CLIs/accounts when creating `.orchestration/project-profile.md`.
+- **Expanded test coverage (100 total unit tests):** Added tests for unified `90%`/`95%` boundaries, `projected-overflow`, `projected-deprioritized`, EWMA convergence, pool fallback, window-reset guard, symlink/input validation, Claude Code plugin manifests/icon, `install.sh`, `docs/index.html`, and `assets/demo.gif`.
+
+### Changed
+- **Unified quota thresholds across both 5-hour and weekly windows:** Standardized all routing logic, example profiles, walkthrough fixtures (`examples/provider-state.json` `codex.weekly_pct: 91`), docs, and simulator controls to **90% move (`deprioritized`) / 95% stop (`blocked`)** for both five-hour and weekly windows.
+- **Setup-first starter prompt:** Updated starter chat prompts in `README.md` and `examples/first-run.md` (EN/TR) so new users can copy-paste a single zero-placeholder prompt to check CLIs, sign in, initialize `.orchestration/`, and wait for their first task.
+
 ## [1.2.3] - 2026-11-22
 
 ### Added
