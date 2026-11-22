@@ -1,0 +1,42 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ultimate-orchestration-skills",
+  "owner": {
+    "name": "Ahmed Kececi",
+    "url": "https://ahmedkececi.com"
+  },
+  "metadata": {
+    "description": "Portable multi-agent orchestration skills with capability-based routing, proactive subscription quota balancing, and cross-family review.",
+    "version": "1.2.3"
+  },
+  "plugins": [
+    {
+      "name": "ultimate-orchestration-skills",
+      "source": "./",
+      "description": "Coordinator presets (Opus, Mythos/Fable, Sol, Astra, Neon), live benchmark updater, and provider onboarding skills for zero-proxy multi-agent orchestration.",
+      "version": "1.2.3",
+      "author": {
+        "name": "Ahmed Kececi",
+        "url": "https://ahmedkececi.com"
+      },
+      "homepage": "https://github.com/ahmedkececi/ultimate-orchestration-skills",
+      "repository": "https://github.com/ahmedkececi/ultimate-orchestration-skills",
+      "license": "MIT",
+      "keywords": [
+        "agent-skills",
+        "multi-agent",
+        "llm-routing",
+        "code-review",
+        "failover"
+      ],
+      "category": "productivity",
+      "strict": false,
+      "skills": [
+        "./skills/opus-orchestration",
+        "./skills/fable-orchestration",
+        "./skills/update-orchestration-skills",
+        "./skills/add-provider-orchestration-skills"
+      ]
+    }
+  ]
+}

@@ -6,7 +6,9 @@
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776ab)](#refresh-model-data-on-demand)
 [![GitHub Stars](https://img.shields.io/github/stars/ahmedkececi/ultimate-orchestration-skills?style=social)](https://github.com/ahmedkececi/ultimate-orchestration-skills)
 
-[English](#english) · [Türkçe](#türkçe) · [Offline demo](examples/first-run.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+[English](#english) · [Türkçe](#türkçe) · [Interactive simulator](https://ahmedkececi.github.io/ultimate-orchestration-skills/) · [Offline demo](examples/first-run.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+
+![Ultimate Orchestration Skills terminal demo](assets/demo.gif)
 
 ## English
 
@@ -18,11 +20,26 @@
 
 **What this is & prerequisites:** These are portable Markdown Agent Skills plus zero-dependency Python 3.9+ helper scripts for benchmark tracking — not an MCP server, proxy, or background daemon. You can start with 1–2 authorized model pools and add more subscriptions or APIs later; record your authorized lanes in `.orchestration/project-profile.md`, and any unconfigured lane is skipped in favor of your authorized pools.
 
-[Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [Resolve lanes offline](examples/first-run.md#resolve-lanes-deterministically-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
+[Interactive simulator](https://ahmedkececi.github.io/ultimate-orchestration-skills/) · [Try the offline benchmark preview](examples/first-run.md#preview-model-data-offline) · [Resolve lanes offline](examples/first-run.md#resolve-lanes-deterministically-offline) · [See a quota handoff](examples/first-run.md#follow-a-quota-handoff)
 
 ### Quick install
 
-From your project, choose the command for your client. The Codex and Claude Code commands each copy both coordinator options and the measurement updater. Choose one coordinator when starting a session. To install a single coordinator, omit the other coordinator's `--skill` flag. Add the optional provider skill by appending `--skill add-provider-orchestration-skills`.
+Pick the fastest option for your client — each installs the recommended coordinator preset(s) plus the live benchmark updater:
+
+**1. Claude Code native plugin (1 step, zero Node.js):**
+
+```text
+/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills
+```
+
+**2. One-line shell installer (no Node.js — Codex, Claude Code, Antigravity):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client codex
+# or: --client claude | --client antigravity | --preset sol --with-provider
+```
+
+**3. Skills CLI (`npx skills add`):**
 
 ```sh
 # Codex
@@ -34,24 +51,9 @@ npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --c
   --skill opus-orchestration --skill fable-orchestration --skill update-orchestration-skills
 ```
 
-For Antigravity, another coordinator, or an install without Node.js, clone once and copy the folders into your project (keep the original folder names):
+To install a single coordinator with `npx skills add`, omit the other coordinator's `--skill` flag; add the optional provider onboarding skill with `--skill add-provider-orchestration-skills` (or `--with-provider` in `install.sh`). Each coordinator preset uses progressive disclosure (`SKILL.md` plus on-demand `references/` files to save context tokens), so keep the full folder including `references/` if copying manually.
 
-```sh
-# Manual / Antigravity (replace neon-orchestration or target directory as needed)
-(
-  set -eu
-  install_dir=$(mktemp -d "${TMPDIR:-/tmp}/ultimate-orchestration-skills.XXXXXXXX")
-  trap 'rm -rf -- "$install_dir"' 0
-  git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git "$install_dir/repo"
-  mkdir -p .agents/skills
-  cp -R "$install_dir/repo/skills/neon-orchestration" \
-    "$install_dir/repo/skills/update-orchestration-skills" .agents/skills/
-)
-```
-
-Each coordinator preset uses progressive disclosure (`SKILL.md` plus on-demand `references/` files to save context tokens), so keep the full folder including `references/` when copying.
-
-[Skills CLI options](https://github.com/vercel-labs/skills#usage)
+[Skills CLI options](https://github.com/vercel-labs/skills#usage) · [Inspect `install.sh`](install.sh)
 
 ### How it works
 
@@ -65,6 +67,17 @@ flowchart LR
     REV -->|"Passes checks"| OK["Accept & Merge"]
     REV -->|"Finds issues"| R
 ```
+
+### Concrete impact
+
+| Metric | Impact | Basis |
+| --- | --- | --- |
+| **Upfront skill context load** | **~49–55% fewer tokens** | *Measured* — lossless progressive disclosure splitting `SKILL.md` + on-demand `references/` |
+| **Primary flagship quota runway** | **~2.2× – 3.5× longer** before hitting a cap | *Modeled* for 2–3 active pools + offloading non-flagship units (`Sol` coordinator is also ~2.5× lighter on Codex quota than `Astra`) |
+| **Flagship model token consumption** | **~40–65% fewer flagship tokens** | *Modeled* — offloading routine coding, PDF/media reading, and bulk cleanup to specialized/lighter lanes + compact 4-line delegation return + 2-round `BLOCKER` circuit breaker |
+| **Total session token overhead** | **~25–45% fewer tokens overall** | *Modeled* — eliminating redundant wide reads in the main loop and long retry loops |
+
+*Methodology note:* Upfront skill context reduction is measured directly from this repository's progressive-disclosure split. Quota runway and token ranges are modeled estimates for typical 2–3 pool workflows and vary by task mix, active subscriptions, and effort levels. Try the [interactive simulator](https://ahmedkececi.github.io/ultimate-orchestration-skills/) to calculate custom estimates for your own stack.
 
 ### What makes it different
 
@@ -103,7 +116,7 @@ flowchart LR
 | [Mythos/Fable](skills/fable-orchestration/) | `/fable-orchestration` | Claude Code (`Mythos` or `Fable`) | Frontier Claude coordinator with scarce allowance; offloads routine execution to Codex and Sonnet | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Everyday Claude Code coordinator, or failover when Mythos/Fable allowance is spent | `.claude/skills/` |
 
-1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `npx skills add` or the manual copy snippet). Keep all skill folder names unchanged.
+1. Install the chosen coordinator folder and the [update skill folder](skills/update-orchestration-skills/) into the **Project location** above (via `/plugin install`, `install.sh`, or `npx skills add`). Keep all skill folder names unchanged.
 2. Start a chat in your project root using the **Command** column above (`/<folder-name>` in Claude Code or Antigravity, `$<folder-name>` in Codex). On a fresh repository where `.orchestration/` does not exist yet, the coordinator automatically checks which worker CLIs (`claude`, `codex`, `agy`) are installed and signed in, asks which pools you want to enable, helps you install (with your approval) and sign in to any missing or signed-out CLI you want to use, and then creates `.orchestration/project-profile.md` (with its `<!-- orchestration-lanes:v1 -->` block) and `.orchestration/provider-state.json` before starting your task. *(If you prefer manual setup first, copy `project-profile.example.md` from your coordinator folder to `.orchestration/project-profile.md` and reference it from `CLAUDE.md` or `AGENTS.md`.)*
 
 #### What to type in chat
@@ -205,11 +218,26 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 
 **Bu nedir ve gereksinimler:** Bu depo, bir MCP sunucusu, vekil (proxy) veya arka plan servisi değil; taşınabilir Markdown Agent Skill’leri ile benchmark takibi için sıfır bağımlılıklı Python 3.9+ yardımcı betiklerinden oluşur. 1–2 yetkili model havuzuyla başlayıp daha sonra yeni abonelikler veya API’ler ekleyebilirsin; yetkili hatlarını `.orchestration/project-profile.md` dosyasına kaydettiğinde yapılandırılmamış her hat atlanarak yetkili havuzların kullanılır.
 
-[API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Çevrimdışı hat seçimi](examples/first-run.md#resolve-lanes-deterministically-offline) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
+[Etkileşimli simülatör](https://ahmedkececi.github.io/ultimate-orchestration-skills/) · [API anahtarı gerektirmeyen demo](examples/first-run.md#türkçe-kısa-başlangıç) · [Çevrimdışı hat seçimi](examples/first-run.md#resolve-lanes-deterministically-offline) · [Kota devri örneği](examples/first-run.md#follow-a-quota-handoff)
 
 ### Hızlı kurulum
 
-Proje dizininde istemcine uygun komutu seç. Codex ve Claude Code komutları ikişer koordinatör seçeneğini ve ölçüm güncelleyicisini projeye kopyalar. Oturum başında bir koordinatör seç. Tek bir koordinatör kurmak için diğer koordinatörün `--skill` seçeneğini kaldır. Sağlayıcı ekleme skill’ini de kurmak için komutun sonuna `--skill add-provider-orchestration-skills` ekle.
+İstemcin için en hızlı yöntemi seç — her biri önerilen koordinatör profil(ler)ini ve canlı benchmark güncelleyicisini kurar:
+
+**1. Claude Code yerel eklentisi (tek adım, Node.js gerekmez):**
+
+```text
+/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills
+```
+
+**2. Tek satırlık kabuk kurucusu (Node.js gerekmez — Codex, Claude Code, Antigravity):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client codex
+# veya: --client claude | --client antigravity | --preset sol --with-provider
+```
+
+**3. Skills CLI (`npx skills add`):**
 
 ```sh
 # Codex
@@ -221,24 +249,9 @@ npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --c
   --skill opus-orchestration --skill fable-orchestration --skill update-orchestration-skills
 ```
 
-Antigravity, farklı bir koordinatör veya Node.js olmadan kurulum için depoyu bir kez klonlayıp ilgili klasörleri projene kopyala (orijinal klasör adlarını koru):
+`npx skills add` ile tek bir koordinatör kurmak için diğer koordinatörün `--skill` seçeneğini kaldır; isteğe bağlı sağlayıcı ekleme skill’ini kurmak için `--skill add-provider-orchestration-skills` (veya `install.sh` içinde `--with-provider`) ekle. Her koordinatör profili aşamalı yükleme (`SKILL.md` ve bağlam token’larından tasarruf etmek için gerektiğinde yüklenen `references/` dosyaları) kullanır; bu nedenle elle kopyalarken `references/` dahil klasörün tamamını koru.
 
-```sh
-# Elle kurulum / Antigravity (neon-orchestration veya hedef dizini ihtiyacına göre değiştir)
-(
-  set -eu
-  install_dir=$(mktemp -d "${TMPDIR:-/tmp}/ultimate-orchestration-skills.XXXXXXXX")
-  trap 'rm -rf -- "$install_dir"' 0
-  git clone --depth 1 https://github.com/ahmedkececi/ultimate-orchestration-skills.git "$install_dir/repo"
-  mkdir -p .agents/skills
-  cp -R "$install_dir/repo/skills/neon-orchestration" \
-    "$install_dir/repo/skills/update-orchestration-skills" .agents/skills/
-)
-```
-
-Her koordinatör profili aşamalı yükleme (`SKILL.md` ve bağlam token’larından tasarruf etmek için gerektiğinde yüklenen `references/` dosyaları) kullanır; bu nedenle kopyalarken `references/` dahil klasörün tamamını koru.
-
-[Skills CLI seçenekleri](https://github.com/vercel-labs/skills#usage)
+[Skills CLI seçenekleri](https://github.com/vercel-labs/skills#usage) · [`install.sh` betiğini incele](install.sh)
 
 ### Nasıl çalışır?
 
@@ -252,6 +265,17 @@ flowchart LR
     REV -->|"Kontroller geçti"| OK["Kabul Et ve Birleştir"]
     REV -->|"Eksik bulundu"| R
 ```
+
+### Somut etki
+
+| Metrik | Etki | Dayanak |
+| --- | --- | --- |
+| **Başlangıç skill bağlam yükü** | **~%49–55 daha az token** | *Ölçüldü* — `SKILL.md` + gerektiğinde yüklenen `references/` ile kayıpsız aşamalı yükleme |
+| **Birincil amiral gemisi kota ömrü** | Limite ulaşmadan **~2,2× – 3,5× daha uzun** | *Modellendi* — 2–3 aktif havuz + rutin iş birimlerini devretme (`Sol` koordinatörü de Codex kotasında `Astra`’dan ~2,5× daha hafiftir) |
+| **Amiral gemisi model token tüketimi** | **~%40–65 daha az amiral gemisi token’ı** | *Modellendi* — rutin kodlama, PDF/medya okuma ve toplu temizliği uzman/daha hafif hatlara devretme + 4 satırlık kompakt dönüş + en fazla 2 turluk `BLOCKER` devre kesici |
+| **Toplam oturum token yükü** | **Genelde ~%25–45 daha az token** | *Modellendi* — ana döngüdeki gereksiz geniş okumaları ve uzun tekrar döngülerini ortadan kaldırma |
+
+*Yöntem notu:* Başlangıç skill bağlam tasarrufu doğrudan bu depodaki aşamalı yükleme ayrımından ölçülmüştür. Kota ömrü ve token aralıkları tipik 2–3 havuzlu iş akışları için modellenmiş tahminlerdir; görev dağılımına, aktif aboneliklere ve efor seviyelerine göre değişir. Kendi yığının için özel tahmin hesaplamak üzere [etkileşimli simülatörü](https://ahmedkececi.github.io/ultimate-orchestration-skills/) deneyebilirsin.
 
 ### Neyi farklı yapıyor?
 
@@ -290,7 +314,7 @@ flowchart LR
 | [Mythos/Fable](skills/fable-orchestration/) | `/fable-orchestration` | Claude Code (`Mythos` veya `Fable`) | Kısıtlı kotalı en üst düzey Claude koordinatörü; rutin uygulamayı Codex ve Sonnet’e devreder | `.claude/skills/` |
 | [Opus](skills/opus-orchestration/) | `/opus-orchestration` | Claude Code (`Claude Opus 5.5`, high/xhigh) | Günlük Claude Code koordinatörü veya Mythos/Fable kotası dolduğunda devralma seçeneği | `.claude/skills/` |
 
-1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`npx skills add` veya elle kopyalama komutuyla). Tüm skill klasör adlarını olduğu gibi koru.
+1. Seçtiğin koordinatör klasörünü ve [yenileme skill’i klasörünü](skills/update-orchestration-skills/) yukarıdaki **Projedeki konumu** dizinine kur (`/plugin install`, `install.sh` veya `npx skills add` ile). Tüm skill klasör adlarını olduğu gibi koru.
 2. Proje dizininde istemcini aç ve yukarıdaki **Komut** sütunundaki adla sohbeti başlat (Claude Code ve Antigravity’de `/<klasör-adı>`, Codex’te `$<klasör-adı>`). Çalışma alanında `.orchestration/` henüz yoksa koordinatör durmak yerine önce hangi çalışan CLI’ların (`claude`, `codex`, `agy`) kurulu ve oturum açık olduğunu kontrol eder, hangi havuzları kullanmak istediğini sorar, eksik veya oturumu kapalı olanlar için (onayınla) kurulum ve oturum açma adımlarında seni yönlendirir; ardından `.orchestration/project-profile.md` (JSON yetki bloğuyla) ve `.orchestration/provider-state.json` dosyalarını oluşturup görevine başlar. *(İstersen önceden elle de `project-profile.example.md` dosyasını `.orchestration/project-profile.md` olarak kopyalayıp `CLAUDE.md` veya `AGENTS.md` içinden referans verebilirsin.)*
 
 #### Chate ne yazarak başlarsın?

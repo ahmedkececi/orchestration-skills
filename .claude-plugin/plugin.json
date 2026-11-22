@@ -1,0 +1,22 @@
+{
+  "name": "ultimate-orchestration-skills",
+  "version": "1.2.3",
+  "description": "Multi-agent orchestration skills for Claude Code, Codex & Antigravity — capability-based routing, subscription quota handoffs & cross-family review.",
+  "author": {
+    "name": "Ahmed Kececi",
+    "url": "https://ahmedkececi.com"
+  },
+  "homepage": "https://github.com/ahmedkececi/ultimate-orchestration-skills",
+  "repository": "https://github.com/ahmedkececi/ultimate-orchestration-skills",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "multi-agent-orchestration",
+    "llm-routing",
+    "quota-balancing",
+    "cross-family-review",
+    "claude-code",
+    "codex",
+    "antigravity"
+  ]
+}

@@ -2,6 +2,8 @@
 
 This walkthrough has three parts. Run the measurement helper against an example bundle, resolve authorized lanes deterministically from a sample quota state without signing in, then read a sample handoff at a quota limit. The models, scores and quota readings in this example are fixtures. They do not rank real providers.
 
+> **Want to explore routing & quota savings in your browser first?** Try the [interactive browser simulator](https://ahmedkececi.github.io/ultimate-orchestration-skills/) with zero setup. Ready to install right away? Use `/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills` in Claude Code or the [one-line `install.sh` installer](../README.md#quick-install).
+
 ## Preview model data offline
 
 With Git and Python 3.9 or newer:
@@ -120,6 +122,8 @@ After installing a coordinator skill, open your client in the project root and s
    *(Replace `/` with `$` in Codex.)*
 
 ## Türkçe kısa başlangıç
+
+> **Yönlendirmeyi ve kota tasarrufunu önce tarayıcıda denemek ister misin?** Kurulum gerektirmeyen [etkileşimli tarayıcı simülatörünü](https://ahmedkececi.github.io/ultimate-orchestration-skills/) aç. Hemen kurmaya hazırsan Claude Code’da `/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills` komutunu veya [tek satırlık `install.sh` kurucusunu](../README.md#hızlı-kurulum) kullanabilirsin.
 
 ### Chate ne yazarak başlarsın?
 

@@ -1,0 +1,3391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Ultimate Orchestration Skills — Interactive Quota &amp; Lane Simulator</title>
+  <meta name="description" content="Interactive browser simulator for Ultimate Orchestration Skills: test deterministic multi-agent lane routing, subscription quota thresholds, cross-family reviews, and runway savings.">
+  <style>
+    :root {
+      --bg: #080c15;
+      --bg-elev: #0f1626;
+      --bg-card: #121b2e;
+      --bg-card-2: #162138;
+      --bg-input: #0a101e;
+      --border: rgba(148, 163, 184, 0.16);
+      --border-strong: rgba(148, 163, 184, 0.28);
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --text-muted: #64748b;
+      --indigo: #818cf8;
+      --indigo-solid: #6366f1;
+      --indigo-soft: rgba(99, 102, 241, 0.16);
+      --emerald: #34d399;
+      --emerald-solid: #10b981;
+      --emerald-soft: rgba(16, 185, 129, 0.14);
+      --cyan: #38bdf8;
+      --cyan-soft: rgba(56, 189, 248, 0.14);
+      --amber: #fbbf24;
+      --amber-solid: #f59e0b;
+      --amber-soft: rgba(245, 158, 11, 0.15);
+      --rose: #fb7185;
+      --rose-solid: #ef4444;
+      --rose-soft: rgba(239, 68, 68, 0.15);
+      --violet: #c084fc;
+      --violet-soft: rgba(192, 132, 252, 0.15);
+      --radius: 14px;
+      --radius-sm: 9px;
+      --shadow: 0 18px 40px -22px rgba(2, 6, 23, 0.85);
+      --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(900px 460px at 14% -6%, rgba(99, 102, 241, 0.18), transparent 60%),
+        radial-gradient(760px 420px at 88% 4%, rgba(16, 185, 129, 0.12), transparent 58%);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--indigo); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre, .mono { font-family: var(--font-mono); }
+    .num { font-variant-numeric: tabular-nums; }
+
+    /* Header */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: rgba(8, 12, 21, 0.82);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      font-size: 1rem;
+    }
+    .brand:hover { text-decoration: none; }
+    .brand-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--indigo-solid), var(--emerald-solid));
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+    }
+    .version-pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--indigo-soft);
+      color: var(--indigo);
+      border: 1px solid rgba(129, 140, 248, 0.28);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 0.875rem;
+      color: var(--text-dim);
+    }
+    .nav-links a { color: var(--text-dim); font-weight: 500; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .lang-toggle {
+      display: inline-flex;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 2px;
+    }
+    .lang-btn {
+      border: 0;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 5px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+    }
+    .lang-btn.active {
+      background: var(--indigo-solid);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.45);
+    }
+    .gh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .gh-btn:hover {
+      border-color: var(--indigo);
+      background: var(--bg-card-2);
+      text-decoration: none;
+    }
+
+    /* Main container */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 12px 0 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.75rem, 3.2vw, 2.55rem);
+      line-height: 1.16;
+      letter-spacing: -0.03em;
+      background: linear-gradient(110deg, #ffffff 15%, #c7d2fe 58%, #6ee7b7 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 78ch;
+      color: var(--text-dim);
+      font-size: 1rem;
+    }
+    .rule-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .rule-chip {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      background: rgba(15, 22, 38, 0.9);
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rule-chip strong { color: var(--text); font-weight: 600; }
+
+    /* Section headers */
+    .section {
+      margin-top: 28px;
+      scroll-margin-top: 76px;
+    }
+    .section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      margin: 0;
+      font-size: 1.32rem;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-kicker {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--indigo);
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .section-sub {
+      margin: 3px 0 0;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    /* Scenario bar */
+    .scenario-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .scenario-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+    .scenario-btn {
+      border: 1px solid var(--border-strong);
+      background: var(--bg-card);
+      color: var(--text-dim);
+      font-size: 0.81rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .scenario-btn:hover {
+      color: var(--text);
+      border-color: var(--indigo);
+      background: var(--bg-card-2);
+    }
+    .scenario-btn.active {
+      background: var(--indigo-soft);
+      border-color: var(--indigo);
+      color: #e0e7ff;
+    }
+
+    /* Simulator Grid */
+    .sim-grid {
+      display: grid;
+      grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .panel-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .control-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .control-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+    }
+    .control-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Preset cards */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .preset-btn {
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-dim);
+      border-radius: var(--radius-sm);
+      padding: 8px 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .preset-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .preset-btn.active {
+      background: var(--indigo-soft);
+      border-color: var(--indigo);
+      color: var(--text);
+    }
+    .preset-name { font-size: 0.82rem; font-weight: 700; }
+    .preset-client { font-size: 0.67rem; color: var(--text-muted); }
+    .preset-btn.active .preset-client { color: #c7d2fe; }
+
+    .preset-meta {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Segmented buttons */
+    .seg-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .seg-btn {
+      flex: 1 1 auto;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-dim);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .seg-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .seg-btn.active {
+      background: var(--indigo-soft);
+      border-color: var(--indigo);
+      color: #eef2ff;
+    }
+    .seg-sm .seg-btn { padding: 5px 8px; font-size: 0.75rem; }
+
+    /* Review author box */
+    .author-box {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(192, 132, 252, 0.08);
+      border: 1px solid rgba(192, 132, 252, 0.28);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .author-box.hidden { display: none; }
+    .formula-note {
+      font-size: 0.74rem;
+      color: #d8b4fe;
+    }
+
+    /* Switch row */
+    .switch-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch-card.active {
+      border-color: rgba(251, 191, 36, 0.55);
+      background: rgba(245, 158, 11, 0.09);
+    }
+    .switch-title { font-size: 0.84rem; font-weight: 700; display: block; }
+    .switch-desc { font-size: 0.74rem; color: var(--text-dim); display: block; }
+    .toggle-pill {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      border-radius: 999px;
+      background: #1e293b;
+      border: 1px solid var(--border-strong);
+      flex-shrink: 0;
+      transition: background 0.16s ease;
+    }
+    .toggle-pill::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      transition: transform 0.16s ease, background 0.16s ease;
+    }
+    input[type="checkbox"]:checked + .toggle-pill {
+      background: var(--amber-solid);
+      border-color: var(--amber);
+    }
+    input[type="checkbox"]:checked + .toggle-pill::after {
+      transform: translateX(18px);
+      background: #080c15;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      border: 0;
+    }
+
+    /* Pool quota cards */
+    .pool-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pool-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 11px 12px;
+      transition: border-color 0.15s ease;
+    }
+    .pool-card.state-deprioritized { border-color: rgba(245, 158, 11, 0.48); }
+    .pool-card.state-stopped, .pool-card.state-down { border-color: rgba(239, 68, 68, 0.5); }
+    .pool-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pool-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+    .pool-name { font-size: 0.86rem; font-weight: 700; }
+    .pool-headroom {
+      font-size: 0.74rem;
+      color: var(--text-dim);
+    }
+    .outage-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      cursor: pointer;
+      user-select: none;
+    }
+    .outage-toggle input { accent-color: var(--rose-solid); cursor: pointer; }
+    .outage-toggle.is-down { color: var(--rose); }
+    .slider-row {
+      display: grid;
+      grid-template-columns: 78px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .slider-label { font-size: 0.74rem; color: var(--text-dim); }
+    .slider-val {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: right;
+    }
+    .slider-wrap { position: relative; display: flex; align-items: center; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #1e293b;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]:disabled { opacity: 0.35; cursor: not-allowed; }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      border: 2px solid var(--indigo-solid);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      border: 2px solid var(--indigo-solid);
+    }
+    .threshold-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      padding-left: 86px;
+      padding-right: 50px;
+      margin-top: 2px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 0.71rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .b-healthy { background: var(--emerald-soft); color: var(--emerald); border-color: rgba(52, 211, 153, 0.3); }
+    .b-equivalent { background: var(--cyan-soft); color: var(--cyan); border-color: rgba(56, 189, 248, 0.3); }
+    .b-deprioritized { background: var(--amber-soft); color: var(--amber); border-color: rgba(251, 191, 36, 0.35); }
+    .b-blocked, .b-outage, .b-restricted { background: var(--rose-soft); color: var(--rose); border-color: rgba(251, 113, 133, 0.35); }
+    .b-same-family { background: var(--violet-soft); color: var(--violet); border-color: rgba(192, 132, 252, 0.35); }
+    .b-below { background: rgba(148, 163, 184, 0.12); color: var(--text-dim); border-color: rgba(148, 163, 184, 0.22); }
+    .b-modeled { background: var(--indigo-soft); color: var(--indigo); border-color: rgba(129, 140, 248, 0.3); }
+    .b-measured { background: var(--emerald-soft); color: var(--emerald); border-color: rgba(52, 211, 153, 0.35); }
+
+    /* Recommended Lane Spotlight Card */
+    .rec-card {
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      background: linear-gradient(150deg, rgba(16, 185, 129, 0.12), rgba(15, 22, 38, 0.96) 52%);
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rec-card.is-warn {
+      background: linear-gradient(150deg, rgba(245, 158, 11, 0.13), rgba(15, 22, 38, 0.96) 52%);
+      border-color: rgba(251, 191, 36, 0.45);
+    }
+    .rec-card.is-empty {
+      background: linear-gradient(150deg, rgba(239, 68, 68, 0.13), rgba(15, 22, 38, 0.96) 52%);
+      border-color: rgba(251, 113, 133, 0.45);
+    }
+    .rec-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .rec-kicker {
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--emerald);
+      margin-bottom: 4px;
+    }
+    .rec-card.is-warn .rec-kicker { color: var(--amber); }
+    .rec-card.is-empty .rec-kicker { color: var(--rose); }
+    .rec-model {
+      font-size: 1.38rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .rec-effort {
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+    }
+    .rec-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .rec-stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .rec-stat-box {
+      background: rgba(8, 12, 21, 0.65);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      min-width: 88px;
+      text-align: center;
+    }
+    .rec-stat-val { font-size: 1.18rem; font-weight: 800; display: block; }
+    .rec-stat-lbl { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .why-box {
+      background: rgba(8, 12, 21, 0.62);
+      border-left: 3px solid var(--emerald);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.88rem;
+      color: #e2e8f0;
+    }
+    .rec-card.is-warn .why-box { border-left-color: var(--amber); }
+    .rec-card.is-empty .why-box { border-left-color: var(--rose); }
+    .why-box strong { color: #fff; }
+    .recovery-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .mini-action-btn {
+      border: 1px solid var(--indigo);
+      background: var(--indigo-soft);
+      color: #e0e7ff;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 6px 11px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .mini-action-btn:hover { background: rgba(99, 102, 241, 0.28); }
+    .warnings-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .warnings-list li {
+      font-size: 0.79rem;
+      color: var(--amber);
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.22);
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+
+    /* Candidates Table */
+    .table-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .table-title { font-size: 0.92rem; font-weight: 700; margin: 0; }
+    .table-meta { font-size: 0.78rem; color: var(--text-dim); }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    th {
+      text-align: left;
+      padding: 9px 10px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      background: rgba(15, 22, 38, 0.92);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.09);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr.row-winner { background: rgba(16, 185, 129, 0.08); }
+    tr.row-excluded { opacity: 0.72; background: rgba(239, 68, 68, 0.03); }
+    .rank-num {
+      font-weight: 800;
+      color: var(--text-dim);
+      font-size: 0.84rem;
+    }
+    tr.row-winner .rank-num { color: var(--emerald); }
+    .model-cell-main { font-weight: 700; color: var(--text); }
+    .model-cell-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+    .badges-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+    .hr-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+    .hr-track {
+      width: 48px;
+      height: 6px;
+      border-radius: 999px;
+      background: #1e293b;
+      overflow: hidden;
+    }
+    .hr-fill { height: 100%; border-radius: 999px; }
+    .show-unauth-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+    .link-btn {
+      background: transparent;
+      border: 0;
+      color: var(--indigo);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+    .link-btn:hover { text-decoration: underline; }
+
+    /* Code blocks */
+    .code-box {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .code-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      background: rgba(15, 22, 38, 0.9);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .code-pre {
+      margin: 0;
+      padding: 12px;
+      overflow-x: auto;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .copy-btn {
+      border: 1px solid var(--border-strong);
+      background: var(--bg-card);
+      color: var(--text);
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .copy-btn:hover { border-color: var(--indigo); color: #e0e7ff; }
+    .copy-btn.copied {
+      background: var(--emerald-soft);
+      border-color: var(--emerald);
+      color: var(--emerald);
+    }
+
+    details.collapsible {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+    details.collapsible summary {
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    details.collapsible summary:hover { color: var(--text); }
+    details.collapsible[open] summary { margin-bottom: 10px; color: var(--text); }
+
+    /* Estimator section */
+    .est-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 15px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .kpi-card.is-measured {
+      border-color: rgba(52, 211, 153, 0.38);
+      background: linear-gradient(155deg, rgba(16, 185, 129, 0.09), var(--bg-card) 60%);
+    }
+    .kpi-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .kpi-label { font-size: 0.8rem; font-weight: 600; color: var(--text-dim); }
+    .kpi-val {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .kpi-card.is-measured .kpi-val { color: var(--emerald); }
+    .kpi-note { font-size: 0.76rem; color: var(--text-muted); }
+
+    .burn-compare {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .burn-row-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .stacked-bar {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: #1e293b;
+      overflow: hidden;
+      display: flex;
+    }
+    .seg-flagship { background: var(--indigo-solid); }
+    .seg-offload { background: var(--cyan); }
+    .seg-saved { background: var(--emerald-solid); }
+    .seg-single { background: linear-gradient(90deg, #f43f5e, #fb923c); }
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+    .mix-row {
+      display: grid;
+      grid-template-columns: 145px 1fr 44px;
+      align-items: center;
+      gap: 8px;
+      margin-top: 7px;
+    }
+    .mix-label { font-size: 0.8rem; color: var(--text-dim); }
+    .mix-pct { font-size: 0.8rem; font-weight: 700; text-align: right; color: var(--text); }
+    .assumptions-body {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      line-height: 1.55;
+    }
+    .assumptions-body ul { margin: 0; padding-left: 18px; }
+    .assumptions-body li { margin-bottom: 4px; }
+
+    /* Install & CTA Section */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .install-card {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .install-card h3 {
+      margin: 0;
+      font-size: 0.96rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .install-card p { margin: 0; font-size: 0.8rem; color: var(--text-dim); }
+    .cta-banner {
+      margin-top: 18px;
+      padding: 20px 22px;
+      border-radius: var(--radius);
+      background: linear-gradient(125deg, rgba(99, 102, 241, 0.16), rgba(16, 185, 129, 0.12));
+      border: 1px solid rgba(129, 140, 248, 0.32);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .cta-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--indigo-solid);
+      color: #fff;
+      font-size: 0.88rem;
+      font-weight: 700;
+      box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
+    }
+    .btn-primary:hover { background: #4f46e5; text-decoration: none; }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+    .btn-secondary:hover { border-color: var(--indigo); text-decoration: none; }
+
+    footer {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 18px 20px 44px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1020px) {
+      .sim-grid, .est-grid { grid-template-columns: 1fr; }
+      .install-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .mix-row { grid-template-columns: 120px 1fr 40px; }
+      .slider-row { grid-template-columns: 68px 1fr 38px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">
+        <span class="brand-icon" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="5" cy="12" r="2.5"></circle>
+            <circle cx="19" cy="6" r="2.5"></circle>
+            <circle cx="19" cy="18" r="2.5"></circle>
+            <path d="M7.5 11.2 16.5 7"></path>
+            <path d="M7.5 12.8 16.5 17"></path>
+          </svg>
+        </span>
+        <span>Ultimate Orchestration Skills</span>
+        <span class="version-pill">v1.2.3</span>
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#simulator" data-i18n="navSimulator">Lane Simulator</a>
+        <a href="#estimator" data-i18n="navEstimator">Runway Estimator</a>
+        <a href="#install" data-i18n="navInstall">Quick Install</a>
+      </nav>
+
+      <div class="top-actions">
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button type="button" class="lang-btn active" id="langEn" data-lang="en">EN</button>
+          <button type="button" class="lang-btn" id="langTr" data-lang="tr">TR</button>
+        </div>
+        <a class="gh-btn" href="https://github.com/ahmedkececi/ultimate-orchestration-skills" target="_blank" rel="noopener noreferrer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11.02 11.02 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.8 1.19 1.83 1.19 3.08 0 4.41-2.7 5.39-5.26 5.67.41.36.78 1.07.78 2.15 0 1.55-.01 2.8-.01 3.18 0 .31.21.66.79.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="top">
+    <section class="hero">
+      <h1 data-i18n="heroTitle">Keep your agents working when a model hits its quota.</h1>
+      <p data-i18n="heroSubtitle">
+        Test the exact deterministic routing engine behind <code>resolve_lanes.py</code> directly in your browser — live subscription quota sliders, ±3-point equivalence, cross-family review priority, restricted-data gates, and transparent runway estimates.
+      </p>
+      <div class="rule-chips">
+        <span class="rule-chip"><strong data-i18n="chipEq">±3-pt equivalence</strong> · <span data-i18n="chipEqSub">headroom breaks ties</span></span>
+        <span class="rule-chip"><strong data-i18n="chipWeekly">Weekly 85% / 90%</strong> · <span data-i18n="chipWeeklySub">move / stop</span></span>
+        <span class="rule-chip"><strong data-i18n="chip5h">5-Hour 90% / 95%</strong> · <span data-i18n="chip5hSub">move / stop</span></span>
+        <span class="rule-chip"><strong data-i18n="chipCross">Cross-family review</strong> · <span data-i18n="chipCrossSub">independent verifier</span></span>
+        <span class="rule-chip"><strong data-i18n="chipZero">Zero proxy / Zero daemon</strong> · <span data-i18n="chipZeroSub">native CLIs only</span></span>
+      </div>
+    </section>
+
+    <!-- SECTION 1: INTERACTIVE QUOTA & LANE SIMULATOR -->
+    <section class="section" id="simulator">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker" data-i18n="simKicker">Deterministic Routing Sandbox</div>
+          <h2 class="section-title" data-i18n="simTitle">Interactive Quota &amp; Lane Simulator</h2>
+          <p class="section-sub" data-i18n="simSub">Mirrors <code>skills/update-orchestration-skills/scripts/resolve_lanes.py</code> and the bundled Nov 2026 benchmark reference.</p>
+        </div>
+      </div>
+
+      <div class="scenario-bar" role="group" aria-label="Quick Scenarios">
+        <span class="scenario-label" data-i18n="scenarioLabel">Scenarios:</span>
+        <button type="button" class="scenario-btn active" data-scenario="normal" data-i18n="scNormal">Normal Day</button>
+        <button type="button" class="scenario-btn" data-scenario="codex87" data-i18n="scCodex87">Codex 87% Weekly Cap</button>
+        <button type="button" class="scenario-btn" data-scenario="claudeOutage" data-i18n="scClaudeOutage">Claude Outage</button>
+        <button type="button" class="scenario-btn" data-scenario="pdfSprint" data-i18n="scPdfSprint">Heavy PDF Sprint</button>
+        <button type="button" class="scenario-btn" data-scenario="restrictedReview" data-i18n="scRestrictedReview">Restricted Data + Cross-Family Review</button>
+      </div>
+
+      <div class="sim-grid">
+        <!-- Left Controls -->
+        <div class="panel panel-stack">
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblPreset">Coordinator Preset</span>
+              <span class="control-hint" data-i18n="lblPresetHint">project-profile.example.md</span>
+            </div>
+            <div class="preset-grid" id="presetButtons">
+              <button type="button" class="preset-btn active" data-preset="sol">
+                <span class="preset-name">Sol</span>
+                <span class="preset-client">Codex</span>
+              </button>
+              <button type="button" class="preset-btn" data-preset="astra">
+                <span class="preset-name">Astra</span>
+                <span class="preset-client">Codex</span>
+              </button>
+              <button type="button" class="preset-btn" data-preset="opus">
+                <span class="preset-name">Opus</span>
+                <span class="preset-client">Claude</span>
+              </button>
+              <button type="button" class="preset-btn" data-preset="fable">
+                <span class="preset-name">Mythos/Fable</span>
+                <span class="preset-client">Claude</span>
+              </button>
+              <button type="button" class="preset-btn" data-preset="neon">
+                <span class="preset-name">Neon</span>
+                <span class="preset-client">Antigravity</span>
+              </button>
+            </div>
+            <div class="preset-meta" id="presetMeta"></div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblLaneScope">Authorized Lane Scope</span>
+              <span class="control-hint" data-i18n="lblLaneScopeHint">Profile vs 4-pool</span>
+            </div>
+            <div class="seg-group seg-sm" id="scopeButtons">
+              <button type="button" class="seg-btn active" data-scope="profile" data-i18n="scopeProfile">Profile Lanes</button>
+              <button type="button" class="seg-btn" data-scope="expanded" data-i18n="scopeExpanded">+ 4-Pool Optional</button>
+              <button type="button" class="seg-btn" data-scope="advisory" data-i18n="scopeAdvisory">All 20 (Advisory)</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblRole">Task Role</span>
+              <span class="control-hint mono" id="roleCliFlag">--role coding</span>
+            </div>
+            <div class="seg-group" id="roleButtons">
+              <button type="button" class="seg-btn active" data-role="coding" data-i18n="roleCoding">Coding</button>
+              <button type="button" class="seg-btn" data-role="reasoning" data-i18n="roleReasoning">Reasoning</button>
+              <button type="button" class="seg-btn" data-role="accuracy" data-i18n="roleAccuracy">Factual</button>
+              <button type="button" class="seg-btn" data-role="knowledge" data-i18n="roleKnowledge">Knowledge / PDF</button>
+              <button type="button" class="seg-btn" data-role="review" data-i18n="roleReview">Review</button>
+            </div>
+          </div>
+
+          <div class="author-box hidden" id="authorFamilyBox">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblAuthorFamily">Author Model Family</span>
+              <span class="control-hint mono" id="authorCliFlag">--author-family openai</span>
+            </div>
+            <div class="seg-group seg-sm" id="authorButtons">
+              <button type="button" class="seg-btn active" data-author="openai">OpenAI</button>
+              <button type="button" class="seg-btn" data-author="claude">Claude</button>
+              <button type="button" class="seg-btn" data-author="google">Google</button>
+              <button type="button" class="seg-btn" data-author="deepseek">DeepSeek</button>
+            </div>
+            <div class="formula-note" data-i18n="reviewFormulaNote">
+              Review score = 0.5×accuracy + 0.3×reasoning + 0.2×knowledge. Cross-family reviewers always rank ahead of same-family lanes.
+            </div>
+          </div>
+
+          <label class="switch-card" id="restrictedCard" for="restrictedToggle">
+            <div>
+              <span class="switch-title" data-i18n="lblRestricted">Restricted / PII Data Mode</span>
+              <span class="switch-desc" data-i18n="lblRestrictedDesc">Only lanes with <code>"restricted_data": true</code> remain eligible (<code>--restricted-data</code>).</span>
+            </div>
+            <input class="sr-only" type="checkbox" id="restrictedToggle">
+            <span class="toggle-pill" aria-hidden="true"></span>
+          </label>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="lblQuotas">Live Subscription Pool Quotas</span>
+              <span class="control-hint" data-i18n="lblQuotasHint">85%/90% wk · 90%/95% 5h</span>
+            </div>
+            <div class="pool-list" id="poolSliders"></div>
+          </div>
+        </div>
+
+        <!-- Right Deterministic Output -->
+        <div class="panel-stack">
+          <div class="rec-card" id="recommendedCard"></div>
+
+          <div class="panel">
+            <div class="table-header-row">
+              <div>
+                <h3 class="table-title" data-i18n="tblTitle">Ranked Candidates &amp; Policy Exclusions</h3>
+                <div class="table-meta" id="tableMeta"></div>
+              </div>
+              <span class="badge b-equivalent num" id="eqBandBadge">±3 pts</span>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="thRank">Rank</th>
+                    <th data-i18n="thLane">Model / Effort</th>
+                    <th data-i18n="thPool">Pool / Family</th>
+                    <th data-i18n="thScore">Score</th>
+                    <th data-i18n="thDelta">&Delta; Top</th>
+                    <th data-i18n="thStatus">Status Badges</th>
+                    <th data-i18n="thHeadroom">Headroom</th>
+                  </tr>
+                </thead>
+                <tbody id="candidatesBody"></tbody>
+              </table>
+            </div>
+
+            <div class="show-unauth-row" id="unauthToggleRow"></div>
+          </div>
+
+          <div class="code-box">
+            <div class="code-bar">
+              <span data-i18n="cliHeader">Equivalent deterministic CLI command</span>
+              <button type="button" class="copy-btn" id="copyCliBtn" data-i18n="btnCopy">Copy</button>
+            </div>
+            <pre class="code-pre mono" id="cliCommand"></pre>
+          </div>
+
+          <details class="collapsible">
+            <summary data-i18n="statePreviewSummary">View equivalent <code>.orchestration/provider-state.json</code> snapshot</summary>
+            <div class="code-box">
+              <div class="code-bar">
+                <span class="mono">.orchestration/provider-state.json</span>
+                <button type="button" class="copy-btn" id="copyStateBtn" data-i18n="btnCopy">Copy</button>
+              </div>
+              <pre class="code-pre mono" id="stateJsonPreview"></pre>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: QUOTA RUNWAY & TOKEN SAVINGS ESTIMATOR -->
+    <section class="section" id="estimator">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker" data-i18n="estKicker">Transparent Modeling + Repo Measurements</div>
+          <h2 class="section-title" data-i18n="estTitle">Quota Runway &amp; Token Savings Estimator</h2>
+          <p class="section-sub" data-i18n="estSub">Estimate how multi-pool delegation extends your flagship subscription runway and reduces unnecessary max-effort token burn.</p>
+        </div>
+      </div>
+
+      <div class="est-grid">
+        <!-- Estimator Controls -->
+        <div class="panel panel-stack">
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="estPoolsLabel">Active Subscription Pools</span>
+              <span class="control-hint" id="estPoolsHint">2 pools</span>
+            </div>
+            <div class="seg-group" id="estPoolButtons">
+              <button type="button" class="seg-btn" data-pools="1">1</button>
+              <button type="button" class="seg-btn active" data-pools="2">2</button>
+              <button type="button" class="seg-btn" data-pools="3">3</button>
+              <button type="button" class="seg-btn" data-pools="4">4</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="estCoordLabel">Coordinator Preset</span>
+              <span class="control-hint" id="estCoordBurnNote"></span>
+            </div>
+            <div class="seg-group seg-sm" id="estPresetButtons">
+              <button type="button" class="seg-btn active" data-est-preset="sol">Sol</button>
+              <button type="button" class="seg-btn" data-est-preset="astra">Astra</button>
+              <button type="button" class="seg-btn" data-est-preset="opus">Opus</button>
+              <button type="button" class="seg-btn" data-est-preset="fable">Fable</button>
+              <button type="button" class="seg-btn" data-est-preset="neon">Neon</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row">
+              <span class="control-label" data-i18n="estMixLabel">Session Task Mix</span>
+              <span class="control-hint" data-i18n="estMixHint">Auto-normalized to 100%</span>
+            </div>
+            <div class="seg-group seg-sm" id="mixPresetButtons">
+              <button type="button" class="seg-btn active" data-mix="balanced" data-i18n="mixBalanced">Balanced Sprint</button>
+              <button type="button" class="seg-btn" data-mix="refactor" data-i18n="mixRefactor">Heavy Refactor</button>
+              <button type="button" class="seg-btn" data-mix="research" data-i18n="mixResearch">Docs &amp; PDF</button>
+            </div>
+            <div id="mixSliders"></div>
+          </div>
+        </div>
+
+        <!-- Estimator Outputs -->
+        <div class="panel-stack">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-head">
+                <span class="kpi-label" data-i18n="kpiRunwayLbl">Flagship Pool Runway</span>
+                <span class="badge b-modeled" data-i18n="badgeModeled">Modeled</span>
+              </div>
+              <div class="kpi-val num" id="kpiRunway">2.4x</div>
+              <div class="kpi-note" id="kpiRunwayNote"></div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-head">
+                <span class="kpi-label" data-i18n="kpiFlagshipLbl">Flagship Quota Reduction</span>
+                <span class="badge b-modeled" data-i18n="badgeModeled">Modeled</span>
+              </div>
+              <div class="kpi-val num" id="kpiFlagship">53%</div>
+              <div class="kpi-note" id="kpiFlagshipNote"></div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-head">
+                <span class="kpi-label" data-i18n="kpiTokensLbl">Total Session Token Savings</span>
+                <span class="badge b-modeled" data-i18n="badgeModeled">Modeled</span>
+              </div>
+              <div class="kpi-val num" id="kpiTokens">36%</div>
+              <div class="kpi-note" id="kpiTokensNote"></div>
+            </div>
+
+            <div class="kpi-card is-measured">
+              <div class="kpi-head">
+                <span class="kpi-label" data-i18n="kpiContextLbl">Upfront Skill Context Saved</span>
+                <span class="badge b-measured" data-i18n="badgeMeasured">Measured</span>
+              </div>
+              <div class="kpi-val num" id="kpiContext">52.8%</div>
+              <div class="kpi-note" id="kpiContextNote"></div>
+            </div>
+          </div>
+
+          <div class="burn-compare">
+            <div>
+              <div class="burn-row-label">
+                <span data-i18n="barBaseline">Single-Pool Flagship Baseline</span>
+                <span class="num">100%</span>
+              </div>
+              <div class="stacked-bar">
+                <div class="seg-single" style="width:100%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="burn-row-label">
+                <span data-i18n="barOrchestrated">Orchestrated Workload Distribution</span>
+                <span class="num" id="barOrchSummary"></span>
+              </div>
+              <div class="stacked-bar">
+                <div class="seg-flagship" id="barSegFlagship" style="width:45%"></div>
+                <div class="seg-offload" id="barSegOffload" style="width:35%"></div>
+                <div class="seg-saved" id="barSegSaved" style="width:20%"></div>
+              </div>
+            </div>
+            <div class="legend-row">
+              <span class="legend-item"><span class="dot seg-flagship"></span><span data-i18n="legFlagship">Retained on flagship pool</span></span>
+              <span class="legend-item"><span class="dot seg-offload"></span><span data-i18n="legOffload">Offloaded to secondary pools</span></span>
+              <span class="legend-item"><span class="dot seg-saved"></span><span data-i18n="legSaved">Eliminated via right-sizing &amp; concise briefs</span></span>
+            </div>
+          </div>
+
+          <details class="collapsible">
+            <summary data-i18n="assumptionsTitle">Transparent assumptions &amp; exact formulas (honest breakdown)</summary>
+            <div class="assumptions-body" id="assumptionsBody"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: QUICK ONE-LINE INSTALL & GITHUB CTA -->
+    <section class="section" id="install">
+      <div class="section-head">
+        <div>
+          <div class="section-kicker" data-i18n="instKicker">Zero Daemon · Native CLIs Only</div>
+          <h2 class="section-title" data-i18n="instTitle">Quick One-Line Install</h2>
+          <p class="section-sub" data-i18n="instSub">Add portable Markdown skills directly to Claude Code, Codex, or Antigravity in seconds.</p>
+        </div>
+      </div>
+
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>
+            <span data-i18n="instClaudePluginTitle">Claude Code Plugin</span>
+            <span class="badge b-healthy">/plugin</span>
+          </h3>
+          <p data-i18n="instClaudePluginDesc">Install the full coordinator &amp; updater bundle directly from the repo marketplace inside Claude Code.</p>
+          <div class="code-box">
+            <div class="code-bar">
+              <span>Claude Code</span>
+              <button type="button" class="copy-btn" data-copy-target="cmdPlugin" data-i18n="btnCopy">Copy</button>
+            </div>
+            <pre class="code-pre mono" id="cmdPlugin">/plugin install ultimate-orchestration-skills --marketplace ahmedkececi/ultimate-orchestration-skills</pre>
+          </div>
+        </div>
+
+        <div class="install-card">
+          <h3>
+            <span>npx skills add</span>
+            <div class="seg-group seg-sm" style="gap:4px;" id="npxTabs">
+              <button type="button" class="seg-btn active" data-npx="codex">Codex</button>
+              <button type="button" class="seg-btn" data-npx="claude">Claude</button>
+            </div>
+          </h3>
+          <p data-i18n="instNpxDesc">Install both coordinator options plus the live benchmark updater via Vercel Skills CLI.</p>
+          <div class="code-box">
+            <div class="code-bar">
+              <span id="npxBarLabel">Codex</span>
+              <button type="button" class="copy-btn" data-copy-target="cmdNpx" data-i18n="btnCopy">Copy</button>
+            </div>
+            <pre class="code-pre mono" id="cmdNpx"></pre>
+          </div>
+        </div>
+
+        <div class="install-card">
+          <h3>
+            <span>install.sh</span>
+            <div class="seg-group seg-sm" style="gap:4px;" id="shTabs">
+              <button type="button" class="seg-btn active" data-sh="codex">Codex</button>
+              <button type="button" class="seg-btn" data-sh="claude">Claude</button>
+              <button type="button" class="seg-btn" data-sh="antigravity">AGY</button>
+            </div>
+          </h3>
+          <p data-i18n="instShDesc">POSIX shell one-liner — no Node.js required. Copies coordinator + updater folders cleanly.</p>
+          <div class="code-box">
+            <div class="code-bar">
+              <span id="shBarLabel">Codex</span>
+              <button type="button" class="copy-btn" data-copy-target="cmdSh" data-i18n="btnCopy">Copy</button>
+            </div>
+            <pre class="code-pre mono" id="cmdSh"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-banner">
+        <div>
+          <h3 style="margin:0 0 4px; font-size:1.12rem;" data-i18n="ctaTitle">Ready to run deterministic multi-agent orchestration in your repo?</h3>
+          <p style="margin:0; font-size:0.88rem; color:var(--text-dim);" data-i18n="ctaSub">Explore the full README, offline benchmark walkthrough, and 89 zero-dependency tests on GitHub.</p>
+        </div>
+        <div class="cta-actions">
+          <a class="btn-primary" href="https://github.com/ahmedkececi/ultimate-orchestration-skills" target="_blank" rel="noopener noreferrer" data-i18n="ctaGithub">View on GitHub</a>
+          <a class="btn-secondary" href="https://github.com/ahmedkececi/ultimate-orchestration-skills/blob/main/examples/first-run.md" target="_blank" rel="noopener noreferrer" data-i18n="ctaDemo">Offline Demo</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span data-i18n="footerLeft">Bundled historical benchmark snapshot (Nov 15 &amp; 19, 2026) attributed to Artificial Analysis · MIT License</span>
+    <span data-i18n="footerRight">100% client-side · Zero telemetry · Zero external dependencies</span>
+  </footer>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* =====================================================================
+       * 1. AUTHENTIC BUNDLED DATA FROM REPOSITORY
+       *    Source: skills/update-orchestration-skills/references/model-measurements.md
+       *            (Historical routing reference table, lines 169-190)
+       *    Canonical model IDs match resolve_lanes.py HISTORICAL_MODEL_IDS
+       * ===================================================================== */
+      const EQUIVALENCE_POINTS = 3.0;
+      const WEEKLY_MOVE_PCT = 85.0;
+      const WEEKLY_STOP_PCT = 90.0;
+      const FIVE_HOUR_MOVE_PCT = 90.0;
+      const FIVE_HOUR_STOP_PCT = 95.0;
+
+      const POOLS = [
+        { id: "codex", label: "Codex", provider: "OpenAI", family: "openai" },
+        { id: "claude", label: "Claude", provider: "Anthropic", family: "claude" },
+        { id: "gemini", label: "Gemini / AGY", provider: "Google", family: "google" },
+        { id: "deepseek", label: "DeepSeek", provider: "DeepSeek", family: "deepseek" }
+      ];
+
+      const BUNDLED_CANDIDATES = [
+        { model: "claude-fable-5-2", display: "Fable 5.2", effort: "medium", pool: "claude", family: "claude", index: 56.4, profiles: { coding: 85, reasoning: 77, accuracy: 65, knowledge: 84 }, latency_s: 447, latency_kind: "measured" },
+        { model: "claude-opus-5-5", display: "Opus 5.5", effort: "medium", pool: "claude", family: "claude", index: 48.2, profiles: { coding: 76, reasoning: 65, accuracy: 53, knowledge: 78 }, latency_s: 414, latency_kind: "measured" },
+        { model: "claude-opus-5-5", display: "Opus 5.5", effort: "high", pool: "claude", family: "claude", index: 51.8, profiles: { coding: 81, reasoning: 72, accuracy: 55, knowledge: 85 }, latency_s: 566, latency_kind: "measured" },
+        { model: "claude-sonnet-5-5", display: "Sonnet 5.5", effort: "high", pool: "claude", family: "claude", index: 41.5, profiles: { coding: 73, reasoning: 62, accuracy: 46, knowledge: 78 }, latency_s: 405, latency_kind: "measured" },
+        { model: "claude-haiku-5-5", display: "Haiku 5.5", effort: "high", pool: "claude", family: "claude", index: 29.9, profiles: { coding: 57, reasoning: 50, accuracy: 52, knowledge: 53 }, latency_s: 392, latency_kind: "measured" },
+        { model: "gpt-6.2-astra", display: "gpt-6.2-astra", effort: "high", pool: "codex", family: "openai", index: 60.1, profiles: { coding: 95, reasoning: 92, accuracy: 60, knowledge: 83 }, latency_s: 357, latency_kind: "measured" },
+        { model: "gpt-6.2-astra", display: "gpt-6.2-astra", effort: "medium", pool: "codex", family: "openai", index: 57.0, profiles: { coding: 89, reasoning: 79, accuracy: 61, knowledge: 83 }, latency_s: 264, latency_kind: "measured" },
+        { model: "gpt-6.2-sol", display: "gpt-6.2-sol", effort: "xhigh", pool: "codex", family: "openai", index: 55.7, profiles: { coding: 88, reasoning: 83, accuracy: 58, knowledge: 81 }, latency_s: 306, latency_kind: "estimate" },
+        { model: "gpt-6.2-sol", display: "gpt-6.2-sol", effort: "high", pool: "codex", family: "openai", index: 54.9, profiles: { coding: 82, reasoning: 76, accuracy: 56, knowledge: 82 }, latency_s: 258, latency_kind: "estimate" },
+        { model: "gpt-6.2-sol", display: "gpt-6.2-sol", effort: "medium", pool: "codex", family: "openai", index: 52.7, profiles: { coding: 87, reasoning: 76, accuracy: 54, knowledge: 77 }, latency_s: 186, latency_kind: "measured" },
+        { model: "gpt-6.1-terra", display: "gpt-6.1-terra", effort: "medium", pool: "codex", family: "openai", index: 38.2, profiles: { coding: 73, reasoning: 60, accuracy: 62, knowledge: 56 }, latency_s: 172, latency_kind: "measured" },
+        { model: "gpt-6-luna", display: "gpt-6-luna", effort: "high", pool: "codex", family: "openai", index: 21.4, profiles: { coding: 30, reasoning: 22, accuracy: 41, knowledge: 45 }, latency_s: 348, latency_kind: "measured" },
+        { model: "gemini-4-hydrogen", display: "gemini-4-hydrogen", effort: "high", pool: "gemini", family: "google", index: 50.8, profiles: { coding: 79, reasoning: 69, accuracy: 82, knowledge: 81 }, latency_s: 500, latency_kind: "measured" },
+        { model: "gemini-4-hydrogen", display: "gemini-4-hydrogen", effort: "medium", pool: "gemini", family: "google", index: 41.2, profiles: { coding: 63, reasoning: 55, accuracy: 79, knowledge: 70 }, latency_s: 227, latency_kind: "measured" },
+        { model: "gemini-4-neon", display: "gemini-4-neon", effort: "high", pool: "gemini", family: "google", index: 60.0, profiles: { coding: 89, reasoning: 84, accuracy: 84, knowledge: 92 }, latency_s: 888, latency_kind: "measured" },
+        { model: "gemini-4-neon", display: "gemini-4-neon", effort: "medium", pool: "gemini", family: "google", index: 55.0, profiles: { coding: 84, reasoning: 78, accuracy: null, knowledge: 84 }, latency_s: 498, latency_kind: "measured" },
+        { model: "gemini-4-neon", display: "gemini-4-neon", effort: "xhigh", pool: "gemini", family: "google", index: 61.4, profiles: { coding: 96, reasoning: 87, accuracy: 84, knowledge: 90 }, latency_s: 1290, latency_kind: "measured" },
+        { model: "gemini-4-argon", display: "gemini-4-argon", effort: "medium", pool: "gemini", family: "google", index: 47.6, profiles: { coding: 79, reasoning: 69, accuracy: 72, knowledge: 83 }, latency_s: 1802, latency_kind: "measured" },
+        { model: "gemini-3.8-flash", display: "gemini-3.8-flash", effort: "high", pool: "gemini", family: "google", index: 30.8, profiles: { coding: 43, reasoning: 40, accuracy: 54, knowledge: 52 }, latency_s: 876, latency_kind: "measured" },
+        { model: "deepseek-v4.1-flash-1017", display: "deepseek-flash", effort: "max", pool: "deepseek", family: "deepseek", index: 32.6, profiles: { coding: 58, reasoning: 28, accuracy: 38, knowledge: 71 }, latency_s: 832, latency_kind: "measured" }
+      ];
+
+      /* Exact authorized lanes from skills/*-orchestration/project-profile.example.md */
+      const PRESETS = {
+        sol: {
+          id: "sol",
+          name: "Sol",
+          dir: "sol-orchestration",
+          command: "$sol-orchestration",
+          client: "Codex",
+          manager: "gpt-6.2-sol (xhigh)",
+          profilePath: "skills/sol-orchestration/project-profile.example.md",
+          coordOverhead: 0.22,
+          contextRetainBonus: 0.12,
+          measuredUpfrontPct: 52.8,
+          skillBytes: 29881,
+          refBytes: 33412,
+          lanes: [
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
+            { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false }
+          ]
+        },
+        astra: {
+          id: "astra",
+          name: "Astra",
+          dir: "astra-orchestration",
+          command: "$astra-orchestration",
+          client: "Codex",
+          manager: "gpt-6.2-astra (medium)",
+          profilePath: "skills/astra-orchestration/project-profile.example.md",
+          coordOverhead: 0.34,
+          contextRetainBonus: 0.08,
+          measuredUpfrontPct: 53.1,
+          skillBytes: 29610,
+          refBytes: 33484,
+          lanes: [
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
+            { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false }
+          ]
+        },
+        opus: {
+          id: "opus",
+          name: "Opus",
+          dir: "opus-orchestration",
+          command: "/opus-orchestration",
+          client: "Claude Code",
+          manager: "Claude Opus 5.5 (high/xhigh)",
+          profilePath: "skills/opus-orchestration/project-profile.example.md",
+          coordOverhead: 0.28,
+          contextRetainBonus: 0.10,
+          measuredUpfrontPct: 56.7,
+          skillBytes: 25610,
+          refBytes: 33496,
+          lanes: [
+            { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
+            { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "review"], restricted_data: true },
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true }
+          ]
+        },
+        fable: {
+          id: "fable",
+          name: "Mythos/Fable",
+          dir: "fable-orchestration",
+          command: "/fable-orchestration",
+          client: "Claude Code",
+          manager: "Claude Mythos / Fable",
+          profilePath: "skills/fable-orchestration/project-profile.example.md",
+          coordOverhead: 0.20,
+          contextRetainBonus: 0.13,
+          measuredUpfrontPct: 59.1,
+          skillBytes: 23202,
+          refBytes: 33496,
+          lanes: [
+            { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
+            { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "review"], restricted_data: true },
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true }
+          ]
+        },
+        neon: {
+          id: "neon",
+          name: "Neon",
+          dir: "neon-orchestration",
+          command: "/neon-orchestration",
+          client: "Antigravity",
+          manager: "gemini-4-neon (high)",
+          profilePath: "skills/neon-orchestration/project-profile.example.md",
+          coordOverhead: 0.25,
+          contextRetainBonus: 0.11,
+          measuredUpfrontPct: 53.1,
+          skillBytes: 31123,
+          refBytes: 35283,
+          lanes: [
+            { model: "gpt-6.2-sol", effort: "high", pool: "codex", runner: "codex exec", roles: ["coding", "review"], restricted_data: false },
+            { model: "gpt-6.2-sol", effort: "xhigh", pool: "codex", runner: "codex exec", roles: ["reasoning"], restricted_data: false },
+            { model: "claude-opus-5-5", effort: "medium", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "claude-opus-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding", "reasoning", "review"], restricted_data: true },
+            { model: "claude-sonnet-5-5", effort: "high", pool: "claude", runner: "claude -p", roles: ["coding"], restricted_data: true },
+            { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "Native Swarm", roles: ["knowledge", "accuracy"], restricted_data: false }
+          ]
+        }
+      };
+
+      const OPTIONAL_4POOL_LANES = [
+        { model: "gemini-4-hydrogen", effort: "high", pool: "gemini", runner: "agy / Native Swarm", roles: ["coding", "accuracy", "knowledge", "review"], restricted_data: false },
+        { model: "gemini-4-neon", effort: "high", pool: "gemini", runner: "agy / Native Swarm", roles: ["coding", "reasoning", "accuracy", "knowledge", "review"], restricted_data: false },
+        { model: "deepseek-v4.1-flash-1017", effort: "max", pool: "deepseek", runner: "deepseek API (metered)", roles: ["coding", "knowledge"], restricted_data: false }
+      ];
+
+      /* =====================================================================
+       * 2. BILINGUAL I18N DICTIONARY (EN / TR)
+       * ===================================================================== */
+      const I18N = {
+        en: {
+          pageTitle: "Ultimate Orchestration Skills — Interactive Quota & Lane Simulator",
+          navSimulator: "Lane Simulator",
+          navEstimator: "Runway Estimator",
+          navInstall: "Quick Install",
+          heroTitle: "Keep your agents working when a model hits its quota.",
+          heroSubtitle: "Test the exact deterministic routing engine behind resolve_lanes.py directly in your browser — live subscription quota sliders, ±3-point equivalence, cross-family review priority, restricted-data gates, and transparent runway estimates.",
+          chipEq: "±3-pt equivalence",
+          chipEqSub: "headroom breaks ties",
+          chipWeekly: "Weekly 85% / 90%",
+          chipWeeklySub: "move / stop",
+          chip5h: "5-Hour 90% / 95%",
+          chip5hSub: "move / stop",
+          chipCross: "Cross-family review",
+          chipCrossSub: "independent verifier",
+          chipZero: "Zero proxy / Zero daemon",
+          chipZeroSub: "native CLIs only",
+
+          simKicker: "Deterministic Routing Sandbox",
+          simTitle: "Interactive Quota & Lane Simulator",
+          simSub: "Mirrors skills/update-orchestration-skills/scripts/resolve_lanes.py and the bundled Nov 2026 benchmark reference.",
+          scenarioLabel: "Scenarios:",
+          scNormal: "Normal Day",
+          scCodex87: "Codex 87% Weekly Cap",
+          scClaudeOutage: "Claude Outage",
+          scPdfSprint: "Heavy PDF Sprint",
+          scRestrictedReview: "Restricted Data + Cross-Family Review",
+
+          lblPreset: "Coordinator Preset",
+          lblPresetHint: "project-profile.example.md",
+          lblLaneScope: "Authorized Lane Scope",
+          lblLaneScopeHint: "Profile vs 4-pool",
+          scopeProfile: "Profile Lanes",
+          scopeExpanded: "+ 4-Pool Optional",
+          scopeAdvisory: "All 20 (Advisory)",
+          lblRole: "Task Role",
+          roleCoding: "Coding",
+          roleReasoning: "Reasoning",
+          roleAccuracy: "Factual",
+          roleKnowledge: "Knowledge / PDF",
+          roleReview: "Review",
+          lblAuthorFamily: "Author Model Family",
+          reviewFormulaNote: "Review score = 0.5×accuracy + 0.3×reasoning + 0.2×knowledge. Cross-family reviewers always rank ahead of same-family lanes.",
+          lblRestricted: "Restricted / PII Data Mode",
+          lblRestrictedDesc: "Only lanes with \"restricted_data\": true remain eligible (--restricted-data).",
+          lblQuotas: "Live Subscription Pool Quotas",
+          lblQuotasHint: "85%/90% wk · 90%/95% 5h",
+
+          poolWeekly: "Weekly",
+          poolFiveHour: "5-Hour",
+          poolOutage: "Outage / Down",
+          poolHeadroom: "Headroom",
+          poolDownText: "Down",
+          tickMoveStopWk: "Move 85% · Stop 90%",
+          tickMoveStop5h: "Move 90% · Stop 95%",
+
+          presetManager: "Manager",
+          presetAuthCount: "{n} authorized lanes",
+
+          recKickerHealthy: "Recommended Lane",
+          recKickerWarn: "Recommended Lane (With Advisory)",
+          recKickerAdvisory: "Top Advisory Candidate (No Profile Lock)",
+          recKickerEmpty: "No Eligible Lane Available",
+          recRunner: "Runner",
+          recScore: "Score",
+          recHeadroom: "Headroom",
+          recDelta: "Δ Top",
+          recUnknown: "N/A",
+          recWhyPrefix: "Why it won:",
+          recEmptyWhy: "Why blocked:",
+          recSwitchNeon: "Switch to Neon preset (has Gemini PDF/Factual lane)",
+          recEnable4Pool: "Enable + 4-Pool Optional lanes",
+          recResetQuotas: "Reset quotas to healthy",
+
+          tblTitle: "Ranked Candidates & Policy Exclusions",
+          tblMeta: "{elig} eligible · {excl} blocked/filtered · anchor top score: {top}",
+          tblMetaCross: "{elig} eligible · {excl} blocked/filtered · cross-family anchor: {top}",
+          thRank: "Rank",
+          thLane: "Model / Effort",
+          thPool: "Pool / Family",
+          thScore: "Score",
+          thDelta: "Δ Top",
+          thStatus: "Status Badges",
+          thHeadroom: "Headroom",
+          showUnauth: "Show {n} role-unauthorized bundled models",
+          hideUnauth: "Hide {n} role-unauthorized bundled models",
+          unauthNote: "Role-unauthorized lanes are excluded by the active project-profile.md.",
+
+          badgeHealthy: "healthy",
+          badgeEquivalent: "equivalent",
+          badgeDeprioritized: "deprioritized",
+          badgeBlocked: "blocked",
+          badgeSameFamily: "same-family",
+          badgeRestricted: "restricted-denied",
+          badgeOutage: "outage",
+          badgeBelow: "below (+1 verification)",
+          badgeUnauth: "unauthorized",
+          badgeUnmeasured: "unmeasured",
+
+          cliHeader: "Equivalent deterministic CLI command",
+          statePreviewSummary: "View equivalent .orchestration/provider-state.json snapshot",
+          btnCopy: "Copy",
+          btnCopied: "Copied!",
+
+          warnAdvisory: "Advisory mode: no project-profile.md lane lock applied; resolve_lanes.py leaves recommendation empty without explicit authorization.",
+          warnSameFamilyOnly: "No cross-family reviewer available for author family '{author}'; top lane is same-family (label review explicitly).",
+          warnDeprioritizedTop: "Top lane is past its proactive move threshold (85% weekly / 90% 5-hour); prepare a checkpoint handoff.",
+          warnNoEligible: "No eligible lanes available for role '{role}' under current profile and pool states.",
+
+          whyRestrictedCross: "Cleared for restricted data and provides independent cross-family review (author: {author}); {rest}.",
+          whyCrossPriority: "Prioritized as an independent cross-family reviewer (family '{fam}' ≠ author '{author}') with score {score} and {hr}% headroom.",
+          whyEquivHeadroom: "Within the ±3-pt equivalence band of top score {top} (Δ {delta}) and wins on higher remaining headroom ({hr}% vs {rivalHr}% on {rival}).",
+          whyDeprioBeat: "Top scorer {rival} is deprioritized ({rivalReason}), so healthy equivalent lane wins cleanly at {hr}% headroom.",
+          whyOutageBeat: "Higher-scoring or rival pool ({rivalPool}) is excluded due to {rivalExcludeReason}, routing seamlessly to {model} ({hr}% headroom).",
+          whyClearTop: "Highest eligible {role} score ({score}) in a healthy pool with {hr}% remaining headroom.",
+          whySoleEligible: "Only eligible authorized lane for {role} under current policy & quota state (score {score}, {hr}% headroom).",
+          whyBelowDeprio: "No healthy equivalent lane remained; best available fallback with score {score} ({hr}% headroom).",
+          whySameFamilyFallback: "All cross-family reviewers were excluded or unavailable; falling back to same-family lane ({fam}) with score {score}.",
+          emptyReasonAllAuthOut: "Every authorized lane for '{role}' was excluded ({reasons}).",
+          emptyReasonNoRole: "The {preset} example profile does not authorize any worker lanes for '{role}'. Switch to Neon or enable + 4-Pool Optional lanes to test Gemini/DeepSeek.",
+
+          estKicker: "Transparent Modeling + Repo Measurements",
+          estTitle: "Quota Runway & Token Savings Estimator",
+          estSub: "Estimate how multi-pool delegation extends your flagship subscription runway and reduces unnecessary max-effort token burn.",
+          estPoolsLabel: "Active Subscription Pools",
+          estPoolWord: "{n} pool",
+          estPoolsWord: "{n} pools",
+          estCoordLabel: "Coordinator Preset",
+          estCoordNoteSol: "~2.5× lighter Codex burn than Astra",
+          estCoordNoteAstra: "Highest Codex coordinator reasoning burn",
+          estCoordNoteOpus: "Balanced everyday Claude Code coordinator",
+          estCoordNoteFable: "Scarce frontier allowance; offloads aggressively",
+          estCoordNoteNeon: "Antigravity loop + Native Swarm intake",
+          estMixLabel: "Session Task Mix",
+          estMixHint: "Auto-normalized to 100%",
+          mixBalanced: "Balanced Sprint",
+          mixRefactor: "Heavy Refactor",
+          mixResearch: "Docs & PDF",
+          mixCoding: "Routine coding",
+          mixReasoning: "Complex reasoning",
+          mixPdf: "PDF / docs & knowledge",
+          mixCleanup: "Bulk cleanup / verify",
+
+          badgeModeled: "Modeled",
+          badgeMeasured: "Measured",
+          kpiRunwayLbl: "Flagship Pool Runway",
+          kpiFlagshipLbl: "Flagship Quota Reduction",
+          kpiTokensLbl: "Total Session Token Savings",
+          kpiContextLbl: "Upfront Skill Context Saved",
+          kpiRunwayNote1: "Single pool: within-pool lighter-tier offloading + concise briefs only",
+          kpiRunwayNoteMulti: "Estimated {mult}× longer before hitting the 85%/90% flagship cap across {pools} pools",
+          kpiFlagshipNote: "~{pct}% of workload offloaded from the scarce coordinator model",
+          kpiTokensNote: "Scoped worker briefs + right-sized effort vs monolithic max-effort loop",
+          kpiContextNote: "{skillKb} KB SKILL.md upfront vs {refKb} KB deferred references/ ({preset})",
+
+          barBaseline: "Single-Pool Flagship Baseline",
+          barOrchestrated: "Orchestrated Workload Distribution",
+          barSummaryText: "{flag}% flagship · {off}% other pools · {sav}% saved",
+          legFlagship: "Retained on flagship pool",
+          legOffload: "Offloaded to secondary pools",
+          legSaved: "Eliminated via right-sizing & concise briefs",
+
+          assumptionsTitle: "Transparent assumptions & exact formulas (honest breakdown)",
+          assumptionsHtml: `
+            <p><strong>What is measured vs. modeled:</strong> Only <em>Upfront Skill Context Saved</em> is directly measured from this repository's files (<code>SKILL.md</code> bytes vs deferred <code>references/*.md</code> bytes: 52.8%–59.1% across presets). Runway multiplier, flagship quota reduction, and session token savings are <strong>transparent planning models</strong>, not guaranteed billing measurements.</p>
+            <ul>
+              <li><strong>Task offload suitability:</strong> Routine coding <code>78%</code>, Complex reasoning <code>35%</code>, PDF/docs <code>85%</code>, Bulk cleanup/verification <code>90%</code>.</li>
+              <li><strong>Active pool capture factor:</strong> 1 pool = <code>28%</code> (same pool, lighter tier at ~0.55× burn weight), 2 pools = <code>78%</code>, 3 pools = <code>90%</code>, 4 pools = <code>95%</code>.</li>
+              <li><strong>Coordinator keep factor:</strong> Sol <code>0.93</code>, Astra <code>0.89</code>, Opus <code>0.91</code>, Mythos/Fable <code>0.94</code>, Neon <code>0.92</code> (reflecting coordinator overhead and delegation posture).</li>
+              <li><strong>Flagship quota reduction:</strong> <code>delegable × poolCapture × coordKeep</code> (capped at 75%).</li>
+              <li><strong>Runway multiplier:</strong> For ≥2 pools, <code>1 / ((1 − flagshipReduction) × (1 − briefEfficiency))</code> where <code>briefEfficiency</code> is 8%–13%. For 1 pool, secondary workers still share the same pool at ~0.55× relative burn.</li>
+              <li><strong>Session token savings:</strong> Weighted right-sizing factor (coding 36%, reasoning 18%, PDF 48%, cleanup 52%) scaled by active pool specialization plus upfront progressive-disclosure savings.</li>
+            </ul>
+          `,
+
+          instKicker: "Zero Daemon · Native CLIs Only",
+          instTitle: "Quick One-Line Install",
+          instSub: "Add portable Markdown skills directly to Claude Code, Codex, or Antigravity in seconds.",
+          instClaudePluginTitle: "Claude Code Plugin",
+          instClaudePluginDesc: "Install the full coordinator & updater bundle directly from the repo marketplace inside Claude Code.",
+          instNpxDesc: "Install both coordinator options plus the live benchmark updater via Vercel Skills CLI.",
+          instShDesc: "POSIX shell one-liner — no Node.js required. Copies coordinator + updater folders cleanly.",
+          ctaTitle: "Ready to run deterministic multi-agent orchestration in your repo?",
+          ctaSub: "Explore the full README, offline benchmark walkthrough, and 89 zero-dependency tests on GitHub.",
+          ctaGithub: "View on GitHub",
+          ctaDemo: "Offline Demo",
+          footerLeft: "Bundled historical benchmark snapshot (Nov 15 & 19, 2026) attributed to Artificial Analysis · MIT License",
+          footerRight: "100% client-side · Zero telemetry · Zero external dependencies"
+        },
+
+        tr: {
+          pageTitle: "Ultimate Orchestration Skills — Etkileşimli Kota ve Hat Simülatörü",
+          navSimulator: "Hat Simülatörü",
+          navEstimator: "Kota & Tasarruf Hesaplayıcı",
+          navInstall: "Hızlı Kurulum",
+          heroTitle: "Bir modelin kotası dolduğunda ajanların çalışmaya devam etsin.",
+          heroSubtitle: "resolve_lanes.py arkasındaki deterministik yönlendirme motorunu tarayıcında canlı dene — anlık abonelik kota kaydırıcıları, ±3 puan eşdeğerlik bandı, çapraz aile inceleme önceliği, kısıtlı veri kapıları ve şeffaf kota ömrü tahmini.",
+          chipEq: "±3 puan eşdeğerlik",
+          chipEqSub: "eşitlikte kalan kota seçilir",
+          chipWeekly: "Haftalık %85 / %90",
+          chipWeeklySub: "taşı / durdur",
+          chip5h: "5 Saatlik %90 / %95",
+          chip5hSub: "taşı / durdur",
+          chipCross: "Çapraz aile incelemesi",
+          chipCrossSub: "bağımsız doğrulayıcı",
+          chipZero: "Sıfır proxy / Sıfır servis",
+          chipZeroSub: "yalnızca resmî CLI'lar",
+
+          simKicker: "Deterministik Yönlendirme Alanı",
+          simTitle: "Etkileşimli Kota ve Hat Simülatörü",
+          simSub: "skills/update-orchestration-skills/scripts/resolve_lanes.py kurallarını ve paketli Kasım 2026 benchmark referansını birebir uygular.",
+          scenarioLabel: "Senaryolar:",
+          scNormal: "Normal Gün",
+          scCodex87: "Codex %87 Haftalık Eşik",
+          scClaudeOutage: "Claude Kesintisi",
+          scPdfSprint: "Yoğun PDF Sprinti",
+          scRestrictedReview: "Kısıtlı Veri + Çapraz Aile İnceleme",
+
+          lblPreset: "Koordinatör Profili",
+          lblPresetHint: "project-profile.example.md",
+          lblLaneScope: "Yetkili Hat Kapsamı",
+          lblLaneScopeHint: "Profil vs 4 havuz",
+          scopeProfile: "Profil Hatları",
+          scopeExpanded: "+ 4 Havuz Opsiyonel",
+          scopeAdvisory: "Tümü 20 (Bilgi Amaçlı)",
+          lblRole: "Görev Rolü",
+          roleCoding: "Kodlama",
+          roleReasoning: "Muhakeme",
+          roleAccuracy: "Olgusal Doğruluk",
+          roleKnowledge: "Bilgi / PDF",
+          roleReview: "İnceleme",
+          lblAuthorFamily: "Yazar Model Ailesi",
+          reviewFormulaNote: "İnceleme skoru = 0.5×doğruluk + 0.3×muhakeme + 0.2×bilgi. Çapraz aile inceleyiciler her zaman aynı aileden önce sıralanır.",
+          lblRestricted: "Kısıtlı / PII Veri Modu",
+          lblRestrictedDesc: "Yalnızca \"restricted_data\": true yetkili hatlar uygun kalır (--restricted-data).",
+          lblQuotas: "Canlı Abonelik Havuzu Kotaları",
+          lblQuotasHint: "%85/%90 hft · %90/%95 5s",
+
+          poolWeekly: "Haftalık",
+          poolFiveHour: "5 Saatlik",
+          poolOutage: "Kesinti / Kapalı",
+          poolHeadroom: "Kalan Kota",
+          poolDownText: "Kapalı",
+          tickMoveStopWk: "Taşı %85 · Dur %90",
+          tickMoveStop5h: "Taşı %90 · Dur %95",
+
+          presetManager: "Yönetici",
+          presetAuthCount: "{n} yetkili hat",
+
+          recKickerHealthy: "Önerilen Hat",
+          recKickerWarn: "Önerilen Hat (Uyarılı)",
+          recKickerAdvisory: "En İyi Bilgi Amaçlı Aday (Profil Kilitsiz)",
+          recKickerEmpty: "Uygun Yetkili Hat Yok",
+          recRunner: "Çalıştırıcı",
+          recScore: "Skor",
+          recHeadroom: "Kalan Kota",
+          recDelta: "Δ Zirve",
+          recUnknown: "Yok",
+          recWhyPrefix: "Neden kazandı:",
+          recEmptyWhy: "Neden engellendi:",
+          recSwitchNeon: "Neon profiline geç (Gemini PDF/Doğruluk hattı içerir)",
+          recEnable4Pool: "+ 4 Havuz Opsiyonel hatları aç",
+          recResetQuotas: "Kotaları sağlıklı duruma sıfırla",
+
+          tblTitle: "Sıralı Adaylar ve Politika Dışlamaları",
+          tblMeta: "{elig} uygun · {excl} engelli/filtrelendi · referans zirve skor: {top}",
+          tblMetaCross: "{elig} uygun · {excl} engelli/filtrelendi · çapraz aile zirvesi: {top}",
+          thRank: "Sıra",
+          thLane: "Model / Efor",
+          thPool: "Havuz / Aile",
+          thScore: "Skor",
+          thDelta: "Δ Zirve",
+          thStatus: "Durum Rozetleri",
+          thHeadroom: "Kalan Kota",
+          showUnauth: "Bu rol için yetkisiz {n} paketli modeli göster",
+          hideUnauth: "Bu rol için yetkisiz {n} paketli modeli gizle",
+          unauthNote: "Rol yetkisi olmayan hatlar aktif project-profile.md tarafından dışlanır.",
+
+          badgeHealthy: "sağlıklı",
+          badgeEquivalent: "eşdeğer",
+          badgeDeprioritized: "önceliği düştü",
+          badgeBlocked: "engellendi",
+          badgeSameFamily: "aynı aile",
+          badgeRestricted: "kısıtlı veri reddi",
+          badgeOutage: "kesinti",
+          badgeBelow: "alt kademe (+1 doğrulama)",
+          badgeUnauth: "yetkisiz",
+          badgeUnmeasured: "ölçümsüz",
+
+          cliHeader: "Eşdeğer deterministik CLI komutu",
+          statePreviewSummary: "Eşdeğer .orchestration/provider-state.json çıktısını görüntüle",
+          btnCopy: "Kopyala",
+          btnCopied: "Kopyalandı!",
+
+          warnAdvisory: "Bilgi amaçlı mod: project-profile.md hat kilidi yok; resolve_lanes.py açık yetki olmadan öneri alanını boş bırakır.",
+          warnSameFamilyOnly: "'{author}' yazar ailesi için çapraz aile inceleyici yok; en üst hat aynı aileden (incelemeyi açıkça etiketle).",
+          warnDeprioritizedTop: "En üst hat proaktif taşıma eşiğini geçti (haftalık %85 / 5 saatlik %90); devir kaydı hazırlamaya başla.",
+          warnNoEligible: "Mevcut profil ve havuz durumlarında '{role}' rolü için uygun hat bulunmuyor.",
+
+          whyRestrictedCross: "Kısıtlı veri iznine sahip ve bağımsız çapraz aile incelemesi sağlıyor (yazar: {author}); {rest}.",
+          whyCrossPriority: "Bağımsız çapraz aile inceleyici olarak önceliklendirildi (aile '{fam}' ≠ yazar '{author}'); skor {score}, kalan kota %{hr}.",
+          whyEquivHeadroom: "Zirve skor {top} ile ±3 puan eşdeğerlik bandında (Δ {delta}) ve daha yüksek kalan kota ile kazandı (%{hr} vs {rival} %{rivalHr}).",
+          whyDeprioBeat: "En yüksek skorlu {rival} öncelik düşürdü ({rivalReason}); bu yüzden sağlıklı eşdeğer hat %{hr} kalan kota ile temiz biçimde kazandı.",
+          whyOutageBeat: "Yüksek skorlu/rakip havuz ({rivalPool}) {rivalExcludeReason} nedeniyle dışlandı; görev sorunsuzca {model} hattına yönlendi (%{hr} kalan kota).",
+          whyClearTop: "Sağlıklı bir havuzda en yüksek uygun {role} skoru ({score}) ve %{hr} kalan kota.",
+          whySoleEligible: "Mevcut politika ve kota durumunda {role} için tek uygun yetkili hat (skor {score}, %{hr} kalan kota).",
+          whyBelowDeprio: "Sağlıklı eşdeğer hat kalmadı; mevcut en iyi yedek hat (skor {score}, %{hr} kalan kota).",
+          whySameFamilyFallback: "Tüm çapraz aile inceleyiciler dışlandı veya müsait değil; {score} skoru ile aynı aile ({fam}) yedeğine düşüldü.",
+          emptyReasonAllAuthOut: "'{role}' için yetkili tüm hatlar dışlandı ({reasons}).",
+          emptyReasonNoRole: "{preset} örnek profili '{role}' rolü için işçi hattı yetkilendirmiyor. Gemini/DeepSeek denemek için Neon profiline geç veya + 4 Havuz Opsiyonel seçeneğini aç.",
+
+          estKicker: "Şeffaf Modelleme + Depo Ölçümleri",
+          estTitle: "Kota Ömrü ve Token Tasarruf Hesaplayıcı",
+          estSub: "Çoklu havuz delegasyonunun amiral gemisi abonelik ömrünü nasıl uzattığını ve gereksiz maksimum-efor token tüketimini nasıl azalttığını tahmin et.",
+          estPoolsLabel: "Aktif Abonelik Havuzu Sayısı",
+          estPoolWord: "{n} havuz",
+          estPoolsWord: "{n} havuz",
+          estCoordLabel: "Koordinatör Profili",
+          estCoordNoteSol: "Codex kotasında Astra'dan ~2,5 kat daha hafif",
+          estCoordNoteAstra: "En yüksek Codex koordinatör muhakeme tüketimi",
+          estCoordNoteOpus: "Dengeli günlük Claude Code koordinatörü",
+          estCoordNoteFable: "Kısıtlı öncü kota; rutin işi agresif devreder",
+          estCoordNoteNeon: "Antigravity ana döngüsü + Native Swarm alımı",
+          estMixLabel: "Oturum Görev Dağılımı",
+          estMixHint: "Otomatik %100'e normalize edilir",
+          mixBalanced: "Dengeli Sprint",
+          mixRefactor: "Yoğun Refaktör",
+          mixResearch: "Doküman & PDF",
+          mixCoding: "Rutin kodlama",
+          mixReasoning: "Karmaşık muhakeme",
+          mixPdf: "PDF / doküman & bilgi",
+          mixCleanup: "Toplu temizlik / doğrulama",
+
+          badgeModeled: "Modellenmiş",
+          badgeMeasured: "Ölçülmüş",
+          kpiRunwayLbl: "Amiral Gemisi Kota Ömrü",
+          kpiFlagshipLbl: "Amiral Gemisi Kota Tasarrufu",
+          kpiTokensLbl: "Toplam Oturum Token Tasarrufu",
+          kpiContextLbl: "Başlangıç Skill Bağlam Tasarrufu",
+          kpiRunwayNote1: "Tek havuz: yalnızca havuz içi hafif kademe + odaklı özet kazanımı",
+          kpiRunwayNoteMulti: "{pools} havuzla %85/%90 amiral gemisi eşiğine ulaşma süresi tahmini {mult}× uzar",
+          kpiFlagshipNote: "İş yükünün ~%{pct} kısmı kısıtlı koordinatör modelinden devredilir",
+          kpiTokensNote: "Tek parça max-efor döngü yerine odaklı işçi özetleri + doğru efor",
+          kpiContextNote: "{skillKb} KB başlangıç SKILL.md vs {refKb} KB isteğe bağlı references/ ({preset})",
+
+          barBaseline: "Tek Havuz Amiral Gemisi Referansı",
+          barOrchestrated: "Orkestre Edilmiş İş Yükü Dağılımı",
+          barSummaryText: "%{flag} amiral gemisi · %{off} diğer havuzlar · %{sav} tasarruf",
+          legFlagship: "Amiral gemisi havuzunda kalan",
+          legOffload: "İkincil havuzlara aktarılan",
+          legSaved: "Doğru efor ve kısa özetlerle elenen",
+
+          assumptionsTitle: "Şeffaf varsayımlar ve açık formüller (dürüst kırılım)",
+          assumptionsHtml: `
+            <p><strong>Ölçülen ve modellenen ayrımı:</strong> Yalnızca <em>Başlangıç Skill Bağlam Tasarrufu</em> bu deponun gerçek dosyalarından doğrudan ölçülmüştür (<code>SKILL.md</code> boyutu vs isteğe bağlı yüklenen <code>references/*.md</code> boyutu: profiller genelinde %52,8–%59,1). Kota ömrü çarpanı, amiral gemisi kota tasarrufu ve oturum token tasarrufu <strong>şeffaf planlama modelleridir</strong>, garanti edilen fatura ölçümü değildir.</p>
+            <ul>
+              <li><strong>Görev devredilebilirlik oranları:</strong> Rutin kodlama <code>%78</code>, Karmaşık muhakeme <code>%35</code>, PDF/doküman <code>%85</code>, Toplu temizlik/doğrulama <code>%90</code>.</li>
+              <li><strong>Aktif havuz aktarım katsayısı:</strong> 1 havuz = <code>%28</code> (aynı havuz, ~0,55× tüketimli hafif kademe), 2 havuz = <code>%78</code>, 3 havuz = <code>%90</code>, 4 havuz = <code>%95</code>.</li>
+              <li><strong>Koordinatör koruma katsayısı:</strong> Sol <code>0,93</code>, Astra <code>0,89</code>, Opus <code>0,91</code>, Mythos/Fable <code>0,94</code>, Neon <code>0,92</code> (koordinatör yükü ve delegasyon tutumuna göre).</li>
+              <li><strong>Amiral gemisi kota azaltımı:</strong> <code>devredilebilir × havuzKatsayısı × koordinatörKatsayısı</code> (üst sınır %75).</li>
+              <li><strong>Kota ömrü çarpanı:</strong> ≥2 havuzda <code>1 / ((1 − kotaAzaltımı) × (1 − özetVerimliliği))</code> (özet verimliliği %8–%13). 1 havuzda ikincil ajanlar aynı havuzu ~0,55× ağırlıkla paylaşır.</li>
+              <li><strong>Oturum token tasarrufu:</strong> Ağırlıklı doğru-efor tasarrufu (kodlama %36, muhakeme %18, PDF %48, temizlik %52) aktif havuz uzmanlaşması ve başlangıç aşamalı yükleme kazancıyla birleştirilir.</li>
+            </ul>
+          `,
+
+          instKicker: "Sıfır Arka Plan Servisi · Yalnızca Resmî CLI'lar",
+          instTitle: "Tek Satırda Hızlı Kurulum",
+          instSub: "Taşınabilir Markdown skill'lerini saniyeler içinde Claude Code, Codex veya Antigravity projenize ekleyin.",
+          instClaudePluginTitle: "Claude Code Eklentisi",
+          instClaudePluginDesc: "Tüm koordinatör ve benchmark güncelleyici paketini Claude Code içinden doğrudan kurun.",
+          instNpxDesc: "Vercel Skills CLI ile her iki koordinatör seçeneğini ve canlı benchmark güncelleyicisini kurun.",
+          instShDesc: "Node.js gerektirmeyen POSIX shell tek satır kurulumu. Koordinatör ve güncelleyici klasörlerini temizce kopyalar.",
+          ctaTitle: "Deponuzda deterministik çoklu ajan orkestrasyonuna hazır mısınız?",
+          ctaSub: "GitHub'da tam README'yi, çevrimdışı benchmark demosunu ve 89 sıfır-bağımlılıklı testi inceleyin.",
+          ctaGithub: "GitHub'da İncele",
+          ctaDemo: "Çevrimdışı Demo",
+          footerLeft: "Paketli tarihsel benchmark özeti (15 & 19 Kasım 2026) Artificial Analysis kaynaklıdır · MIT Lisansı",
+          footerRight: "%100 istemci taraflı · Sıfır telemetri · Sıfır harici bağımlılık"
+        }
+      };
+
+      /* =====================================================================
+       * 3. APPLICATION STATE
+       * ===================================================================== */
+      const state = {
+        lang: "en",
+        scenario: "normal",
+        preset: "sol",
+        scope: "profile", // "profile" | "expanded" | "advisory"
+        role: "coding",
+        authorFamily: "openai",
+        restrictedData: false,
+        showUnauthorized: false,
+        pools: {
+          codex: { weekly: 34, fiveHour: 20, down: false },
+          claude: { weekly: 22, fiveHour: 15, down: false },
+          gemini: { weekly: 18, fiveHour: 10, down: false },
+          deepseek: { weekly: 8, fiveHour: 5, down: false }
+        },
+        est: {
+          pools: 2,
+          preset: "sol",
+          mixPreset: "balanced",
+          mix: { coding: 45, reasoning: 20, pdf: 20, cleanup: 15 }
+        },
+        install: {
+          npx: "codex",
+          sh: "codex"
+        }
+      };
+
+      const SCENARIOS = {
+        normal: {
+          preset: "sol", scope: "profile", role: "coding", authorFamily: "openai", restrictedData: false,
+          pools: {
+            codex: { weekly: 34, fiveHour: 20, down: false },
+            claude: { weekly: 22, fiveHour: 15, down: false },
+            gemini: { weekly: 18, fiveHour: 10, down: false },
+            deepseek: { weekly: 8, fiveHour: 5, down: false }
+          }
+        },
+        codex87: {
+          preset: "sol", scope: "profile", role: "coding", authorFamily: "openai", restrictedData: false,
+          pools: {
+            codex: { weekly: 87, fiveHour: 64, down: false },
+            claude: { weekly: 40, fiveHour: 28, down: false },
+            gemini: { weekly: 25, fiveHour: 15, down: false },
+            deepseek: { weekly: 10, fiveHour: 5, down: false }
+          }
+        },
+        claudeOutage: {
+          preset: "opus", scope: "profile", role: "coding", authorFamily: "claude", restrictedData: false,
+          pools: {
+            codex: { weekly: 45, fiveHour: 30, down: false },
+            claude: { weekly: 38, fiveHour: 25, down: true },
+            gemini: { weekly: 22, fiveHour: 12, down: false },
+            deepseek: { weekly: 12, fiveHour: 8, down: false }
+          }
+        },
+        pdfSprint: {
+          preset: "neon", scope: "profile", role: "knowledge", authorFamily: "google", restrictedData: false,
+          pools: {
+            codex: { weekly: 62, fiveHour: 45, down: false },
+            claude: { weekly: 55, fiveHour: 30, down: false },
+            gemini: { weekly: 28, fiveHour: 15, down: false },
+            deepseek: { weekly: 15, fiveHour: 10, down: false }
+          }
+        },
+        restrictedReview: {
+          preset: "sol", scope: "profile", role: "review", authorFamily: "openai", restrictedData: true,
+          pools: {
+            codex: { weekly: 30, fiveHour: 18, down: false },
+            claude: { weekly: 36, fiveHour: 22, down: false },
+            gemini: { weekly: 20, fiveHour: 10, down: false },
+            deepseek: { weekly: 5, fiveHour: 5, down: false }
+          }
+        }
+      };
+
+      const MIX_PRESETS = {
+        balanced: { coding: 45, reasoning: 20, pdf: 20, cleanup: 15 },
+        refactor: { coding: 55, reasoning: 25, pdf: 5, cleanup: 15 },
+        research: { coding: 20, reasoning: 25, pdf: 45, cleanup: 10 }
+      };
+
+      /* =====================================================================
+       * 4. EXACT DETERMINISTIC RESOLVER (PORT OF resolve_lanes.py)
+       * ===================================================================== */
+      function round2(v) {
+        return Math.round(v * 100) / 100;
+      }
+
+      function fmtNum(val) {
+        if (val === null || val === undefined || Number.isNaN(val)) return "—";
+        const r = round2(val);
+        return Number.isInteger(r) ? String(r) : String(r);
+      }
+
+      function fmtDelta(val) {
+        if (val === null || val === undefined) return "—";
+        if (Math.abs(val) < 1e-9) return "0";
+        return (val > 0 ? "+" : "") + fmtNum(val);
+      }
+
+      function laneKey(model, effort, pool) {
+        return model.toLowerCase() + "|" + effort.toLowerCase() + "|" + pool.toLowerCase();
+      }
+
+      function evaluateProviderStates(poolInputs) {
+        const evaluated = {};
+        for (const poolDef of POOLS) {
+          const p = poolDef.id;
+          const raw = poolInputs[p];
+          if (raw.down) {
+            evaluated[p] = {
+              status: "down",
+              effective_state: "down",
+              excluded: true,
+              deprioritized: false,
+              headroom: null,
+              weekly_pct: raw.weekly,
+              five_hour_pct: raw.fiveHour,
+              reasonType: "outage",
+              reasons: ["down (active outage)"]
+            };
+            continue;
+          }
+
+          const weekly = Number(raw.weekly);
+          const fiveHour = Number(raw.fiveHour);
+          const headroom = round2(Math.min(100 - weekly, 100 - fiveHour));
+          const stopReasons = [];
+          const moveReasons = [];
+
+          if (weekly >= WEEKLY_STOP_PCT) stopReasons.push("weekly_pct=" + weekly + "% >= " + WEEKLY_STOP_PCT + "%");
+          if (fiveHour >= FIVE_HOUR_STOP_PCT) stopReasons.push("five_hour_pct=" + fiveHour + "% >= " + FIVE_HOUR_STOP_PCT + "%");
+          if (weekly >= WEEKLY_MOVE_PCT) moveReasons.push("weekly_pct=" + weekly + "% >= " + WEEKLY_MOVE_PCT + "%");
+          if (fiveHour >= FIVE_HOUR_MOVE_PCT) moveReasons.push("five_hour_pct=" + fiveHour + "% >= " + FIVE_HOUR_MOVE_PCT + "%");
+
+          if (stopReasons.length > 0) {
+            evaluated[p] = {
+              status: "up",
+              effective_state: "stopped",
+              excluded: true,
+              deprioritized: false,
+              headroom: headroom,
+              weekly_pct: weekly,
+              five_hour_pct: fiveHour,
+              reasonType: "blocked",
+              reasons: ["stopped (" + stopReasons.join(", ") + ")"]
+            };
+          } else if (moveReasons.length > 0) {
+            evaluated[p] = {
+              status: "up",
+              effective_state: "deprioritized",
+              excluded: false,
+              deprioritized: true,
+              headroom: headroom,
+              weekly_pct: weekly,
+              five_hour_pct: fiveHour,
+              reasonType: "deprioritized",
+              reasons: ["past move threshold (" + moveReasons.join(", ") + ")"]
+            };
+          } else {
+            evaluated[p] = {
+              status: "up",
+              effective_state: "up",
+              excluded: false,
+              deprioritized: false,
+              headroom: headroom,
+              weekly_pct: weekly,
+              five_hour_pct: fiveHour,
+              reasonType: "healthy",
+              reasons: []
+            };
+          }
+        }
+        return evaluated;
+      }
+
+      function roleScore(cand, role, ignoreKnowledge) {
+        if (role === "review") {
+          const acc = cand.profiles.accuracy;
+          const reas = cand.profiles.reasoning;
+          const know = ignoreKnowledge ? null : cand.profiles.knowledge;
+          if (acc === null || reas === null) return null;
+          if (know !== null) return round2(0.5 * acc + 0.3 * reas + 0.2 * know);
+          return round2(0.6 * acc + 0.4 * reas);
+        }
+        const v = cand.profiles[role];
+        return v !== null && v !== undefined ? round2(v) : null;
+      }
+
+      function compareTuples(a, b) {
+        const len = Math.min(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+          if (a[i] === b[i]) continue;
+          if (typeof a[i] === "string" && typeof b[i] === "string") {
+            return a[i] < b[i] ? -1 : 1;
+          }
+          return a[i] < b[i] ? -1 : 1;
+        }
+        return 0;
+      }
+
+      function getAuthorizedLanesMap(presetId, scope) {
+        if (scope === "advisory") return null;
+        const map = new Map();
+        const presetLanes = PRESETS[presetId].lanes;
+        for (const lane of presetLanes) {
+          map.set(laneKey(lane.model, lane.effort, lane.pool), lane);
+        }
+        if (scope === "expanded") {
+          for (const lane of OPTIONAL_4POOL_LANES) {
+            const k = laneKey(lane.model, lane.effort, lane.pool);
+            if (!map.has(k)) map.set(k, lane);
+          }
+        }
+        return map;
+      }
+
+      function resolveLanesJS(opts) {
+        const role = opts.role;
+        const authorFamily = role === "review" ? opts.authorFamily : null;
+        const restrictedData = Boolean(opts.restrictedData);
+        const authorizedMap = opts.authorizedMap; // Map or null
+        const providerStates = evaluateProviderStates(opts.pools);
+
+        const eligible = [];
+        const excluded = [];
+
+        for (const cand of BUNDLED_CANDIDATES) {
+          const key = laneKey(cand.model, cand.effort, cand.pool);
+          const lane = authorizedMap ? authorizedMap.get(key) || null : null;
+          const pstate = providerStates[cand.pool];
+
+          const exclusionTypes = [];
+          const exclusionReasons = [];
+
+          const roleAuthorized = !authorizedMap || (lane !== null && lane.roles.includes(role));
+          if (!roleAuthorized) {
+            exclusionTypes.push("unauthorized");
+            exclusionReasons.push("model, effort and pool are not authorized for this role");
+          }
+          if (restrictedData && (!lane || !lane.restricted_data)) {
+            exclusionTypes.push("restricted-denied");
+            exclusionReasons.push("lane is not authorized for restricted data");
+          }
+          if (pstate && pstate.excluded) {
+            exclusionTypes.push(pstate.reasonType); // "outage" or "blocked"
+            exclusionReasons.push(...pstate.reasons);
+          }
+
+          if (exclusionReasons.length > 0) {
+            excluded.push({
+              model: lane ? lane.model : cand.model,
+              display: cand.display,
+              effort: cand.effort,
+              pool: cand.pool,
+              family: cand.family,
+              runner: lane ? lane.runner : null,
+              score: null,
+              headroom: pstate ? pstate.headroom : null,
+              roleAuthorized: roleAuthorized,
+              exclusionTypes: exclusionTypes,
+              reasons: exclusionReasons,
+              _cand: cand
+            });
+            continue;
+          }
+
+          const sameFamily = Boolean(role === "review" && authorFamily && cand.family === authorFamily);
+          eligible.push({
+            model: lane ? lane.model : cand.model,
+            display: cand.display,
+            effort: cand.effort,
+            pool: cand.pool,
+            family: cand.family,
+            runner: lane ? lane.runner : null,
+            score: null,
+            latency_s: cand.latency_s,
+            latency_kind: cand.latency_kind,
+            pool_state: pstate.effective_state,
+            deprioritized: pstate.deprioritized,
+            headroom: pstate.headroom,
+            stale: false,
+            same_family: sameFamily,
+            state_reasons: pstate.reasons.slice(),
+            _cand: cand
+          });
+        }
+
+        // Historical drop_knowledge consistency rule for review
+        let dropKnowledge = false;
+        if (role === "review") {
+          const revMeasured = eligible.filter(
+            (e) => e._cand.profiles.accuracy !== null && e._cand.profiles.reasoning !== null
+          );
+          const hasKnow = revMeasured.some((e) => e._cand.profiles.knowledge !== null);
+          const missingKnow = revMeasured.some((e) => e._cand.profiles.knowledge === null);
+          dropKnowledge = hasKnow && missingKnow;
+        }
+
+        for (const item of eligible) {
+          item.score = roleScore(item._cand, role, dropKnowledge);
+        }
+        for (const item of excluded) {
+          item.score = roleScore(item._cand, role, dropKnowledge);
+        }
+
+        // Shared latencies tie-break (measured-only when tied on pre-latency keys)
+        const tiedGroups = new Map();
+        for (const item of eligible) {
+          const tkey = JSON.stringify([item.same_family, item.deprioritized, item.stale, item.headroom, item.score]);
+          if (!tiedGroups.has(tkey)) tiedGroups.set(tkey, []);
+          tiedGroups.get(tkey).push(item);
+        }
+        for (const items of tiedGroups.values()) {
+          const comparable =
+            items[0].score !== null &&
+            items.every((it) => it.latency_s !== null && it.latency_kind === "measured");
+          for (const it of items) {
+            it._comparable_latency = comparable ? it.latency_s : Infinity;
+          }
+        }
+
+        // Equivalence band & cross-family anchor
+        const measured = eligible.filter((it) => it.score !== null);
+        const hasCrossFamily = Boolean(role === "review" && authorFamily && eligible.some((it) => !it.same_family));
+        const crossMeasured = hasCrossFamily ? measured.filter((it) => !it.same_family) : [];
+        let anchorPool = measured;
+        let crossFamilyAnchored = false;
+        if (hasCrossFamily && crossMeasured.length > 0) {
+          anchorPool = crossMeasured;
+          crossFamilyAnchored = true;
+        }
+        const unmeasuredCrossBlocksSameFamily = Boolean(hasCrossFamily && crossMeasured.length === 0);
+        const topScore = anchorPool.length > 0 ? Math.max(...anchorPool.map((it) => it.score)) : null;
+
+        for (const item of eligible) {
+          const flags = [];
+          if (item.score === null) {
+            item.delta = null;
+            item.tier = "unmeasured";
+            flags.push("unmeasured");
+          } else {
+            item.delta = topScore !== null ? round2(item.score - topScore) : 0.0;
+            if (topScore !== null && (topScore - item.score) <= EQUIVALENCE_POINTS + 1e-9) {
+              item.tier = "equivalent";
+            } else {
+              item.tier = "below (+1 verification)";
+              flags.push("below (+1 verification)");
+            }
+          }
+          if (item.same_family) flags.push("same-family");
+          if (item.deprioritized) flags.push("deprioritized");
+          item.flags = flags;
+        }
+
+        function sortKey(item) {
+          const isUnmeasured = item.score === null;
+          const isSameFamily = item.same_family;
+          const isBelow = item.tier !== "equivalent";
+          const headroomRank = item.headroom !== null ? item.headroom : 0.0;
+          const scoreRank = item.score !== null ? item.score : -1.0;
+          const latencyRank = item._comparable_latency;
+
+          if (isUnmeasured) {
+            const primary = (unmeasuredCrossBlocksSameFamily && !isSameFamily) ? 0 : 2;
+            return [
+              primary,
+              isSameFamily ? 1 : 0,
+              item.deprioritized ? 1 : 0,
+              item.stale ? 1 : 0,
+              -headroomRank,
+              0.0,
+              latencyRank,
+              item.model.toLowerCase(),
+              item.effort.toLowerCase()
+            ];
+          }
+          if (!isBelow) {
+            return [
+              isSameFamily ? 1 : 0,
+              0,
+              item.deprioritized ? 1 : 0,
+              item.stale ? 1 : 0,
+              -headroomRank,
+              -scoreRank,
+              latencyRank,
+              item.model.toLowerCase(),
+              item.effort.toLowerCase()
+            ];
+          }
+          return [
+            isSameFamily ? 1 : 0,
+            1,
+            -scoreRank,
+            item.deprioritized ? 1 : 0,
+            item.stale ? 1 : 0,
+            -headroomRank,
+            latencyRank,
+            item.model.toLowerCase(),
+            item.effort.toLowerCase()
+          ];
+        }
+
+        eligible.sort((a, b) => compareTuples(sortKey(a), sortKey(b)));
+        eligible.forEach((item, idx) => {
+          item.rank = idx + 1;
+        });
+
+        excluded.sort((a, b) =>
+          compareTuples(
+            [a.roleAuthorized ? 0 : 1, a.score === null ? 1 : 0, -(a.score || 0), a.model.toLowerCase(), a.effort.toLowerCase()],
+            [b.roleAuthorized ? 0 : 1, b.score === null ? 1 : 0, -(b.score || 0), b.model.toLowerCase(), b.effort.toLowerCase()]
+          )
+        );
+
+        const topLane = eligible.length > 0 && eligible[0].score !== null ? eligible[0] : null;
+        return {
+          role: role,
+          authorFamily: authorFamily,
+          restrictedData: restrictedData,
+          advisory: authorizedMap === null,
+          topScore: topScore,
+          crossFamilyAnchored: crossFamilyAnchored,
+          providerStates: providerStates,
+          recommended: topLane,
+          ranked: eligible,
+          excluded: excluded
+        };
+      }
+
+      /* =====================================================================
+       * 5. HELPERS & EXPLANATION GENERATOR
+       * ===================================================================== */
+      function t(key, vars) {
+        const dict = I18N[state.lang] || I18N.en;
+        let str = dict[key] !== undefined ? dict[key] : (I18N.en[key] || key);
+        if (vars) {
+          for (const [k, v] of Object.entries(vars)) {
+            str = str.replaceAll("{" + k + "}", String(v));
+          }
+        }
+        return str;
+      }
+
+      function esc(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function roleDisplayName(role) {
+        const map = {
+          coding: "roleCoding",
+          reasoning: "roleReasoning",
+          accuracy: "roleAccuracy",
+          knowledge: "roleKnowledge",
+          review: "roleReview"
+        };
+        return t(map[role] || "roleCoding");
+      }
+
+      function buildWinExplanation(res) {
+        const rec = res.recommended;
+        const roleLabel = roleDisplayName(res.role);
+        const relevantExcluded = res.excluded.filter((x) => x.roleAuthorized);
+
+        if (!rec) {
+          if (relevantExcluded.length > 0) {
+            const uniqueTypes = [...new Set(relevantExcluded.flatMap((x) => x.exclusionTypes))];
+            const reasonLabels = uniqueTypes.map((tp) => {
+              if (tp === "outage") return t("badgeOutage");
+              if (tp === "blocked") return t("badgeBlocked");
+              if (tp === "restricted-denied") return t("badgeRestricted");
+              return tp;
+            });
+            return t("emptyReasonAllAuthOut", { role: roleLabel, reasons: reasonLabels.join(", ") });
+          }
+          return t("emptyReasonNoRole", { preset: PRESETS[state.preset].name, role: roleLabel });
+        }
+
+        if (rec.same_family && res.role === "review") {
+          return t("whySameFamilyFallback", { fam: rec.family, score: fmtNum(rec.score) });
+        }
+
+        if (res.restrictedData && res.role === "review" && !rec.same_family) {
+          const rest = state.lang === "tr"
+            ? "skor " + fmtNum(rec.score) + ", kalan kota %" + fmtNum(rec.headroom)
+            : "score " + fmtNum(rec.score) + ", " + fmtNum(rec.headroom) + "% headroom";
+          return t("whyRestrictedCross", { author: res.authorFamily, rest: rest });
+        }
+
+        // Check if a higher-scoring authorized lane was excluded due to outage/blocked/restricted
+        const higherExcluded = relevantExcluded.find((x) => x.score !== null && x.score >= rec.score);
+        if (higherExcluded && res.role !== "review") {
+          const reasonBadge = higherExcluded.exclusionTypes.includes("outage")
+            ? t("badgeOutage")
+            : higherExcluded.exclusionTypes.includes("restricted-denied")
+              ? t("badgeRestricted")
+              : t("badgeBlocked");
+          return t("whyOutageBeat", {
+            rivalPool: higherExcluded.pool,
+            rivalExcludeReason: reasonBadge,
+            model: rec.model + " (" + rec.effort + ")",
+            hr: fmtNum(rec.headroom)
+          });
+        }
+
+        // Check if an equivalent rival was deprioritized
+        const deprioHigher = res.ranked.find(
+          (x) => x !== rec && x.tier === "equivalent" && x.deprioritized && x.score >= rec.score && (!x.same_family || rec.same_family)
+        );
+        if (deprioHigher && !rec.deprioritized) {
+          const rReason = deprioHigher.state_reasons[0] || t("badgeDeprioritized");
+          return t("whyDeprioBeat", {
+            rival: deprioHigher.model + " (" + deprioHigher.effort + ")",
+            rivalReason: rReason,
+            hr: fmtNum(rec.headroom)
+          });
+        }
+
+        // Check if won within ±3-pt equivalence band due to higher headroom over higher-scoring rival
+        const higherScoreEquivRival = res.ranked.find(
+          (x) => x !== rec && x.tier === "equivalent" && !x.deprioritized && x.score > rec.score && (!x.same_family || rec.same_family)
+        );
+        if (higherScoreEquivRival) {
+          return t("whyEquivHeadroom", {
+            top: fmtNum(res.topScore),
+            delta: fmtDelta(rec.delta),
+            hr: fmtNum(rec.headroom),
+            rivalHr: fmtNum(higherScoreEquivRival.headroom),
+            rival: higherScoreEquivRival.model + " (" + higherScoreEquivRival.effort + ")"
+          });
+        }
+
+        if (res.role === "review" && res.authorFamily && !rec.same_family) {
+          return t("whyCrossPriority", {
+            fam: rec.family,
+            author: res.authorFamily,
+            score: fmtNum(rec.score),
+            hr: fmtNum(rec.headroom)
+          });
+        }
+
+        if (res.ranked.length === 1) {
+          return t("whySoleEligible", {
+            role: roleLabel,
+            score: fmtNum(rec.score),
+            hr: fmtNum(rec.headroom)
+          });
+        }
+
+        if (rec.deprioritized || rec.tier !== "equivalent") {
+          return t("whyBelowDeprio", {
+            score: fmtNum(rec.score),
+            hr: fmtNum(rec.headroom)
+          });
+        }
+
+        return t("whyClearTop", {
+          role: roleLabel,
+          score: fmtNum(rec.score),
+          hr: fmtNum(rec.headroom)
+        });
+      }
+
+      /* =====================================================================
+       * 6. RENDERING FUNCTIONS
+       * ===================================================================== */
+      function initPoolSliders() {
+        const container = document.getElementById("poolSliders");
+        let html = "";
+        for (const p of POOLS) {
+          html += `
+            <div class="pool-card" data-pool-card="${p.id}">
+              <div class="pool-head">
+                <div class="pool-title-wrap">
+                  <span class="pool-name">${esc(p.label)}</span>
+                  <span class="badge b-healthy" data-pool-badge="${p.id}"></span>
+                  <span class="pool-headroom num" data-pool-hr="${p.id}"></span>
+                </div>
+                <label class="outage-toggle" data-pool-down-wrap="${p.id}">
+                  <input type="checkbox" data-pool-down="${p.id}">
+                  <span data-pool-down-lbl="${p.id}"></span>
+                </label>
+              </div>
+              <div class="slider-row">
+                <span class="slider-label" data-pool-wk-lbl="${p.id}"></span>
+                <div class="slider-wrap">
+                  <input type="range" min="0" max="100" step="1" value="0" data-pool-weekly="${p.id}" aria-label="${esc(p.label)} weekly usage">
+                </div>
+                <span class="slider-val num" data-pool-wk-val="${p.id}"></span>
+              </div>
+              <div class="threshold-ticks"><span>0%</span><span data-pool-tick-wk="${p.id}"></span><span>100%</span></div>
+              <div class="slider-row">
+                <span class="slider-label" data-pool-fh-lbl="${p.id}"></span>
+                <div class="slider-wrap">
+                  <input type="range" min="0" max="100" step="1" value="0" data-pool-five="${p.id}" aria-label="${esc(p.label)} 5-hour usage">
+                </div>
+                <span class="slider-val num" data-pool-fh-val="${p.id}"></span>
+              </div>
+              <div class="threshold-ticks"><span>0%</span><span data-pool-tick-fh="${p.id}"></span><span>100%</span></div>
+            </div>
+          `;
+        }
+        container.innerHTML = html;
+      }
+
+      function renderPoolSliders() {
+        const container = document.getElementById("poolSliders");
+        if (!container.querySelector("[data-pool-card]")) {
+          initPoolSliders();
+        }
+        const pStates = evaluateProviderStates(state.pools);
+        for (const p of POOLS) {
+          const val = state.pools[p.id];
+          const st = pStates[p.id];
+          let badgeClass = "b-healthy";
+          let badgeText = t("badgeHealthy");
+          if (st.effective_state === "down") {
+            badgeClass = "b-outage";
+            badgeText = t("badgeOutage");
+          } else if (st.effective_state === "stopped") {
+            badgeClass = "b-blocked";
+            badgeText = t("badgeBlocked");
+          } else if (st.effective_state === "deprioritized") {
+            badgeClass = "b-deprioritized";
+            badgeText = t("badgeDeprioritized");
+          }
+
+          const hrText = st.headroom !== null ? (t("poolHeadroom") + ": " + fmtNum(st.headroom) + "%") : t("poolDownText");
+          const wkColor = val.down ? "var(--text-muted)" : (val.weekly >= 90 ? "var(--rose)" : (val.weekly >= 85 ? "var(--amber)" : "var(--text)"));
+          const fhColor = val.down ? "var(--text-muted)" : (val.fiveHour >= 95 ? "var(--rose)" : (val.fiveHour >= 90 ? "var(--amber)" : "var(--text)"));
+
+          const card = container.querySelector('[data-pool-card="' + p.id + '"]');
+          card.className = "pool-card state-" + st.effective_state;
+
+          const badge = container.querySelector('[data-pool-badge="' + p.id + '"]');
+          badge.className = "badge " + badgeClass;
+          badge.textContent = badgeText;
+
+          container.querySelector('[data-pool-hr="' + p.id + '"]').textContent = hrText;
+          container.querySelector('[data-pool-down-wrap="' + p.id + '"]').classList.toggle("is-down", val.down);
+          container.querySelector('[data-pool-down="' + p.id + '"]').checked = val.down;
+          container.querySelector('[data-pool-down-lbl="' + p.id + '"]').textContent = t("poolOutage");
+
+          container.querySelector('[data-pool-wk-lbl="' + p.id + '"]').textContent = t("poolWeekly");
+          const wkInput = container.querySelector('[data-pool-weekly="' + p.id + '"]');
+          if (Number(wkInput.value) !== val.weekly) wkInput.value = val.weekly;
+          wkInput.disabled = val.down;
+          const wkValEl = container.querySelector('[data-pool-wk-val="' + p.id + '"]');
+          wkValEl.textContent = val.weekly + "%";
+          wkValEl.style.color = wkColor;
+          container.querySelector('[data-pool-tick-wk="' + p.id + '"]').textContent = t("tickMoveStopWk");
+
+          container.querySelector('[data-pool-fh-lbl="' + p.id + '"]').textContent = t("poolFiveHour");
+          const fhInput = container.querySelector('[data-pool-five="' + p.id + '"]');
+          if (Number(fhInput.value) !== val.fiveHour) fhInput.value = val.fiveHour;
+          fhInput.disabled = val.down;
+          const fhValEl = container.querySelector('[data-pool-fh-val="' + p.id + '"]');
+          fhValEl.textContent = val.fiveHour + "%";
+          fhValEl.style.color = fhColor;
+          container.querySelector('[data-pool-tick-fh="' + p.id + '"]').textContent = t("tickMoveStop5h");
+        }
+      }
+
+      function renderSimulator() {
+        const preset = PRESETS[state.preset];
+        const authMap = getAuthorizedLanesMap(state.preset, state.scope);
+        const res = resolveLanesJS({
+          role: state.role,
+          authorFamily: state.authorFamily,
+          restrictedData: state.restrictedData,
+          authorizedMap: authMap,
+          pools: state.pools
+        });
+
+        // Update preset meta bar
+        const authCount = authMap ? authMap.size : BUNDLED_CANDIDATES.length;
+        document.getElementById("presetMeta").innerHTML =
+          `<span><strong>${esc(t("presetManager"))}:</strong> <span class="mono">${esc(preset.manager)}</span></span>` +
+          `<span class="badge b-modeled">${esc(t("presetAuthCount", { n: authCount }))}</span>`;
+
+        // Role CLI flags & Author Family visibility
+        document.getElementById("roleCliFlag").textContent = "--role " + state.role;
+        const authorBox = document.getElementById("authorFamilyBox");
+        if (state.role === "review") {
+          authorBox.classList.remove("hidden");
+          document.getElementById("authorCliFlag").textContent = "--author-family " + state.authorFamily;
+        } else {
+          authorBox.classList.add("hidden");
+        }
+
+        // Restricted card style
+        const restrictedCard = document.getElementById("restrictedCard");
+        restrictedCard.classList.toggle("active", state.restrictedData);
+        document.getElementById("restrictedToggle").checked = state.restrictedData;
+
+        // Render Recommended Card
+        const recCard = document.getElementById("recommendedCard");
+        const rec = res.recommended;
+        const whyText = buildWinExplanation(res);
+        const warnings = [];
+        if (res.advisory) warnings.push(t("warnAdvisory"));
+        if (!rec) {
+          warnings.push(t("warnNoEligible", { role: roleDisplayName(res.role) }));
+        } else {
+          if (rec.same_family) warnings.push(t("warnSameFamilyOnly", { author: res.authorFamily }));
+          if (rec.deprioritized) warnings.push(t("warnDeprioritizedTop"));
+        }
+
+        recCard.className = "rec-card" + (!rec ? " is-empty" : (warnings.length > 0 ? " is-warn" : ""));
+
+        if (rec) {
+          const kicker = res.advisory
+            ? t("recKickerAdvisory")
+            : (warnings.length > 0 ? t("recKickerWarn") : t("recKickerHealthy"));
+
+          const recBadges = [];
+          if (!rec.deprioritized) recBadges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
+          else recBadges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+          if (rec.tier === "equivalent") recBadges.push(`<span class="badge b-equivalent">${esc(t("badgeEquivalent"))}</span>`);
+          else recBadges.push(`<span class="badge b-below">${esc(t("badgeBelow"))}</span>`);
+          if (rec.same_family) recBadges.push(`<span class="badge b-same-family">${esc(t("badgeSameFamily"))}</span>`);
+
+          recCard.innerHTML = `
+            <div class="rec-top">
+              <div>
+                <div class="rec-kicker">${esc(kicker)}</div>
+                <div class="rec-model">
+                  <span class="mono">${esc(rec.model)}</span>
+                  <span class="rec-effort mono">${esc(rec.effort)}</span>
+                </div>
+                <div class="rec-meta-row">
+                  <span>Pool: <strong class="mono">${esc(rec.pool)}</strong> (${esc(rec.family)})</span>
+                  ${rec.runner ? `<span>· ${esc(t("recRunner"))}: <code style="color:var(--text)">${esc(rec.runner)}</code></span>` : ""}
+                  <span class="badges-wrap">${recBadges.join("")}</span>
+                </div>
+              </div>
+              <div class="rec-stats">
+                <div class="rec-stat-box">
+                  <span class="rec-stat-val num" style="color:var(--emerald)">${esc(fmtNum(rec.score))}</span>
+                  <span class="rec-stat-lbl">${esc(t("recScore"))}</span>
+                </div>
+                <div class="rec-stat-box">
+                  <span class="rec-stat-val num">${rec.headroom !== null ? esc(fmtNum(rec.headroom)) + "%" : esc(t("recUnknown"))}</span>
+                  <span class="rec-stat-lbl">${esc(t("recHeadroom"))}</span>
+                </div>
+                <div class="rec-stat-box">
+                  <span class="rec-stat-val num" style="color:var(--cyan)">${esc(fmtDelta(rec.delta))}</span>
+                  <span class="rec-stat-lbl">${esc(t("recDelta"))}</span>
+                </div>
+              </div>
+            </div>
+            <div class="why-box">
+              <strong>${esc(t("recWhyPrefix"))}</strong> ${esc(whyText)}
+            </div>
+            ${warnings.length ? `<ul class="warnings-list">${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+          `;
+        } else {
+          const relevantExcluded = res.excluded.filter((x) => x.roleAuthorized);
+          const recoveryBtns = [];
+          if (relevantExcluded.length === 0) {
+            if (state.preset !== "neon" && (state.role === "knowledge" || state.role === "accuracy")) {
+              recoveryBtns.push(`<button type="button" class="mini-action-btn" data-recover="neon">${esc(t("recSwitchNeon"))}</button>`);
+            }
+            if (state.scope === "profile") {
+              recoveryBtns.push(`<button type="button" class="mini-action-btn" data-recover="expanded">${esc(t("recEnable4Pool"))}</button>`);
+            }
+          } else {
+            recoveryBtns.push(`<button type="button" class="mini-action-btn" data-recover="resetQuotas">${esc(t("recResetQuotas"))}</button>`);
+          }
+
+          recCard.innerHTML = `
+            <div class="rec-kicker">${esc(t("recKickerEmpty"))}</div>
+            <div class="why-box">
+              <strong>${esc(t("recEmptyWhy"))}</strong> ${esc(whyText)}
+            </div>
+            ${recoveryBtns.length ? `<div class="recovery-actions">${recoveryBtns.join("")}</div>` : ""}
+          `;
+        }
+
+        // Render Table
+        const policyExcluded = res.excluded.filter((x) => x.roleAuthorized);
+        const unauthExcluded = res.excluded.filter((x) => !x.roleAuthorized);
+        const metaKey = res.crossFamilyAnchored ? "tblMetaCross" : "tblMeta";
+        document.getElementById("tableMeta").textContent = t(metaKey, {
+          elig: res.ranked.length,
+          excl: policyExcluded.length,
+          top: fmtNum(res.topScore)
+        });
+        document.getElementById("eqBandBadge").textContent =
+          res.topScore !== null
+            ? "±3 pts (" + fmtNum(round2(res.topScore - EQUIVALENCE_POINTS)) + "–" + fmtNum(res.topScore) + ")"
+            : "±3 pts";
+
+        const rows = [];
+        for (const item of res.ranked) {
+          const isWinner = rec && item === rec;
+          const badges = [];
+          if (!item.deprioritized) badges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
+          else badges.push(`<span class="badge b-deprioritized">${esc(t("badgeDeprioritized"))}</span>`);
+          if (item.tier === "equivalent") badges.push(`<span class="badge b-equivalent">${esc(t("badgeEquivalent"))}</span>`);
+          else if (item.tier === "unmeasured") badges.push(`<span class="badge b-below">${esc(t("badgeUnmeasured"))}</span>`);
+          else badges.push(`<span class="badge b-below">${esc(t("badgeBelow"))}</span>`);
+          if (item.same_family) badges.push(`<span class="badge b-same-family">${esc(t("badgeSameFamily"))}</span>`);
+
+          const hr = item.headroom !== null ? item.headroom : 0;
+          const hrColor = item.deprioritized ? "var(--amber)" : "var(--emerald)";
+          rows.push(`
+            <tr class="${isWinner ? "row-winner" : ""}">
+              <td class="rank-num num">#${item.rank}</td>
+              <td>
+                <div class="model-cell-main mono">${esc(item.model)} <span style="color:var(--text-dim);font-weight:500;">(${esc(item.effort)})</span></div>
+                ${item.runner ? `<div class="model-cell-sub mono">${esc(item.runner)}</div>` : ""}
+              </td>
+              <td>
+                <div class="mono" style="font-size:0.79rem;">${esc(item.pool)}</div>
+                <div class="model-cell-sub">${esc(item.family)}</div>
+              </td>
+              <td class="num" style="font-weight:700;">${esc(fmtNum(item.score))}</td>
+              <td class="num" style="color:${item.delta === 0 ? "var(--emerald)" : "var(--text-dim)"}">${esc(fmtDelta(item.delta))}</td>
+              <td><div class="badges-wrap">${badges.join("")}</div></td>
+              <td>
+                <div class="hr-bar-wrap num">
+                  <div class="hr-track"><div class="hr-fill" style="width:${Math.max(0, Math.min(100, hr))}%;background:${hrColor}"></div></div>
+                  <span>${item.headroom !== null ? esc(fmtNum(item.headroom)) + "%" : "—"}</span>
+                </div>
+              </td>
+            </tr>
+          `);
+        }
+
+        const excludedToShow = state.showUnauthorized ? res.excluded : policyExcluded;
+        for (const item of excludedToShow) {
+          const badges = [];
+          if (item.exclusionTypes.includes("outage")) badges.push(`<span class="badge b-outage">${esc(t("badgeOutage"))}</span>`);
+          if (item.exclusionTypes.includes("blocked")) badges.push(`<span class="badge b-blocked">${esc(t("badgeBlocked"))}</span>`);
+          if (item.exclusionTypes.includes("restricted-denied")) badges.push(`<span class="badge b-restricted">${esc(t("badgeRestricted"))}</span>`);
+          if (item.exclusionTypes.includes("unauthorized")) badges.push(`<span class="badge b-below">${esc(t("badgeUnauth"))}</span>`);
+
+          const deltaVal = (item.score !== null && res.topScore !== null) ? round2(item.score - res.topScore) : null;
+          const hr = item.headroom !== null ? item.headroom : 0;
+          const hrText = item.exclusionTypes.includes("outage") ? t("poolDownText") : (item.headroom !== null ? fmtNum(item.headroom) + "%" : "—");
+          rows.push(`
+            <tr class="row-excluded">
+              <td class="rank-num num">—</td>
+              <td>
+                <div class="model-cell-main mono">${esc(item.model)} <span style="color:var(--text-muted);font-weight:500;">(${esc(item.effort)})</span></div>
+                ${item.runner ? `<div class="model-cell-sub mono">${esc(item.runner)}</div>` : ""}
+              </td>
+              <td>
+                <div class="mono" style="font-size:0.79rem;">${esc(item.pool)}</div>
+                <div class="model-cell-sub">${esc(item.family)}</div>
+              </td>
+              <td class="num">${esc(fmtNum(item.score))}</td>
+              <td class="num" style="color:var(--text-muted)">${esc(fmtDelta(deltaVal))}</td>
+              <td><div class="badges-wrap">${badges.join("")}</div></td>
+              <td>
+                <div class="hr-bar-wrap num">
+                  <div class="hr-track"><div class="hr-fill" style="width:${item.exclusionTypes.includes("outage") ? 0 : Math.max(0, Math.min(100, hr))}%;background:var(--rose)"></div></div>
+                  <span>${esc(hrText)}</span>
+                </div>
+              </td>
+            </tr>
+          `);
+        }
+
+        document.getElementById("candidatesBody").innerHTML = rows.join("");
+
+        const unauthRow = document.getElementById("unauthToggleRow");
+        if (unauthExcluded.length > 0) {
+          const btnLabel = state.showUnauthorized
+            ? t("hideUnauth", { n: unauthExcluded.length })
+            : t("showUnauth", { n: unauthExcluded.length });
+          unauthRow.innerHTML = `
+            <span>${esc(t("unauthNote"))}</span>
+            <button type="button" class="link-btn" id="toggleUnauthBtn">${esc(btnLabel)}</button>
+          `;
+        } else {
+          unauthRow.innerHTML = "";
+        }
+
+        // Equivalent CLI command
+        const cliParts = [
+          "python3 skills/update-orchestration-skills/scripts/resolve_lanes.py"
+        ];
+        if (state.scope === "profile") {
+          cliParts.push("  --profile " + preset.profilePath);
+        } else if (state.scope === "expanded") {
+          cliParts.push("  --profile .orchestration/project-profile.md");
+        }
+        cliParts.push("  --state .orchestration/provider-state.json");
+        cliParts.push("  --role " + state.role);
+        if (state.role === "review") {
+          cliParts.push("  --author-family " + state.authorFamily);
+        }
+        if (state.restrictedData) {
+          cliParts.push("  --restricted-data");
+        }
+        document.getElementById("cliCommand").textContent = cliParts.join(" \\\n");
+
+        // Equivalent provider-state.json preview
+        const nowIso = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+        const downUntilIso = new Date(Date.now() + 30 * 60000).toISOString().replace(/\.\d{3}Z$/, "Z");
+        const stateObj = {};
+        for (const p of POOLS) {
+          const pv = state.pools[p.id];
+          stateObj[p.id] = {
+            status: pv.down ? "down" : "up",
+            down_until: pv.down ? downUntilIso : null,
+            limit: pv.down ? "simulated provider outage" : null,
+            five_hour_pct: pv.down ? null : pv.fiveHour,
+            weekly_pct: pv.down ? null : pv.weekly,
+            resets_at: null,
+            observed_at: nowIso
+          };
+        }
+        document.getElementById("stateJsonPreview").textContent = JSON.stringify(stateObj, null, 2);
+
+        syncButtonHighlights();
+      }
+
+      /* =====================================================================
+       * 7. QUOTA RUNWAY & TOKEN SAVINGS ESTIMATOR
+       * ===================================================================== */
+      function initMixSliders() {
+        const container = document.getElementById("mixSliders");
+        const keys = ["coding", "reasoning", "pdf", "cleanup"];
+        container.innerHTML = keys.map((k) => `
+          <div class="mix-row" data-mix-row="${k}">
+            <span class="mix-label" data-mix-lbl="${k}"></span>
+            <input type="range" min="0" max="100" step="5" value="25" data-mix-key="${k}" aria-label="${k}">
+            <span class="mix-pct num" data-mix-pct="${k}"></span>
+          </div>
+        `).join("");
+      }
+
+      function renderMixSliders() {
+        const container = document.getElementById("mixSliders");
+        if (!container.querySelector("[data-mix-row]")) {
+          initMixSliders();
+        }
+        const m = state.est.mix;
+        const total = m.coding + m.reasoning + m.pdf + m.cleanup || 1;
+        const items = [
+          { key: "coding", label: t("mixCoding") },
+          { key: "reasoning", label: t("mixReasoning") },
+          { key: "pdf", label: t("mixPdf") },
+          { key: "cleanup", label: t("mixCleanup") }
+        ];
+        for (const it of items) {
+          const pct = Math.round((m[it.key] / total) * 100);
+          container.querySelector('[data-mix-lbl="' + it.key + '"]').textContent = it.label;
+          const inp = container.querySelector('[data-mix-key="' + it.key + '"]');
+          inp.setAttribute("aria-label", it.label);
+          if (Number(inp.value) !== m[it.key]) inp.value = m[it.key];
+          container.querySelector('[data-mix-pct="' + it.key + '"]').textContent = pct + "%";
+        }
+      }
+
+      function renderEstimator() {
+        const P = state.est.pools;
+        const preset = PRESETS[state.est.preset];
+        const m = state.est.mix;
+        const total = m.coding + m.reasoning + m.pdf + m.cleanup || 1;
+        const wCode = m.coding / total;
+        const wReas = m.reasoning / total;
+        const wPdf = m.pdf / total;
+        const wClean = m.cleanup / total;
+
+        // Transparent modeled coefficients
+        const delegable = wCode * 0.78 + wReas * 0.35 + wPdf * 0.85 + wClean * 0.90;
+        const poolCaptureMap = { 1: 0.28, 2: 0.78, 3: 0.90, 4: 0.95 };
+        const poolCapture = poolCaptureMap[P];
+        const coordKeep = 1 - preset.coordOverhead * 0.32;
+
+        const flagshipReduction = Math.min(0.75, delegable * poolCapture * coordKeep);
+        const briefEff = preset.contextRetainBonus;
+
+        let runwayMult;
+        let retainedBarPct;
+        let offloadBarPct;
+        if (P === 1) {
+          // Single pool: lighter-tier workers still consume ~55% relative quota from same pool
+          const effectiveBurn = (1 - flagshipReduction * 0.45) * (1 - briefEff * 0.55);
+          runwayMult = 1 / Math.max(0.25, effectiveBurn);
+          retainedBarPct = Math.round(effectiveBurn * 100);
+          offloadBarPct = 0;
+        } else {
+          const retainedBurn = (1 - flagshipReduction) * (1 - briefEff);
+          runwayMult = 1 / Math.max(0.2, retainedBurn);
+          retainedBarPct = Math.round(retainedBurn * 100);
+          offloadBarPct = Math.round(flagshipReduction * (1 - briefEff * 0.65) * 100);
+        }
+
+        const rightSizing = wCode * 0.36 + wReas * 0.18 + wPdf * 0.48 + wClean * 0.52;
+        const poolSpecFactor = 0.58 + 0.14 * P;
+        const sessionTokenSavings = Math.max(
+          0.14,
+          Math.min(0.52, rightSizing * poolSpecFactor + (preset.measuredUpfrontPct / 100) * 0.08)
+        );
+        const savedBarPct = Math.max(5, 100 - retainedBarPct - offloadBarPct);
+        const normFlagPct = Math.max(10, 100 - offloadBarPct - savedBarPct);
+
+        // Update UI
+        const poolHintKey = P === 1 ? "estPoolWord" : "estPoolsWord";
+        document.getElementById("estPoolsHint").textContent = t(poolHintKey, { n: P });
+
+        const coordNoteMap = {
+          sol: "estCoordNoteSol",
+          astra: "estCoordNoteAstra",
+          opus: "estCoordNoteOpus",
+          fable: "estCoordNoteFable",
+          neon: "estCoordNoteNeon"
+        };
+        document.getElementById("estCoordBurnNote").textContent = t(coordNoteMap[preset.id]);
+
+        const multStr = runwayMult.toFixed(1);
+        const flagshipPct = Math.round(flagshipReduction * 100);
+        const tokenPct = Math.round(sessionTokenSavings * 100);
+
+        document.getElementById("kpiRunway").textContent = multStr + "×";
+        document.getElementById("kpiRunwayNote").textContent =
+          P === 1 ? t("kpiRunwayNote1") : t("kpiRunwayNoteMulti", { mult: multStr, pools: P });
+
+        document.getElementById("kpiFlagship").textContent = "~" + flagshipPct + "%";
+        document.getElementById("kpiFlagshipNote").textContent = t("kpiFlagshipNote", { pct: flagshipPct });
+
+        document.getElementById("kpiTokens").textContent = "~" + tokenPct + "%";
+        document.getElementById("kpiTokensNote").textContent = t("kpiTokensNote");
+
+        document.getElementById("kpiContext").textContent = preset.measuredUpfrontPct.toFixed(1) + "%";
+        document.getElementById("kpiContextNote").textContent = t("kpiContextNote", {
+          skillKb: (preset.skillBytes / 1024).toFixed(1),
+          refKb: (preset.refBytes / 1024).toFixed(1),
+          preset: preset.name
+        });
+
+        document.getElementById("barSegFlagship").style.width = normFlagPct + "%";
+        document.getElementById("barSegOffload").style.width = offloadBarPct + "%";
+        document.getElementById("barSegSaved").style.width = savedBarPct + "%";
+        document.getElementById("barOrchSummary").textContent = t("barSummaryText", {
+          flag: normFlagPct,
+          off: offloadBarPct,
+          sav: savedBarPct
+        });
+
+        document.getElementById("assumptionsBody").innerHTML = t("assumptionsHtml");
+        renderMixSliders();
+        syncEstimatorButtons();
+      }
+
+      /* =====================================================================
+       * 8. INSTALL COMMANDS & I18N SYNC
+       * ===================================================================== */
+      function renderInstallCommands() {
+        const npxMap = {
+          codex: "npx skills add ahmedkececi/ultimate-orchestration-skills --agent codex --copy \\\n  --skill sol-orchestration --skill astra-orchestration --skill update-orchestration-skills",
+          claude: "npx skills add ahmedkececi/ultimate-orchestration-skills --agent claude-code --copy \\\n  --skill opus-orchestration --skill fable-orchestration --skill update-orchestration-skills"
+        };
+        const shMap = {
+          codex: "curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client codex",
+          claude: "curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client claude",
+          antigravity: "curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client antigravity"
+        };
+        const labelMap = { codex: "Codex", claude: "Claude Code", antigravity: "Antigravity" };
+
+        document.getElementById("cmdNpx").textContent = npxMap[state.install.npx];
+        document.getElementById("npxBarLabel").textContent = labelMap[state.install.npx];
+        document.getElementById("cmdSh").textContent = shMap[state.install.sh];
+        document.getElementById("shBarLabel").textContent = labelMap[state.install.sh];
+
+        document.querySelectorAll("#npxTabs .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.npx === state.install.npx);
+        });
+        document.querySelectorAll("#shTabs .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.sh === state.install.sh);
+        });
+      }
+
+      function applyStaticI18n() {
+        document.documentElement.lang = state.lang;
+        document.title = t("pageTitle");
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.getAttribute("data-i18n");
+          el.textContent = t(key);
+        });
+        document.getElementById("langEn").classList.toggle("active", state.lang === "en");
+        document.getElementById("langTr").classList.toggle("active", state.lang === "tr");
+      }
+
+      function syncButtonHighlights() {
+        document.querySelectorAll(".scenario-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.scenario === state.scenario);
+        });
+        document.querySelectorAll("#presetButtons .preset-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.preset === state.preset);
+        });
+        document.querySelectorAll("#scopeButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.scope === state.scope);
+        });
+        document.querySelectorAll("#roleButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.role === state.role);
+        });
+        document.querySelectorAll("#authorButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.author === state.authorFamily);
+        });
+      }
+
+      function syncEstimatorButtons() {
+        document.querySelectorAll("#estPoolButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", Number(b.dataset.pools) === state.est.pools);
+        });
+        document.querySelectorAll("#estPresetButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.estPreset === state.est.preset);
+        });
+        document.querySelectorAll("#mixPresetButtons .seg-btn").forEach((b) => {
+          b.classList.toggle("active", b.dataset.mix === state.est.mixPreset);
+        });
+      }
+
+      function applyScenario(id) {
+        const sc = SCENARIOS[id];
+        if (!sc) return;
+        state.scenario = id;
+        state.preset = sc.preset;
+        state.scope = sc.scope;
+        state.role = sc.role;
+        state.authorFamily = sc.authorFamily;
+        state.restrictedData = sc.restrictedData;
+        for (const p of POOLS) {
+          state.pools[p.id] = { ...sc.pools[p.id] };
+        }
+        renderPoolSliders();
+        renderSimulator();
+      }
+
+      async function copyText(text, btn) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+          btn.classList.add("copied");
+          btn.textContent = t("btnCopied");
+          setTimeout(() => {
+            btn.classList.remove("copied");
+            btn.textContent = t("btnCopy");
+          }, 1500);
+        } catch (_err) {
+          // Clipboard blocked in restricted iframe/context
+        }
+      }
+
+      /* =====================================================================
+       * 9. EVENT LISTENERS
+       * ===================================================================== */
+      document.querySelectorAll(".lang-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.lang = btn.dataset.lang;
+          try { localStorage.setItem("uos_lang", state.lang); } catch (_e) {}
+          applyStaticI18n();
+          renderPoolSliders();
+          renderSimulator();
+          renderEstimator();
+        });
+      });
+
+      document.querySelectorAll(".scenario-btn").forEach((btn) => {
+        btn.addEventListener("click", () => applyScenario(btn.dataset.scenario));
+      });
+
+      document.getElementById("presetButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".preset-btn");
+        if (!btn) return;
+        state.scenario = null;
+        state.preset = btn.dataset.preset;
+        renderSimulator();
+      });
+
+      document.getElementById("scopeButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.scenario = null;
+        state.scope = btn.dataset.scope;
+        renderSimulator();
+      });
+
+      document.getElementById("roleButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.scenario = null;
+        state.role = btn.dataset.role;
+        renderSimulator();
+      });
+
+      document.getElementById("authorButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.scenario = null;
+        state.authorFamily = btn.dataset.author;
+        renderSimulator();
+      });
+
+      document.getElementById("restrictedToggle").addEventListener("change", (e) => {
+        state.scenario = null;
+        state.restrictedData = e.target.checked;
+        renderSimulator();
+      });
+
+      document.getElementById("poolSliders").addEventListener("input", (e) => {
+        const wk = e.target.dataset.poolWeekly;
+        const fh = e.target.dataset.poolFive;
+        if (wk) {
+          state.scenario = null;
+          state.pools[wk].weekly = Number(e.target.value);
+          renderPoolSliders();
+          renderSimulator();
+        } else if (fh) {
+          state.scenario = null;
+          state.pools[fh].fiveHour = Number(e.target.value);
+          renderPoolSliders();
+          renderSimulator();
+        }
+      });
+
+      document.getElementById("poolSliders").addEventListener("change", (e) => {
+        const dn = e.target.dataset.poolDown;
+        if (dn) {
+          state.scenario = null;
+          state.pools[dn].down = e.target.checked;
+          renderPoolSliders();
+          renderSimulator();
+        }
+      });
+
+      document.getElementById("recommendedCard").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-recover]");
+        if (!btn) return;
+        const action = btn.dataset.recover;
+        state.scenario = null;
+        if (action === "neon") {
+          state.preset = "neon";
+        } else if (action === "expanded") {
+          state.scope = "expanded";
+        } else if (action === "resetQuotas") {
+          for (const p of POOLS) {
+            state.pools[p.id] = { weekly: 25, fiveHour: 15, down: false };
+          }
+          renderPoolSliders();
+        }
+        renderSimulator();
+      });
+
+      document.getElementById("unauthToggleRow").addEventListener("click", (e) => {
+        if (e.target && e.target.id === "toggleUnauthBtn") {
+          state.showUnauthorized = !state.showUnauthorized;
+          renderSimulator();
+        }
+      });
+
+      document.getElementById("copyCliBtn").addEventListener("click", (e) => {
+        copyText(document.getElementById("cliCommand").textContent, e.target);
+      });
+
+      document.getElementById("copyStateBtn").addEventListener("click", (e) => {
+        copyText(document.getElementById("stateJsonPreview").textContent, e.target);
+      });
+
+      // Estimator events
+      document.getElementById("estPoolButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.est.pools = Number(btn.dataset.pools);
+        renderEstimator();
+      });
+
+      document.getElementById("estPresetButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.est.preset = btn.dataset.estPreset;
+        renderEstimator();
+      });
+
+      document.getElementById("mixPresetButtons").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.est.mixPreset = btn.dataset.mix;
+        state.est.mix = { ...MIX_PRESETS[btn.dataset.mix] };
+        renderEstimator();
+      });
+
+      document.getElementById("mixSliders").addEventListener("input", (e) => {
+        const k = e.target.dataset.mixKey;
+        if (!k) return;
+        state.est.mixPreset = null;
+        state.est.mix[k] = Number(e.target.value);
+        renderEstimator();
+      });
+
+      // Install tabs & copy buttons
+      document.getElementById("npxTabs").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.install.npx = btn.dataset.npx;
+        renderInstallCommands();
+      });
+
+      document.getElementById("shTabs").addEventListener("click", (e) => {
+        const btn = e.target.closest(".seg-btn");
+        if (!btn) return;
+        state.install.sh = btn.dataset.sh;
+        renderInstallCommands();
+      });
+
+      document.querySelectorAll("[data-copy-target]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const target = document.getElementById(btn.dataset.copyTarget);
+          if (target) copyText(target.textContent, btn);
+        });
+      });
+
+      /* =====================================================================
+       * 10. INITIALIZATION
+       * ===================================================================== */
+      try {
+        const saved = localStorage.getItem("uos_lang");
+        if (saved === "tr" || saved === "en") state.lang = saved;
+      } catch (_e) {}
+
+      applyStaticI18n();
+      renderPoolSliders();
+      renderSimulator();
+      renderEstimator();
+      renderInstallCommands();
+    })();
+  </script>
+</body>
+</html>

@@ -1,8 +1,11 @@
 """Zero-dependency integrity tests for skill files, progressive disclosure, and Markdown links."""
 
 from pathlib import Path
+import json
 import re
+import subprocess
 import sys
+import tempfile
 import unicodedata
 import unittest
 from urllib.parse import unquote
@@ -416,6 +419,213 @@ class SkillIntegrityTests(unittest.TestCase):
                             report["recommended"]["same_family"],
                             f"{preset} review for author={author_family} should prefer a cross-family reviewer",
                         )
+
+    def test_claude_plugin_manifests_and_icon(self):
+        plugin_dir = REPO_ROOT / ".claude-plugin"
+        plugin_path = plugin_dir / "plugin.json"
+        marketplace_path = plugin_dir / "marketplace.json"
+        icon_path = plugin_dir / "icon.png"
+
+        self.assertTrue(plugin_path.is_file(), f"Missing {plugin_path}")
+        self.assertTrue(marketplace_path.is_file(), f"Missing {marketplace_path}")
+
+        plugin = json.loads(plugin_path.read_text(encoding="utf-8"))
+        marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+
+        self.assertIsInstance(plugin, dict)
+        self.assertIsInstance(marketplace, dict)
+
+        plugin_name = plugin.get("name")
+        plugin_version = plugin.get("version")
+        self.assertIsInstance(plugin_name, str)
+        self.assertTrue(plugin_name.strip(), "plugin.json name must be non-empty")
+        self.assertIsInstance(plugin_version, str)
+        self.assertTrue(plugin_version.strip(), "plugin.json version must be non-empty")
+
+        self.assertEqual(
+            marketplace.get("name"),
+            plugin_name,
+            "marketplace.json name must match plugin.json name",
+        )
+        self.assertEqual(
+            marketplace.get("metadata", {}).get("version"),
+            plugin_version,
+            "marketplace.json metadata.version must match plugin.json version",
+        )
+
+        plugins = marketplace.get("plugins")
+        self.assertIsInstance(plugins, list)
+        self.assertTrue(plugins, "marketplace.json plugins list must not be empty")
+
+        matching_plugins = [p for p in plugins if isinstance(p, dict) and p.get("name") == plugin_name]
+        self.assertTrue(
+            matching_plugins,
+            f"marketplace.json must include a plugin entry named {plugin_name!r}",
+        )
+        for entry in matching_plugins:
+            self.assertEqual(
+                entry.get("version"),
+                plugin_version,
+                "marketplace.json plugin entry version must match plugin.json version",
+            )
+
+        for idx, entry in enumerate(plugins):
+            with self.subTest(plugin_index=idx, plugin_name=entry.get("name")):
+                skills = entry.get("skills")
+                self.assertIsInstance(skills, list)
+                self.assertTrue(skills, "marketplace.json plugin entry must list at least one skill")
+                for rel_skill in skills:
+                    self.assertIsInstance(rel_skill, str)
+                    resolved = (REPO_ROOT / rel_skill).resolve()
+                    self.assertTrue(
+                        resolved.is_relative_to(REPO_ROOT),
+                        f"Skill path {rel_skill!r} escapes repository root",
+                    )
+                    self.assertTrue(
+                        resolved.is_dir(),
+                        f"Skill directory listed in marketplace.json does not exist: {rel_skill}",
+                    )
+                    self.assertTrue(
+                        (resolved / "SKILL.md").is_file(),
+                        f"Skill directory listed in marketplace.json is missing SKILL.md: {rel_skill}",
+                    )
+
+        self.assertTrue(icon_path.is_file(), f"Missing {icon_path}")
+        icon_bytes = icon_path.read_bytes()
+        self.assertTrue(
+            icon_bytes.startswith(b"\x89PNG\r\n\x1a\n"),
+            ".claude-plugin/icon.png must start with valid PNG magic bytes",
+        )
+        self.assertLess(
+            len(icon_bytes),
+            2 * 1024 * 1024,
+            f".claude-plugin/icon.png is too large ({len(icon_bytes)} bytes, limit 2 MB)",
+        )
+
+    def test_install_sh_syntax_flags_and_end_to_end(self):
+        install_sh = REPO_ROOT / "install.sh"
+        self.assertTrue(install_sh.is_file(), f"Missing {install_sh}")
+
+        syntax = subprocess.run(
+            ["sh", "-n", str(install_sh)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            syntax.returncode,
+            0,
+            f"sh -n install.sh failed: {syntax.stderr}",
+        )
+
+        help_res = subprocess.run(
+            ["sh", str(install_sh), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(help_res.returncode, 0, f"install.sh --help failed: {help_res.stderr}")
+        self.assertIn("Usage:", help_res.stdout)
+        self.assertIn("--client", help_res.stdout)
+        self.assertIn("--dry-run", help_res.stdout)
+
+        dry_res = subprocess.run(
+            ["sh", str(install_sh), "--dry-run"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(dry_res.returncode, 0, f"install.sh --dry-run failed: {dry_res.stderr}")
+        self.assertIn("Dry run", dry_res.stdout)
+        self.assertIn("sol-orchestration", dry_res.stdout)
+        self.assertIn("astra-orchestration", dry_res.stdout)
+        self.assertIn("update-orchestration-skills", dry_res.stdout)
+
+        for bad_ref in ("../bad", "main;rm", ""):
+            with self.subTest(bad_ref=bad_ref):
+                bad_res = subprocess.run(
+                    ["sh", str(install_sh), "--ref", bad_ref, "--dry-run"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(
+                    bad_res.returncode,
+                    0,
+                    f"install.sh must reject unsafe --ref {bad_ref!r}",
+                )
+                self.assertIn("invalid --ref", bad_res.stderr)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_dir = Path(tmp_dir) / "skills-out"
+            e2e = subprocess.run(
+                [
+                    "sh",
+                    str(install_sh),
+                    "--source",
+                    str(REPO_ROOT),
+                    "--client",
+                    "antigravity",
+                    "--with-provider",
+                    "--dir",
+                    str(target_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                e2e.returncode,
+                0,
+                f"install.sh end-to-end install failed: {e2e.stderr}",
+            )
+
+            expected_installed = sorted(
+                (
+                    "neon-orchestration",
+                    "update-orchestration-skills",
+                    "add-provider-orchestration-skills",
+                )
+            )
+            actual_installed = sorted(p.name for p in target_dir.iterdir() if p.is_dir())
+            self.assertEqual(actual_installed, expected_installed)
+
+            for skill in expected_installed:
+                self.assertTrue(
+                    (target_dir / skill / "SKILL.md").is_file(),
+                    f"Installed skill {skill} is missing SKILL.md",
+                )
+
+            for rel_ref in REQUIRED_COORDINATOR_REFERENCES:
+                self.assertTrue(
+                    (target_dir / "neon-orchestration" / rel_ref).is_file(),
+                    f"Installed neon-orchestration is missing {rel_ref}",
+                )
+
+            self.assertTrue(
+                (target_dir / "update-orchestration-skills" / "scripts" / "resolve_lanes.py").is_file(),
+                "Installed update-orchestration-skills is missing scripts/resolve_lanes.py",
+            )
+
+    def test_docs_simulator_and_demo_gif(self):
+        docs_index = REPO_ROOT / "docs" / "index.html"
+        self.assertTrue(docs_index.is_file(), f"Missing {docs_index}")
+        html = docs_index.read_text(encoding="utf-8")
+        self.assertTrue(html.strip(), "docs/index.html must not be empty")
+        self.assertIn("<html", html.lower(), "docs/index.html must contain an <html> element")
+
+        demo_gif = REPO_ROOT / "assets" / "demo.gif"
+        self.assertTrue(demo_gif.is_file(), f"Missing {demo_gif}")
+        gif_bytes = demo_gif.read_bytes()
+        self.assertTrue(
+            gif_bytes.startswith((b"GIF89a", b"GIF87a")),
+            "assets/demo.gif must start with valid GIF magic bytes (GIF89a or GIF87a)",
+        )
+        self.assertLess(
+            len(gif_bytes),
+            1024 * 1024,
+            f"assets/demo.gif is too large ({len(gif_bytes)} bytes, limit 1 MB)",
+        )
 
 
 if __name__ == "__main__":
