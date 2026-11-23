@@ -198,6 +198,41 @@ class ReadQuotaTests(unittest.TestCase):
         self.assertEqual(read_quota.merge_note(None, "T"), "codex log T")
         self.assertEqual(read_quota.merge_note("a · codex log X", "T"), "a · codex log T")
 
+    def test_parallel_sessions_prefers_newest_rate_limits_timestamp_over_mtime(self):
+        # Log A has a newer file mtime (e.g., a later non-rate-limit event),
+        # while parallel Log B has a genuinely newer rate_limits timestamp.
+        write_log(
+            self.home,
+            "parallel_newer_event.jsonl",
+            [
+                event(
+                    "2026-11-23T12:15:00Z",
+                    primary=(300, 14.0, FIVE_RESET),
+                    secondary=(10080, 92.0, WEEK_RESET),
+                )
+            ],
+            mtime=1700000100,
+        )
+        write_log(
+            self.home,
+            "newer_mtime_older_limit.jsonl",
+            [
+                event(
+                    "2026-11-23T12:05:00Z",
+                    primary=(300, 2.0, FIVE_RESET),
+                    secondary=(10080, 88.0, WEEK_RESET),
+                ),
+                {"timestamp": "2026-11-23T12:20:00Z", "type": "other"},
+            ],
+            mtime=1700000200,
+        )
+        result = run("--codex-home", str(self.home), "--format", "json", "--now", NOW)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["source_time"], "2026-11-23T12:15:00Z")
+        self.assertEqual(data["five_hour_pct"], 14.0)
+        self.assertEqual(data["weekly_pct"], 92.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2160,8 +2160,9 @@
 
           warnAdvisory: "Advisory mode: no project-profile.md lane lock applied; resolve_lanes.py leaves recommendation empty without explicit authorization.",
           warnSameFamilyOnly: "No cross-family reviewer available for author family '{author}'; top lane is same-family (label review explicitly).",
-          warnDeprioritizedTop: "Top lane is past the unified 90% move threshold (90% move / 95% stop on 5-hour or weekly); prepare a checkpoint handoff.",
-          warnProjectedDeprioTop: "Top lane is projected to cross the 90% move threshold after this {unit} unit (projected-deprioritized); prepare a checkpoint handoff or split the unit.",
+          warnDeprioritizedTop: "Dispatch: not OK (dispatch_ok: false). Top lane is past the unified 90% move threshold — do not send new units to this pool; take the next ladder step (below-tier, verification one step higher) or wait for the reset.",
+          warnProjectedDeprioTop: "Dispatch: not OK (dispatch_ok: false). Top lane is projected to cross the 90% move threshold after this {unit} unit — do not send new units to this pool; take the next ladder step, split the unit, or wait for the reset.",
+          badgeDispatchNotOk: "dispatch_ok: false",
           warnNoEligible: "No eligible lanes available for role '{role}' under current profile and pool states.",
 
           whyRestrictedCross: "Cleared for restricted data and provides independent cross-family review (author: {author}); {rest}.",
@@ -2375,8 +2376,9 @@
 
           warnAdvisory: "Bilgi amaçlı mod: project-profile.md hat kilidi yok; resolve_lanes.py açık yetki olmadan öneri alanını boş bırakır.",
           warnSameFamilyOnly: "'{author}' yazar ailesi için çapraz aile inceleyici yok; en üst hat aynı aileden (incelemeyi açıkça etiketle).",
-          warnDeprioritizedTop: "En üst hat birleşik %90 taşıma eşiğini geçti (5 saatlik veya haftalık %90 taşı / %95 dur); devir kaydı hazırlamaya başla.",
-          warnProjectedDeprioTop: "En üst hattın bu '{unit}' birimi sonunda %90 taşıma eşiğini geçmesi öngörülüyor (projected-deprioritized); devir kaydı hazırla veya işi böl.",
+          warnDeprioritizedTop: "Gönderim uygun değil (dispatch_ok: false). En üst hat %90 taşıma eşiğini geçti — bu havuza yeni iş gönderme; merdivende bir sonraki adıma geç (alt kademe, doğrulamayı bir kademe artır) veya sıfırlanmayı bekle.",
+          warnProjectedDeprioTop: "Gönderim uygun değil (dispatch_ok: false). En üst hattın bu '{unit}' birimi sonunda %90 taşıma eşiğini geçmesi öngörülüyor — bu havuza yeni iş gönderme; merdivende bir sonraki adıma geç, işi böl veya sıfırlanmayı bekle.",
+          badgeDispatchNotOk: "dispatch_ok: false",
           warnNoEligible: "Mevcut profil ve havuz durumlarında '{role}' rolü için uygun hat bulunmuyor.",
 
           whyRestrictedCross: "Kısıtlı veri iznine sahip ve bağımsız çapraz aile incelemesi sağlıyor (yazar: {author}); {rest}.",
@@ -3129,6 +3131,14 @@
         );
 
         const topLane = eligible.length > 0 && eligible[0].score !== null ? eligible[0] : null;
+        const dispatchOk = Boolean(
+          authorizedMap !== null &&
+          topLane &&
+          !topLane.deprioritized &&
+          !topLane.projected_deprioritized &&
+          !topLane.projected_overflow &&
+          topLane.pool_state !== "blocked"
+        );
         return {
           role: role,
           authorFamily: authorFamily,
@@ -3139,6 +3149,7 @@
           crossFamilyAnchored: crossFamilyAnchored,
           providerStates: providerStates,
           recommended: topLane,
+          dispatch_ok: dispatchOk,
           ranked: eligible,
           excluded: excluded
         };
@@ -3491,6 +3502,9 @@
             : (warnings.length > 0 ? t("recKickerWarn") : t("recKickerHealthy"));
 
           const recBadges = [];
+          if (!res.advisory && !res.dispatch_ok) {
+            recBadges.push(`<span class="badge b-blocked">${esc(t("badgeDispatchNotOk"))}</span>`);
+          }
           if (!rec.deprioritized) {
             recBadges.push(`<span class="badge b-healthy">${esc(t("badgeHealthy"))}</span>`);
           } else {

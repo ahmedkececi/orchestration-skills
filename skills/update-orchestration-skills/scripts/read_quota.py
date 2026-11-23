@@ -25,6 +25,7 @@ WEEKLY_MINUTES = 10080
 NOTE_PREFIX = "codex log "
 NOTE_SEPARATOR = " · "
 MAX_FILES_TRIED = 50
+MAX_RECORDS_COMPARED = 5
 
 DESCRIPTION = """Read Codex quota from the newest session log under <codex_home>/sessions/ and print it.
 
@@ -126,7 +127,9 @@ def _session_logs(codex_home):
 
 
 def read_codex(codex_home, now):
-    """Return the parsed Codex reading (newest log first; falls back to older logs if a log has no record)."""
+    """Return the parsed Codex reading with the newest rate_limits timestamp across recent active logs."""
+    best = None
+    compared = 0
     for mtime, path in _session_logs(codex_home)[:MAX_FILES_TRIED]:
         try:
             record = _last_codex_record(path)
@@ -136,9 +139,10 @@ def read_codex(codex_home, now):
             continue
         event_time, limits = record
         try:
-            source_time = format_iso_utc(parse_iso_utc(event_time, "timestamp"))
+            source_dt = parse_iso_utc(event_time, "timestamp")
         except ValueError:
-            source_time = format_iso_utc(datetime.fromtimestamp(mtime, tz=timezone.utc))
+            source_dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+        source_time = format_iso_utc(source_dt)
         five, weekly = _window_fields(limits)
         windows = {}
         for key, window in (("five_hour", five), ("weekly", weekly)):
@@ -157,18 +161,28 @@ def read_codex(codex_home, now):
                     f"its percentage is unknown until Codex is used again."
                 )
                 w["pct"] = None
-        return {
-            "source": "codex",
-            "five_hour_pct": windows["five_hour"]["pct"],
-            "weekly_pct": windows["weekly"]["pct"],
-            "five_hour_resets_at": windows["five_hour"]["resets_at"],
-            "weekly_resets_at": windows["weekly"]["resets_at"],
-            "resets_at": min(future) if future else None,
-            "source_time": source_time,
-            "observed_at": format_iso_utc(now),
-            "log_file": path,
-            "warnings": warnings,
-        }
+        candidate = (
+            (source_dt, mtime),
+            {
+                "source": "codex",
+                "five_hour_pct": windows["five_hour"]["pct"],
+                "weekly_pct": windows["weekly"]["pct"],
+                "five_hour_resets_at": windows["five_hour"]["resets_at"],
+                "weekly_resets_at": windows["weekly"]["resets_at"],
+                "resets_at": min(future) if future else None,
+                "source_time": source_time,
+                "observed_at": format_iso_utc(now),
+                "log_file": path,
+                "warnings": warnings,
+            },
+        )
+        if best is None or candidate[0] > best[0]:
+            best = candidate
+        compared += 1
+        if compared >= MAX_RECORDS_COMPARED:
+            break
+    if best is not None:
+        return best[1]
     raise QuotaError(f"No Codex rate_limits record (limit_id 'codex') found under {Path(codex_home) / 'sessions'}.")
 
 
