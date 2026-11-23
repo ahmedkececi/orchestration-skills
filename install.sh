@@ -31,7 +31,8 @@ Options:
   --dir <path>        Override destination skills directory
   --ref <branch|tag>  Git branch or tag to install (default: main)
   --source <path>     Copy from a local clone instead of cloning from GitHub
-  --dry-run           Print what would be installed without writing files
+  --dry-run           Print what would be installed (and which existing skill
+                      folders would be backed up) without writing files
   -h, --help          Show this help message
 
 Examples:
@@ -39,6 +40,11 @@ Examples:
   curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client claude --with-provider
   curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client antigravity
   curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --preset sol
+
+Existing skill folders are never deleted: each one is moved to
+<parent of the skills dir>/skill-backups/<skill>-<UTC timestamp>/ (outside the
+skills dir, so clients do not load it as a duplicate skill) before the upstream
+copy is installed, and files that are not part of upstream are listed.
 EOF
 }
 
@@ -160,6 +166,42 @@ if [ "$WITH_PROVIDER" -eq 1 ]; then
   SKILLS="$SKILLS add-provider-orchestration-skills"
 fi
 
+# Trim trailing slashes so dirname behaves the same for "dir" and "dir/".
+TARGET_DIR_TRIMMED=$TARGET_DIR
+while :; do
+  case "$TARGET_DIR_TRIMMED" in
+    ?*/) TARGET_DIR_TRIMMED=${TARGET_DIR_TRIMMED%/} ;;
+    *) break ;;
+  esac
+done
+BACKUP_ROOT="$(dirname -- "$TARGET_DIR_TRIMMED")/skill-backups"
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+
+# Print files that exist in the old folder ($1) but not in the upstream copy ($2).
+warn_project_local() {
+  old="$1"
+  new="$2"
+  [ -d "$new" ] || return 0
+  find "$old" \( -type f -o -type l \) -print | while IFS= read -r path; do
+    rel=${path#"$old"/}
+    if [ ! -e "$new/$rel" ] && [ ! -L "$new/$rel" ]; then
+      printf '  warning: project-local file not in upstream: %s\n' "$rel"
+    fi
+  done
+}
+
+# Pick a backup folder name that does not exist yet.
+backup_path_for() {
+  base="$BACKUP_ROOT/$1-$STAMP"
+  candidate="$base"
+  n=1
+  while [ -e "$candidate" ] || [ -L "$candidate" ]; do
+    n=$((n + 1))
+    candidate="$base-$n"
+  done
+  printf '%s\n' "$candidate"
+}
+
 if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Dry run — no files written.\n'
   printf 'Destination: %s\n' "$TARGET_DIR"
@@ -167,6 +209,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Skills:\n'
   for skill in $SKILLS; do
     printf '  - %s\n' "$skill"
+  done
+  for skill in $SKILLS; do
+    dst="$TARGET_DIR/$skill"
+    if [ -e "$dst" ] || [ -L "$dst" ]; then
+      printf 'Would back up %s -> %s\n' "$dst" "$(backup_path_for "$skill")"
+      if [ -n "$SOURCE_DIR" ]; then
+        warn_project_local "$dst" "$SOURCE_DIR/skills/$skill"
+      else
+        printf '  (project-local file check needs the upstream copy; it runs during a real install)\n'
+      fi
+    fi
   done
   exit 0
 fi
@@ -197,7 +250,13 @@ for skill in $SKILLS; do
   src="$REPO_ROOT/skills/$skill"
   dst="$TARGET_DIR/$skill"
   [ -d "$src" ] || fail "missing skill directory: $src"
-  rm -rf -- "$dst"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    backup=$(backup_path_for "$skill")
+    mkdir -p -- "$BACKUP_ROOT"
+    mv -- "$dst" "$backup"
+    printf 'Backed up %s -> %s\n' "$dst" "$backup"
+    warn_project_local "$backup" "$src"
+  fi
   cp -R -- "$src" "$dst"
   printf 'Installed %s -> %s\n' "$skill" "$dst"
 done

@@ -39,6 +39,8 @@ curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-
 # or: --client claude | --client antigravity | --preset sol --with-provider
 ```
 
+Re-running the installer never deletes anything: an existing skill folder is moved to `skill-backups/<skill>-<UTC timestamp>/` next to the skills directory (for example `.claude/skill-backups/`, outside `skills/` so it is not loaded as a duplicate skill) and files that are not part of upstream are listed; `--dry-run` prints this plan without moving anything.
+
 **3. Skills CLI (`npx skills add`):**
 
 ```sh
@@ -189,23 +191,21 @@ All runtime artifacts live under `.orchestration/`:
 | `.orchestration/model-measurements.md` | **Commit** | Verified benchmark snapshot refreshed for this workspace |
 | `.orchestration/provider-catalogs.json` | **Commit** | Registered provider catalog sources added via `add-provider-orchestration-skills` |
 | `.orchestration/provider-state.json` | **Ignore** | Local account quota readings, reset windows, and self-calibrating EWMA burn history (`_calibration`) |
-| `.orchestration/orchestration-checkpoint.md` | **Ignore** | Active session handoff state |
-| `.orchestration/orchestration-ledger.md` | **Ignore** | Sanitized local routing history |
+| `.orchestration/orchestration-checkpoint.md` | **Commit** (recommended: the handover history survives across clients; ignore only if you keep handovers local) | Active session handoff state; the coordinator commits it before a handover |
+| `.orchestration/orchestration-ledger.md` | **Commit** (recommended: the handover history survives across clients; ignore only if you keep handovers local) | Sanitized routing history |
 
-Add the ephemeral local state files to your repository's `.gitignore`:
+Add only the machine-local quota file to your repository's `.gitignore`:
 
 ```gitignore
-# Ephemeral local orchestration state
+# Local account quota readings
 .orchestration/provider-state.json
-.orchestration/orchestration-checkpoint.md
-.orchestration/orchestration-ledger.md
 ```
 
 **FAQ**
 
 - **Do I need all four model providers?** Start with 1–2 pools and record the permitted model, effort, pool and roles for each worker in `.orchestration/project-profile.md`. Without the authorization block, the offline resolver shows an advisory ranking and leaves its recommendation empty.
 - **Can I use metered API keys instead of subscriptions?** Yes. The default unified thresholds (**90% move / 95% stop** for both 5-hour and weekly windows) are tuned for rolling subscription pools, and you can record explicit API spending caps in `.orchestration/project-profile.md`.
-- **How does the self-calibrating pre-dispatch quota guard adapt to my plan (Pro / Plus / Max / Team)?** Before each unit, the coordinator reads live quota and runs `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`projected = current + est_burn × safety_margin`), blocking any `projected-overflow` (`>= 95%`, such as an ~11% `l` unit at 89% five-hour) before work starts. After each unit finishes, it logs real before/after usage with `--record-burn` into `.orchestration/provider-state.json` (`_calibration` EWMA, automatically skipping EWMA updates on window resets), so burn estimates quickly converge to your exact subscription plan.
+- **How does the self-calibrating pre-dispatch quota guard adapt to my plan (Pro / Plus / Max / Team)?** Before each unit, the coordinator reads live quota and runs `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`projected = current + est_burn × safety_margin`), blocking any `projected-overflow` (`>= 95%`, such as an ~11% `l` unit at 89% five-hour) before work starts. After each unit finishes, it logs real before/after usage with `--record-burn` into `.orchestration/provider-state.json` (`_calibration` EWMA, automatically skipping EWMA updates on window resets), so burn estimates quickly converge to your exact subscription plan. For Codex, run `python3 -B skills/update-orchestration-skills/scripts/read_quota.py --write` first: it reads the newest Codex session log (no interactive `/status`) and refreshes `observed_at`; ChatGPT web usage shares the weekly pool but is not in that log. If the resolver's recommended lane is `deprioritized` (`"dispatch_ok": false` in `--format json`), do not dispatch new units to that pool: take the next ladder step or wait for the reset.
 - **Why didn't my client detect the skill?** Verify the folder name was kept intact (`sol-orchestration`, `opus-orchestration`, etc.) inside `.claude/skills/` (Claude Code) or `.agents/skills/` (Codex / Antigravity), then start a fresh session.
 
 Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)
@@ -238,6 +238,8 @@ Client docs [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](htt
 curl -fsSL https://raw.githubusercontent.com/ahmedkececi/ultimate-orchestration-skills/main/install.sh | sh -s -- --client codex
 # veya: --client claude | --client antigravity | --preset sol --with-provider
 ```
+
+Kurulum betiğini yeniden çalıştırmak hiçbir şeyi silmez: mevcut bir skill klasörü skills dizininin yanındaki `skill-backups/<skill>-<UTC zaman damgası>/` klasörüne taşınır (örneğin `.claude/skill-backups/`; `skills/` dışında olduğu için yinelenen skill olarak yüklenmez) ve upstream'de olmayan dosyalar listelenir; `--dry-run` bu planı hiçbir şeyi taşımadan yazdırır.
 
 **3. Skills CLI (`npx skills add`):**
 
@@ -389,23 +391,21 @@ Tüm çalışma zamanı dosyaları `.orchestration/` altında tutulur:
 | `.orchestration/model-measurements.md` | **Commit et** | Bu çalışma alanı için yenilenmiş doğrulanmış benchmark özeti |
 | `.orchestration/provider-catalogs.json` | **Commit et** | `add-provider-orchestration-skills` ile kaydedilmiş sağlayıcı katalog kaynakları |
 | `.orchestration/provider-state.json` | **Yoksay** | Yerel hesap kota okumaları, sıfırlanma pencereleri ve kendini kalibre eden EWMA tüketim geçmişi (`_calibration`) |
-| `.orchestration/orchestration-checkpoint.md` | **Yoksay** | Aktif oturum devir kaydı |
-| `.orchestration/orchestration-ledger.md` | **Yoksay** | Temizlenmiş yerel yönlendirme geçmişi |
+| `.orchestration/orchestration-checkpoint.md` | **Commit et** (önerilir: devir geçmişi istemciler arasında korunur; yalnızca devirleri yerelde tutuyorsan yoksay) | Aktif oturum devir kaydı; koordinatör devirden önce commit eder |
+| `.orchestration/orchestration-ledger.md` | **Commit et** (önerilir: devir geçmişi istemciler arasında korunur; yalnızca devirleri yerelde tutuyorsan yoksay) | Temizlenmiş yönlendirme geçmişi |
 
-Geçici yerel durum dosyalarını deponun `.gitignore` dosyasına ekle:
+Yalnızca makineye özel kota dosyasını deponun `.gitignore` dosyasına ekle:
 
 ```gitignore
-# Geçici yerel orkestrasyon durumu
+# Yerel hesap kota okumaları
 .orchestration/provider-state.json
-.orchestration/orchestration-checkpoint.md
-.orchestration/orchestration-ledger.md
 ```
 
 **SSS**
 
 - **Dört model sağlayıcısının hepsine ihtiyacım var mı?** 1–2 havuzla başlayabilir, her işçi için izin verdiğin model, efor, havuz ve rolleri `.orchestration/project-profile.md` dosyasına yazabilirsin. Yetki bloğu eksikse çevrimdışı yönlendirici bilgi amaçlı bir sıralama gösterir ve öneri alanını boş bırakır.
 - **Abonelik yerine ücretli API anahtarları kullanabilir miyim?** Evet. Varsayılan birleşik eşikler (hem 5 saatlik hem haftalık pencereler için **%90 taşıma / %95 durdurma**) yenilenen abonelik havuzlarına göre ayarlanmıştır; `.orchestration/project-profile.md` içine açık API harcama sınırları da yazabilirsin.
-- **Kendini kalibre eden iş öncesi kota koruması benim planıma (Pro / Plus / Max / Team) nasıl uyum sağlar?** Koordinatör her iş biriminden önce canlı kotayı okur ve `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`öngörülen = mevcut + tahmini_tüketim × güvenlik_payı`) çalıştırarak `projected-overflow` (`>= %95`; örn. 5 saatlik %89’dayken ~%11’lik bir `l` işi) durumunu iş başlamadan engeller. Birim bitince gerçek önce/sonra kullanımını `--record-burn` ile `.orchestration/provider-state.json` (`_calibration` EWMA; pencere sıfırlanırsa EWMA güncellemesini otomatik atlar) içine kaydeder; böylece tahminler kendi abonelik planına hızla uyum sağlar.
+- **Kendini kalibre eden iş öncesi kota koruması benim planıma (Pro / Plus / Max / Team) nasıl uyum sağlar?** Koordinatör her iş biriminden önce canlı kotayı okur ve `resolve_lanes.py --unit-size <xs|s|m|l|xl>` (`öngörülen = mevcut + tahmini_tüketim × güvenlik_payı`) çalıştırarak `projected-overflow` (`>= %95`; örn. 5 saatlik %89’dayken ~%11’lik bir `l` işi) durumunu iş başlamadan engeller. Birim bitince gerçek önce/sonra kullanımını `--record-burn` ile `.orchestration/provider-state.json` (`_calibration` EWMA; pencere sıfırlanırsa EWMA güncellemesini otomatik atlar) içine kaydeder; böylece tahminler kendi abonelik planına hızla uyum sağlar. Codex için önce `python3 -B skills/update-orchestration-skills/scripts/read_quota.py --write` çalıştır: en yeni Codex oturum günlüğünü okur (etkileşimli `/status` gerekmez) ve `observed_at` değerini yeniler; ChatGPT web kullanımı aynı haftalık havuzu paylaşır ama bu günlükte yer almaz. Yönlendiricinin önerdiği hat `deprioritized` ise (`--format json` çıktısında `"dispatch_ok": false`), o havuza yeni iş verme: merdivende bir sonraki adıma geç veya sıfırlanmayı bekle.
 - **İstemcim skill’i neden görmüyor?** Klasör adının değiştirilmediğini (`sol-orchestration`, `opus-orchestration` vb.) ve Claude Code için `.claude/skills/`, Codex / Antigravity için `.agents/skills/` altında bulunduğunu doğrula, ardından yeni bir oturum başlat.
 
 İstemci belgeleri [Claude Code](https://code.claude.com/docs/en/skills) · [Codex](https://learn.chatgpt.com/docs/build-skills) · [Antigravity](https://antigravity.google/docs/migration/workflows-to-skills/)

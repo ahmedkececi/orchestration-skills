@@ -93,6 +93,9 @@ For pre-dispatch overflow protection and automatic plan calibration, pass
 dispatching each unit, and run `--record-burn` right after the unit completes:
 
 ```sh
+# 0. Refresh the Codex reading from its session logs (observed_at = now; a stale reading is ignored)
+python3 -B skills/update-orchestration-skills/scripts/read_quota.py --write
+
 # 1. Pre-dispatch ranking with projected overflow guard (90% move / 95% stop)
 python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --workspace . --role coding --unit-size l \
@@ -104,6 +107,11 @@ python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --record-burn --burn-provider codex --burn-model gpt-6.2-sol --burn-effort high \
   --unit-size l --before-5h 72 --after-5h 83 --before-weekly 40 --after-weekly 44
 ```
+
+`read_quota.py` reads only Codex (the newest `rate_limits` event under `~/.codex/sessions/`, or
+`--codex-home`); it never creates `provider-state.json`, and ChatGPT web usage, which shares the weekly
+pool, is not in the log. A recommended lane flagged `deprioritized` or `projected-deprioritized` has
+`dispatch_ok: false` in the JSON output (`--format json`): do not dispatch to it.
 
 If a window resets mid-unit (`after < before`, or when `--reset-occurred` is
 passed), `--record-burn` skips the EWMA update for that reset window while

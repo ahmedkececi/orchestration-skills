@@ -161,12 +161,11 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
    - **Gemini lanes (`Hydrogen` `high`, `Neon` `high`/`medium`)** run via
      the Gemini runner configured in the project profile.
 6. **Pre-dispatch & post-unit quota gate.** Read live pool usage right before
-   dispatching each unit and right after it finishes (the 5-minute TTL is only
-   the upper bound for idle readings). Classify the unit size (`xs|s|m|l|xl`)
+   dispatching each unit and right after it finishes (the 5-minute TTL is only the upper bound for idle readings); refresh the Codex reading first with `read_quota.py --write`. Classify the unit size (`xs|s|m|l|xl`)
    and run `resolve_lanes.py --unit-size <size>` — if a lane hits
    `projected-overflow` (`projected >= 95%` stop on either the five-hour or
    weekly window), **do not dispatch** to that lane; route to a healthy
-   fallback or split into smaller units. After completion, record real burn
+   fallback or split into smaller units. A recommendation flagged `deprioritized` or `projected-deprioritized` (`dispatch_ok: false`) is not dispatchable either: take the next ladder step (below-tier, verification one step higher) or wait for the reset. After completion, record real burn
    with `resolve_lanes.py --record-burn` into `.orchestration/provider-state.json`
    (`_calibration` EWMA, skipped automatically on window resets) and update the
    brief/checkpoint with the pool usage, unit, lane, and reason.

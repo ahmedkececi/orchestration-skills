@@ -951,3 +951,38 @@ class PreDispatchQuotaAndCalibrationTests(unittest.TestCase):
                 safety_margin=1.3,
             )
             self.assertTrue(any("--safety-margin is ignored" in w for w in margin_only["warnings"]))
+
+
+class DispatchOkTests(unittest.TestCase):
+    def test_dispatch_ok_helper(self):
+        self.assertFalse(resolve_lanes.dispatch_ok(None))
+        self.assertTrue(resolve_lanes.dispatch_ok({"deprioritized": False, "projected_deprioritized": False}))
+        self.assertFalse(resolve_lanes.dispatch_ok({"deprioritized": True, "projected_deprioritized": False}))
+        self.assertFalse(resolve_lanes.dispatch_ok({"deprioritized": True, "projected_deprioritized": True}))
+        self.assertFalse(resolve_lanes.dispatch_ok({"deprioritized": False, "projected_overflow": True}))
+
+    def _report(self, state):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            result = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(REPO_ROOT / "skills" / "astra-orchestration" / "project-profile.example.md"),
+                "--role", "coding",
+                "--state", str(state_path),
+                "--now", "2026-11-21T16:00:00Z",
+                "--format", "json",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_json_report_flags_deprioritized_recommendation(self):
+        busy = {"status": "up", "five_hour_pct": 93, "weekly_pct": 93, "observed_at": "2026-11-21T15:58:00Z"}
+        healthy = {"status": "up", "five_hour_pct": 20, "weekly_pct": 20, "observed_at": "2026-11-21T15:58:00Z"}
+        everyone_busy = self._report({"claude": busy, "codex": busy, "gemini": busy, "deepseek": busy})
+        self.assertIsNotNone(everyone_busy["recommended"])
+        self.assertIn("deprioritized", everyone_busy["recommended"]["flags"])
+        self.assertIs(everyone_busy["dispatch_ok"], False)
+        healthy_report = self._report({"claude": healthy, "codex": healthy, "gemini": healthy, "deepseek": healthy})
+        self.assertIs(healthy_report["dispatch_ok"], True)

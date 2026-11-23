@@ -13,6 +13,9 @@ import statistics
 import sys
 from tempfile import NamedTemporaryFile
 
+# Isolated mode (python3 -I) leaves the script directory off sys.path; add it for sibling imports.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from refresh import normalize
 
 
@@ -2601,6 +2604,11 @@ def render_markdown(report):
                 f"headroom `{headroom_str}`{flags_str}"
             )
         lines.append(f"- **Authorized runner:** {_md_cell(rec['runner'])}")
+        if not dispatch_ok(rec):
+            lines.append(
+                "- **Dispatch:** not OK. Do not send new units to this pool; "
+                "take the next ladder step (below-tier, verification one step higher) or wait for the reset."
+            )
     elif report["advisory"]:
         lines.append("- **Recommended lane:** none (advisory only)")
     else:
@@ -2925,6 +2933,23 @@ def build_parser():
     return parser
 
 
+def dispatch_ok(recommended):
+    """True only when a lane is recommended and neither its pool nor its projection is past the move mark.
+
+    Overflowing lanes (projected >= 95%) never become the recommendation; they are excluded and
+    reported as blocked. A recommendation that is `deprioritized` or `projected-deprioritized`
+    means: do not dispatch new units to that pool (take the next ladder step or wait for the reset).
+    """
+    if not isinstance(recommended, dict):
+        return False
+    return not (
+        recommended.get("deprioritized")
+        or recommended.get("projected_deprioritized")
+        or recommended.get("projected_overflow")
+        or recommended.get("pool_state") == "blocked"
+    )
+
+
 def resolve_from_paths(
     *,
     workspace=Path("."),
@@ -3049,6 +3074,7 @@ def resolve_from_paths(
         "warnings": result["warnings"],
         "providers": provider_states,
         "recommended": result["recommended"],
+        "dispatch_ok": dispatch_ok(result["recommended"]),
         "ranked": result["ranked"],
         "excluded": result["excluded"],
     }

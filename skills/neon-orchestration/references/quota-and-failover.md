@@ -37,7 +37,7 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 
 1. **Read live usage right before dispatch and right after each unit, not
    estimates.** Gemini/Antigravity: `swarm{action:"models"}` (`quotas`), Gemini
-   runner usage logs, `/stats` if Gemini CLI is present; Codex: `/status`;
+   runner usage logs, `/stats` if Gemini CLI is present; Codex: `read_quota.py --write` (or `/status`);
    DeepSeek: provider quota or balance; Claude:
    `.orchestration/provider-state.json` or operator `/usage`. Price-per-task
    figures do not measure subscription burn. Treat the 5-minute TTL as the upper
@@ -61,6 +61,21 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
    stop** thresholds, paired with the self-calibrating pre-dispatch guard below
    so a large unit cannot push an active window past 95 % mid-work.
 
+   **Read the Codex quota before dispatch (no interactive `/status` needed):**
+   run `python3 -B <skills>/update-orchestration-skills/scripts/read_quota.py --write`
+   (`<skills>` is `.claude/skills` or `.agents/skills`) **before**
+   `resolve_lanes.py --unit-size ...`. It takes the newest Codex `rate_limits`
+   event from `~/.codex/sessions/` and writes `five_hour_pct`, `weekly_pct`,
+   `resets_at` and `observed_at` of the `codex` entry in
+   `.orchestration/provider-state.json` (the file must already exist; other
+   entries and `_calibration` are untouched). `observed_at` is the reading
+   time, not the log time: Codex percentages change only when Codex is used, so
+   the latest event is current even if it is old. Without a fresh `observed_at`
+   the resolver treats the pool as `stale` (5-minute TTL) and ignores its
+   percentages. ChatGPT web usage draws on the same weekly pool but is not in
+   the Codex log, so read the weekly figure as a lower bound. Claude and
+   Gemini pools are still read live as in step 1.
+
    **Pre-dispatch projected overflow guard & self-calibration (`_calibration`):**
    Before dispatching each unit, classify its size and run
    `resolve_lanes.py --unit-size <xs|s|m|l|xl>` against fresh live readings in
@@ -83,6 +98,13 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
      pieces that fit safely below 95 %.
    - **`projected-deprioritized` (`90 % <= projected < 95 %`):** The lane is
      deprioritized so healthy equivalent lanes with headroom rank ahead of it.
+   - **A recommended lane flagged `deprioritized` or `projected-deprioritized`**
+     (the resolver ranks quality first, so it still recommends such a lane when
+     no other lane is within ±3 points; the JSON field `dispatch_ok` is then
+     `false`): **do not dispatch new units to that pool.** Take the next ladder
+     step (label it below-tier and raise verification one step) or wait for the
+     reset. `projected-overflow` (`>= 95 %`) is a hard stop: the lane is
+     excluded and never receives the unit.
    - **Cold-start & automatic EWMA plan calibration:** On cold start (`0`
      samples), `resolve_lanes.py` uses conservative medium-unit baselines
      (`codex` 5.0%/2.0%, `claude` 6.0%/2.5%, `gemini` 4.5%/1.8%, `deepseek`
@@ -227,8 +249,7 @@ Haiku together (a model-specific limit can leave the other Claude lanes availabl
    `.orchestration/orchestration-checkpoint.md` current; at **95 %** of either
    window (or when pre-dispatch `resolve_lanes.py --unit-size` flags
    `projected-overflow`), stop starting new large Swarm/agy delegates, finish
-   running units, update `.orchestration/orchestration-checkpoint.md` and the
-   handover note, and switch cleanly before Antigravity refuses turns.
+   running units, update `.orchestration/orchestration-checkpoint.md` and the handover note, commit them, and switch cleanly before Antigravity refuses turns.
 2. If the Gemini pool is exhausted and resets within ~30 minutes, wait rather
    than rebuilding the stack. Otherwise switch to **Claude
    (`fable-orchestration` / `opus-orchestration`)** or **Codex
@@ -243,7 +264,7 @@ A fallback lane starts from files, never from another model's memory.
   goal, decisions made and why, the unit list with a status per
   unit (todo, running, done, verified), where each output lives, and open
   questions. Write it before any fan-out, update it lightly after each accepted
-  unit, and refresh it whenever a unit changes state.
+  unit, and refresh it whenever a unit changes state. Commit it with the project, together with `orchestration-ledger.md`, so the handover history survives across clients (ignore them only if you keep handovers local); `provider-state.json` stays local and git-ignored.
 - **Compaction recovery.** After any context compaction or session resume,
   re-read `.orchestration/orchestration-checkpoint.md`,
   `.orchestration/provider-state.json`, and `git status --short` before

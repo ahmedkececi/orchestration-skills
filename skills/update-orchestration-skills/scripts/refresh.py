@@ -4,9 +4,14 @@ import argparse
 from collections import defaultdict
 import json
 import math
+import os
 from pathlib import Path
 import re
 import statistics
+import sys
+
+# Isolated mode (python3 -I) leaves the script directory off sys.path; add it for sibling imports.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from benchmarks import SUITE_BY_LOWER, matrix, normalize_check, require_coverage, validate_metric_unit
 from catalogs import (

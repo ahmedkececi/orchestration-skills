@@ -31,11 +31,14 @@ jobs:
           python3 -B -m py_compile \
             skills/update-orchestration-skills/scripts/benchmarks.py \
             skills/update-orchestration-skills/scripts/catalogs.py \
+            skills/update-orchestration-skills/scripts/read_quota.py \
             skills/update-orchestration-skills/scripts/refresh.py \
             skills/update-orchestration-skills/scripts/resolve_lanes.py \
             tests/test_resolve_lanes.py \
             tests/test_resolve_lanes_benchmarks.py \
             tests/test_resolve_lanes_quota.py \
+            tests/test_read_quota.py \
+            tests/test_script_isolation.py \
             tests/test_skills.py \
             tests/test_updater.py
 

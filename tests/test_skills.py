@@ -630,6 +630,38 @@ class SkillIntegrityTests(unittest.TestCase):
                 "Installed update-orchestration-skills is missing scripts/resolve_lanes.py",
             )
 
+    def test_install_sh_backs_up_existing_skill_folders(self):
+        install_sh = REPO_ROOT / "install.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            skills = Path(tmp) / "proj" / ".claude" / "skills"
+            args = ["sh", str(install_sh), "--preset", "opus", "--dir", str(skills), "--source", str(REPO_ROOT)]
+            first = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertNotIn("Backed up", first.stdout)
+            planted = skills / "opus-orchestration" / "project-local-notes.md"
+            planted.write_text("keep me", encoding="utf-8")
+
+            dry = subprocess.run(args + ["--dry-run"], capture_output=True, text=True)
+            self.assertEqual(dry.returncode, 0, dry.stderr)
+            self.assertIn("Would back up", dry.stdout)
+            self.assertIn("project-local-notes.md", dry.stdout)
+            self.assertTrue(planted.is_file(), "--dry-run must not move anything")
+            self.assertFalse((Path(tmp) / "proj" / ".claude" / "skill-backups").exists())
+
+            real = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(real.returncode, 0, real.stderr)
+            self.assertIn("Backed up", real.stdout)
+            self.assertIn("project-local file not in upstream: project-local-notes.md", real.stdout)
+            backups = sorted((Path(tmp) / "proj" / ".claude" / "skill-backups").glob("opus-orchestration-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual((backups[0] / "project-local-notes.md").read_text(encoding="utf-8"), "keep me")
+            self.assertFalse((skills / "opus-orchestration" / "project-local-notes.md").exists())
+            self.assertTrue((skills / "opus-orchestration" / "SKILL.md").is_file())
+            self.assertFalse(
+                any(p.name.startswith("skill-backups") for p in skills.iterdir()),
+                "backups must live outside the skills directory",
+            )
+
     def test_docs_simulator_and_demo_gif(self):
         docs_index = REPO_ROOT / "docs" / "index.html"
         self.assertTrue(docs_index.is_file(), f"Missing {docs_index}")

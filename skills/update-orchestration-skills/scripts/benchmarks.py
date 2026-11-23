@@ -1,8 +1,13 @@
 """Validate benchmark checklists and render the archived suite as a live matrix."""
 
 from collections import defaultdict
+import os
 from pathlib import Path
 import statistics
+import sys
+
+# Isolated mode (python3 -I) leaves the script directory off sys.path; add it for sibling imports.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from catalogs import fields, https_urls, identifier, read_json, rows, valid_date
 

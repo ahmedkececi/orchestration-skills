@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-23
+
+### Fixed
+- **`install.sh` no longer deletes existing skill folders:** an installed skill folder is moved to `<parent of the skills dir>/skill-backups/<skill>-<UTC timestamp>/` (outside the skills directory, so clients do not load it as a duplicate skill) before the upstream copy is installed. One line is printed per backup, files that exist in the old folder but not upstream are listed as project-local, and `--dry-run` prints the same plan without moving anything. Documented in `README.md` (EN/TR).
+- **Helper scripts now start under `python3 -I`:** `resolve_lanes.py`, `refresh.py` and `benchmarks.py` put their own directory at the front of `sys.path` before importing sibling modules; a test runs every script with `-I --help`.
+- **README and presets agree on committing handover files:** `orchestration-checkpoint.md` and `orchestration-ledger.md` are now **Commit** (recommended; ignore only if handovers stay local) and only `provider-state.json` stays git-ignored. The README table and `.gitignore` snippet (EN/TR), the `project-profile.example.md` Handoff rows and the handover/checkpoint wording in all five presets were aligned (the Codex and Neon handover steps no longer list `provider-state.json` among committed files or omit the commit).
+- **Reading a `deprioritized` recommendation:** all five presets (`SKILL.md` gate and `references/quota-and-failover.md`) now say that a recommended lane flagged `deprioritized` or `projected-deprioritized` must not receive new units (take the next ladder step as below-tier with verification one step higher, or wait for the reset), and that `projected-overflow` (`>= 95%`) is a hard stop.
+
+### Added
+- **`read_quota.py` (updater scripts):** reads Codex quota from the newest `rate_limits` event (`limit_id` `codex`) in `<codex_home>/sessions/*.jsonl` without the interactive `/status`, matching the five-hour and weekly windows by `window_minutes` (300 / 10080). Prints one line, `--format json`, or `--write` updates only the `codex` entry (`five_hour_pct`, `weekly_pct`, `resets_at`, `observed_at`, and a `codex log <time>` note fragment) of an existing `.orchestration/provider-state.json` atomically and never through a symlink. `observed_at` is the reading time so the resolver does not treat the pool as stale; ChatGPT web usage shares the weekly pool but is not in the log. The read-before-dispatch step is documented in every preset and the README (EN/TR).
+- **`dispatch_ok` in `resolve_lanes.py --format json`:** `false` when there is no recommended lane or the recommended lane is `deprioritized`, `projected-deprioritized` or overflowing; the Markdown report prints a matching "Dispatch: not OK" line. Simulator behavior is unchanged.
+- Tests for `-I` isolation, `read_quota.py`, `dispatch_ok` and the `install.sh` backup behavior.
+
 ## [1.3.0] - 2026-11-22
 
 ### Added

@@ -173,12 +173,10 @@ thinking, directing, reviewing or record-keeping? If not, it is a brief.
      `gemini-4-hydrogen` `high` extract or inspect wide batches, and have the
      Neon main loop spot-check key artifacts directly via `read_file`.
 5. **Pre-dispatch & post-unit quota gate.** Read live pool usage right before
-   dispatching each unit and right after it finishes (the 5-minute TTL is only
-   the upper bound for idle readings). Classify unit size (`xs|s|m|l|xl`) and
+   dispatching each unit and right after it finishes (the 5-minute TTL is only the upper bound for idle readings); refresh the Codex reading first with `read_quota.py --write`. Classify unit size (`xs|s|m|l|xl`) and
    run `resolve_lanes.py --unit-size <size>` — if a lane hits
    `projected-overflow` (`projected >= 95%` stop on either five-hour or weekly
-   window), **do not dispatch** to it; route to a healthy fallback or split
-   into smaller units. After completion, record real burn with
+   window), **do not dispatch** to it; route to a healthy fallback or split into smaller units. A recommendation flagged `deprioritized` or `projected-deprioritized` (`dispatch_ok: false`) is not dispatchable either: take the next ladder step (below-tier, verification one step higher) or wait for the reset. After completion, record real burn with
    `resolve_lanes.py --record-burn` into `.orchestration/provider-state.json`
    (`_calibration` EWMA, skipped automatically on window resets) and record the
    pool usage, unit, lane, and reason in the brief and checkpoint.

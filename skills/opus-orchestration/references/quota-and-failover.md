@@ -29,7 +29,7 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
 
 1. **Read live usage right before dispatch and right after each unit, not
    estimates.** Claude: `/usage` (or `.orchestration/provider-state.json`);
-   Codex: `/status`; Gemini/agy: Gemini runner usage logs and quota errors;
+   Codex: `read_quota.py --write` (or `/status`); Gemini/agy: Gemini runner usage logs and quota errors;
    DeepSeek: provider quota or balance. Price-per-task figures do not measure
    subscription burn. Treat the 5-minute TTL as the upper bound for idle
    readings only — always re-check live pool usage right before dispatching a
@@ -50,6 +50,21 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
    Both five-hour/daily and weekly windows share the same **90 % move / 95 %
    stop** thresholds, paired with the self-calibrating pre-dispatch guard below
    so a large unit cannot push an active window past 95 % mid-work.
+
+   **Read the Codex quota before dispatch (no interactive `/status` needed):**
+   run `python3 -B <skills>/update-orchestration-skills/scripts/read_quota.py --write`
+   (`<skills>` is `.claude/skills` or `.agents/skills`) **before**
+   `resolve_lanes.py --unit-size ...`. It takes the newest Codex `rate_limits`
+   event from `~/.codex/sessions/` and writes `five_hour_pct`, `weekly_pct`,
+   `resets_at` and `observed_at` of the `codex` entry in
+   `.orchestration/provider-state.json` (the file must already exist; other
+   entries and `_calibration` are untouched). `observed_at` is the reading
+   time, not the log time: Codex percentages change only when Codex is used, so
+   the latest event is current even if it is old. Without a fresh `observed_at`
+   the resolver treats the pool as `stale` (5-minute TTL) and ignores its
+   percentages. ChatGPT web usage draws on the same weekly pool but is not in
+   the Codex log, so read the weekly figure as a lower bound. Claude and
+   Gemini pools are still read live as in step 1.
 
    **Pre-dispatch projected overflow guard & self-calibration (`_calibration`):**
    Before dispatching each unit, classify its size and run
@@ -73,6 +88,13 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
      pieces that fit safely below 95 %.
    - **`projected-deprioritized` (`90 % <= projected < 95 %`):** The lane is
      deprioritized so healthy equivalent lanes with headroom rank ahead of it.
+   - **A recommended lane flagged `deprioritized` or `projected-deprioritized`**
+     (the resolver ranks quality first, so it still recommends such a lane when
+     no other lane is within ±3 points; the JSON field `dispatch_ok` is then
+     `false`): **do not dispatch new units to that pool.** Take the next ladder
+     step (label it below-tier and raise verification one step) or wait for the
+     reset. `projected-overflow` (`>= 95 %`) is a hard stop: the lane is
+     excluded and never receives the unit.
    - **Cold-start & automatic EWMA plan calibration:** On cold start (`0`
      samples), `resolve_lanes.py` uses conservative medium-unit baselines
      (`codex` 5.0%/2.0%, `claude` 6.0%/2.5%, `gemini` 4.5%/1.8%, `deepseek`
@@ -226,7 +248,7 @@ A fallback lane starts from files, never from another model's memory.
   unit (todo, running, done, verified), where each output lives, and open
   questions. Write it before any fan-out, update it lightly after each accepted
   unit (not only at 90%/95% quota or before fan-outs), and update it whenever a
-  unit changes state.
+  unit changes state. Commit it with the project, together with `orchestration-ledger.md`, so the handover history survives across clients (ignore them only if you keep handovers local); `provider-state.json` stays local and git-ignored.
 - **Compaction recovery.** Whenever context compaction or session resume occurs,
   re-read `.orchestration/orchestration-checkpoint.md`,
   `.orchestration/provider-state.json`, and `git status --short` before spawning
