@@ -986,3 +986,343 @@ class DispatchOkTests(unittest.TestCase):
         self.assertIs(everyone_busy["dispatch_ok"], False)
         healthy_report = self._report({"claude": healthy, "codex": healthy, "gemini": healthy, "deepseek": healthy})
         self.assertIs(healthy_report["dispatch_ok"], True)
+
+    def test_markdown_prints_explicit_dispatch_ok_line(self):
+        busy = {"status": "up", "five_hour_pct": 93, "weekly_pct": 93, "observed_at": "2026-11-21T15:58:00Z"}
+        healthy = {"status": "up", "five_hour_pct": 20, "weekly_pct": 20, "observed_at": "2026-11-21T15:58:00Z"}
+        for state, expected_line in (
+            ({"claude": healthy, "codex": healthy, "gemini": healthy, "deepseek": healthy}, "- dispatch_ok: true"),
+            ({"claude": busy, "codex": busy, "gemini": busy, "deepseek": busy}, "- dispatch_ok: false"),
+        ):
+            with self.subTest(expected=expected_line):
+                with tempfile.TemporaryDirectory() as tmp:
+                    state_path = Path(tmp) / "state.json"
+                    state_path.write_text(json.dumps(state), encoding="utf-8")
+                    res = run_script(
+                        "resolve_lanes.py",
+                        "--workspace", str(REPO_ROOT),
+                        "--profile", str(REPO_ROOT / "skills" / "astra-orchestration" / "project-profile.example.md"),
+                        "--role", "coding",
+                        "--state", str(state_path),
+                        "--now", "2026-11-21T16:00:00Z",
+                    )
+                self.assertEqual(res.returncode, 0, res.stderr)
+                self.assertIn(expected_line, res.stdout.splitlines())
+
+
+class CandidateAndPendingBurnTests(unittest.TestCase):
+    def setUp(self):
+        self.now_iso = "2026-11-26T12:00:00Z"
+        self.obs_iso = "2026-11-26T11:58:00Z"
+        self.after_iso = "2026-11-26T12:15:00Z"
+
+    def _profile(self, tmp):
+        p = Path(tmp) / "project-profile.md"
+        p.write_text(
+            profile_text(
+                authorized_lane("gpt-6.2-sol", "high", "codex", roles=("coding",)),
+                authorized_lane("claude-opus-5-5", "medium", "claude", roles=("coding",), restricted_data=True),
+                authorized_lane("gemini-4-neon", "high", "gemini", roles=("review",)),
+            ),
+            encoding="utf-8",
+        )
+        return p
+
+    def test_candidate_eligible_deprioritized_ineligible_and_does_not_change_ranking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prof = self._profile(tmp)
+            state_path = Path(tmp) / "provider-state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "codex": fresh_state(now_iso=self.obs_iso, five_hour_pct=20, weekly_pct=20),
+                        "claude": fresh_state(now_iso=self.obs_iso, five_hour_pct=34, weekly_pct=40),
+                        "gemini": fresh_state(now_iso=self.obs_iso, five_hour_pct=10, weekly_pct=10),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            base = json.loads(
+                run_script(
+                    "resolve_lanes.py",
+                    "--workspace", str(REPO_ROOT),
+                    "--profile", str(prof),
+                    "--state", str(state_path),
+                    "--role", "coding",
+                    "--unit-size", "m",
+                    "--now", self.now_iso,
+                    "--format", "json",
+                ).stdout
+            )
+            # Candidate is non-top-ranked claude-opus-5-5:medium (eligible & healthy)
+            cand_res = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "m",
+                "--candidate", "claude-opus-5-5:medium",
+                "--now", self.now_iso,
+                "--format", "json",
+            )
+            self.assertEqual(cand_res.returncode, 0, cand_res.stderr)
+            cand_report = json.loads(cand_res.stdout)
+            self.assertEqual(cand_report["recommended"], base["recommended"])
+            self.assertEqual(cand_report["ranked"], base["ranked"])
+            cand = cand_report["candidate"]
+            self.assertTrue(cand["found"])
+            self.assertTrue(cand["eligible"])
+            self.assertEqual(cand["pool"], "claude")
+            self.assertEqual(cand["pool_state"], "up")
+            self.assertFalse(cand["deprioritized"])
+            self.assertIsNotNone(cand["projected_headroom_pct"])
+            self.assertTrue(cand["dispatch_ok"])
+
+            # Markdown includes candidate summary line and explicit candidate dispatch_ok line
+            md_res = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "m",
+                "--candidate", "claude-opus-5-5:medium",
+                "--now", self.now_iso,
+            )
+            self.assertEqual(md_res.returncode, 0, md_res.stderr)
+            self.assertIn("- **Candidate lane:** `claude-opus-5-5` (`medium`)", md_res.stdout)
+            self.assertIn("- **Candidate** dispatch_ok: true", md_res.stdout.splitlines())
+
+            # Ineligible candidate (role mismatch: gemini-4-neon:high only authorized for review)
+            inelig = json.loads(
+                run_script(
+                    "resolve_lanes.py",
+                    "--workspace", str(REPO_ROOT),
+                    "--profile", str(prof),
+                    "--state", str(state_path),
+                    "--role", "coding",
+                    "--unit-size", "m",
+                    "--candidate", "gemini-4-neon:high",
+                    "--now", self.now_iso,
+                    "--format", "json",
+                ).stdout
+            )["candidate"]
+            self.assertTrue(inelig["found"])
+            self.assertFalse(inelig["eligible"])
+            self.assertFalse(inelig["dispatch_ok"])
+            self.assertTrue(inelig["reasons"])
+
+            # Deprioritized candidate (claude at 91% five-hour)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "codex": fresh_state(now_iso=self.obs_iso, five_hour_pct=20, weekly_pct=20),
+                        "claude": fresh_state(now_iso=self.obs_iso, five_hour_pct=91, weekly_pct=40),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            dep_md = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--candidate", "claude-opus-5-5:medium",
+                "--now", self.now_iso,
+            )
+            self.assertEqual(dep_md.returncode, 0, dep_md.stderr)
+            self.assertIn("- **Candidate** dispatch_ok: false", dep_md.stdout.splitlines())
+
+            dep_json = json.loads(
+                run_script(
+                    "resolve_lanes.py",
+                    "--workspace", str(REPO_ROOT),
+                    "--profile", str(prof),
+                    "--state", str(state_path),
+                    "--role", "coding",
+                    "--candidate", "claude-opus-5-5:medium",
+                    "--now", self.now_iso,
+                    "--format", "json",
+                ).stdout
+            )["candidate"]
+            self.assertTrue(dep_json["eligible"])
+            self.assertTrue(dep_json["deprioritized"])
+            self.assertFalse(dep_json["dispatch_ok"])
+
+            # Malformed --candidate fails cleanly
+            bad_cand = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--candidate", "no-colon-here",
+            )
+            self.assertNotEqual(bad_cand.returncode, 0)
+
+    def test_pending_snapshot_record_burn_roundtrip_and_overrides_and_reset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prof = self._profile(tmp)
+            state_path = Path(tmp) / "provider-state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "codex": fresh_state(now_iso=self.obs_iso, five_hour_pct=20, weekly_pct=20),
+                        "claude": fresh_state(now_iso=self.obs_iso, five_hour_pct=34, weekly_pct=40),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            # 1. Pre-dispatch with --unit-size m --unit u1 --candidate claude-opus-5-5:medium stores _pending
+            pre = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "m",
+                "--unit", "u1",
+                "--candidate", "claude-opus-5-5:medium",
+                "--now", self.now_iso,
+                "--format", "json",
+            )
+            self.assertEqual(pre.returncode, 0, pre.stderr)
+            pre_data = json.loads(pre.stdout)
+            self.assertTrue(pre_data["pending_unit"]["stored"])
+            self.assertEqual(pre_data["pending_unit"]["snapshot"]["pool"], "claude")
+            self.assertEqual(pre_data["pending_unit"]["snapshot"]["five_hour_pct"], 34.0)
+
+            on_disk = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertIn("_pending", on_disk)
+            self.assertIn("u1", on_disk["_pending"])
+            # _pending is ignored as a provider pool
+            parsed_states, _ = resolve_lanes.parse_provider_state(on_disk, resolve_lanes.parse_iso_utc(self.now_iso), 5)
+            self.assertNotIn("_pending", parsed_states)
+
+            # 2. Simulate post-unit live quota refresh (34% -> 68% 5h, 40% -> 45% weekly)
+            on_disk["claude"]["five_hour_pct"] = 68.0
+            on_disk["claude"]["weekly_pct"] = 45.0
+            on_disk["claude"]["observed_at"] = self.after_iso
+            state_path.write_text(json.dumps(on_disk), encoding="utf-8")
+
+            # 3. Post-unit --record-burn --unit u1 auto-fills before/after and clears _pending
+            post = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--state", str(state_path),
+                "--record-burn",
+                "--unit", "u1",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(post.returncode, 0, post.stderr)
+            post_data = json.loads(post.stdout)
+            self.assertEqual(post_data["unit"], "u1")
+            self.assertTrue(post_data["pending_cleared"])
+            self.assertTrue(post_data["calibration_updated"])
+            self.assertEqual(post_data["provider"], "claude")
+            self.assertEqual(post_data["model"], "claude-opus-5-5")
+            self.assertEqual(post_data["effort"], "medium")
+            self.assertEqual(post_data["deltas"]["five_hour_pct"], 34.0)
+            self.assertEqual(post_data["deltas"]["weekly_pct"], 5.0)
+            self.assertEqual(post_data["estimated_burn"]["source"], "lane_exact")
+
+            after_disk = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertNotIn("_pending", after_disk)
+            self.assertIn("_calibration", after_disk)
+
+            # 4. Window reset (after < before) with --unit skips EWMA and still clears _pending
+            after_disk["codex"]["observed_at"] = self.after_iso
+            state_path.write_text(json.dumps(after_disk), encoding="utf-8")
+            pre2 = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "s",
+                "--unit", "u2",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(pre2.returncode, 0, pre2.stderr)
+            # Explicit --after-5h override below before (20 -> 5) triggers window reset guard
+            post2 = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--state", str(state_path),
+                "--record-burn",
+                "--unit", "u2",
+                "--after-5h", "5",
+                "--after-weekly", "22",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(post2.returncode, 0, post2.stderr)
+            post2_data = json.loads(post2.stdout)
+            self.assertIn("five_hour_pct", post2_data["skipped_windows"])
+            self.assertEqual(post2_data["deltas"]["weekly_pct"], 2.0)
+            self.assertTrue(post2_data["pending_cleared"])
+
+            # 4b. Explicit --before-5h and --after-5h override both snapshot and live state
+            pre2b = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "s",
+                "--unit", "u2b",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(pre2b.returncode, 0, pre2b.stderr)
+            post2b = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--state", str(state_path),
+                "--record-burn",
+                "--unit", "u2b",
+                "--before-5h", "10",
+                "--after-5h", "17",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(post2b.returncode, 0, post2b.stderr)
+            post2b_data = json.loads(post2b.stdout)
+            self.assertEqual(post2b_data["deltas"]["five_hour_pct"], 7.0)
+            self.assertTrue(post2b_data["pending_cleared"])
+
+            # 5. Missing unit ID fails cleanly
+            missing = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--state", str(state_path),
+                "--record-burn",
+                "--unit", "does-not-exist",
+            )
+            self.assertEqual(missing.returncode, 1)
+            self.assertIn("does-not-exist", missing.stderr)
+
+            # 6. Non-dispatchable lane (deprioritized) does NOT store pending snapshot
+            busy_state = json.loads(state_path.read_text(encoding="utf-8"))
+            busy_state["claude"] = fresh_state(now_iso=self.after_iso, five_hour_pct=92, weekly_pct=45)
+            state_path.write_text(json.dumps(busy_state), encoding="utf-8")
+            blocked = run_script(
+                "resolve_lanes.py",
+                "--workspace", str(REPO_ROOT),
+                "--profile", str(prof),
+                "--state", str(state_path),
+                "--role", "coding",
+                "--unit-size", "m",
+                "--unit", "u3",
+                "--candidate", "claude-opus-5-5:medium",
+                "--now", self.after_iso,
+                "--format", "json",
+            )
+            self.assertEqual(blocked.returncode, 0, blocked.stderr)
+            blocked_data = json.loads(blocked.stdout)
+            self.assertFalse(blocked_data["pending_unit"]["stored"])
+            self.assertNotIn("_pending", json.loads(state_path.read_text(encoding="utf-8")))

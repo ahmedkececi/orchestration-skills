@@ -22,14 +22,14 @@ This skill depends on the sibling [update-orchestration-skills](../update-orches
 2. For each selected model, apply the updater's [full benchmark checklist](../update-orchestration-skills/references/collection.md#full-benchmark-checklist). Collect official model records and the checks for every documented effort into one observation file. The updater shows missing verified scores as `-`. Pass one `--model` flag for each selected canonical ID. Validate with `--preview` before registering the provider.
 
    ```sh
-   python3 -B <updater-skill-dir>/scripts/refresh.py --workspace /path/to/project \
+   python3 -I <updater-skill-dir>/scripts/refresh.py --workspace /path/to/project \
      --provider-entry provider.json --model EXACT_ID --input observations.json --preview
    ```
 
 3. For a requested preview, show the proposed provider record and benchmark matrix. Otherwise register the provider if it is new, verify it appears in `catalogs.py plan`, then rerun the checked refresh command without `--preview` to write the selected models. For a provider-only request, run registration without the refresh step.
 
    ```sh
-   python3 -B <updater-skill-dir>/scripts/catalogs.py register --workspace /path/to/project --input provider.json
+   python3 -I <updater-skill-dir>/scripts/catalogs.py register --workspace /path/to/project --input provider.json
    ```
 
 Report the models added, score gaps, provider documentation and setup prerequisites. Registration stores the discovery source in `.orchestration/provider-catalogs.json`. The updater stores model measurements in `.orchestration/model-measurements.md`. The project profile still governs runner authorization, credentials, private data and budget.

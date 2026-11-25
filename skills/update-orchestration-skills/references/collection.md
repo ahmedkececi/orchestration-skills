@@ -15,7 +15,7 @@ Pass a JSON object with the applicable arrays. Every supplied row should use the
 Identifiers use letters, numbers, hyphens, periods, underscores, slashes, colons or plus signs. Use a canonical model ID, a stable source identifier and a cohort identifier that encodes the benchmark version and harness or scoring method. Give a data mirror the primary source's identity or omit it. Use `unspecified` for an unreported effort and keep that receipt separate from explicitly measured efforts. Supported units are `points`, `percent`, `elo`, `seconds`, `usd` and `tokens`. These are representative field names and the syntax below reads a real export a user supplies.
 
 ```sh
-python3 -B scripts/refresh.py --workspace /path/to/project --input /path/to/observations.json --preview
+python3 -I scripts/refresh.py --workspace /path/to/project --input /path/to/observations.json --preview
 ```
 
 For speed use `seconds-per-task` (or `s-per-task` / `latency-seconds`) with `unit: "seconds"` and a cohort that identifies the task mix, measurement method and harness. Put modeled estimates in a distinct metric such as `estimated-seconds-per-task` (also `unit: "seconds"`); they do not qualify as measured speed. Use the exact scoring version for a headline index. For suite tests, use the exact versioned metric IDs from [benchmark-suite.json](benchmark-suite.json) (such as `terminal-bench-4.0`) with the harness and scoring cohort in `cohort`; other custom raw tests may use a descriptive metric ID with their version and harness in `cohort`.

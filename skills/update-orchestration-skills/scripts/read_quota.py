@@ -1,8 +1,9 @@
-"""Read Codex subscription quota from the local session logs, without the interactive /status."""
+"""Read Codex subscription quota from local logs or record a manual pool reading."""
 
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -11,6 +12,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from resolve_lanes import (  # noqa: E402
+    LANE_ID,
+    RESERVED_STATE_KEYS,
     WORKSPACE_STATE,
     _write_json_atomic,
     format_iso_utc,
@@ -19,15 +22,17 @@ from resolve_lanes import (  # noqa: E402
 )
 
 
-SOURCES = ("codex",)
+SOURCES = ("codex", "manual")
 FIVE_HOUR_MINUTES = 300
 WEEKLY_MINUTES = 10080
 NOTE_PREFIX = "codex log "
 NOTE_SEPARATOR = " · "
 MAX_FILES_TRIED = 50
 MAX_RECORDS_COMPARED = 5
+MAX_NOTE_LEN = 240
 
-DESCRIPTION = """Read Codex quota from the newest session log under <codex_home>/sessions/ and print it.
+DESCRIPTION = """Read Codex quota from the newest session log under <codex_home>/sessions/, or record a
+manual quota reading for any pool (e.g. Claude from /usage, Gemini, DeepSeek).
 
 Codex writes a `rate_limits` event after each turn. The newest event whose limit_id is "codex"
 gives the five-hour window (window_minutes 300) and the weekly window (10080). Percentages only
@@ -36,6 +41,9 @@ reported with `source_time` (the log event) and `observed_at` (now, the reading 
 
 Caveat: ChatGPT web usage draws on the same weekly pool but is not written to the Codex log,
 so the weekly figure can lag behind the real one. Treat the weekly number as a lower bound.
+
+Manual mode (`--source manual --provider <pool> --five-hour PCT --weekly PCT --write`) writes
+the validated reading for that pool with `observed_at` = now into provider-state.json.
 """
 
 
@@ -165,6 +173,7 @@ def read_codex(codex_home, now):
             (source_dt, mtime),
             {
                 "source": "codex",
+                "provider": "codex",
                 "five_hour_pct": windows["five_hour"]["pct"],
                 "weekly_pct": windows["weekly"]["pct"],
                 "five_hour_resets_at": windows["five_hour"]["resets_at"],
@@ -186,10 +195,106 @@ def read_codex(codex_home, now):
     raise QuotaError(f"No Codex rate_limits record (limit_id 'codex') found under {Path(codex_home) / 'sessions'}.")
 
 
+def _validate_manual_pct(value, field_name):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise QuotaError(f"{field_name} must be a finite number between 0 and 100 (got {value!r}).")
+    val = float(value)
+    if not math.isfinite(val) or val < 0.0 or val > 100.0:
+        raise QuotaError(f"{field_name} must be between 0 and 100 (got {value!r}).")
+    out = round(val, 2)
+    return 0.0 if out == 0.0 else out
+
+
+def _validate_manual_provider(raw):
+    if not isinstance(raw, str) or not raw.strip():
+        raise QuotaError("--provider must be a non-empty pool or model identifier.")
+    text = raw.strip()
+    if text.startswith("_") or any(ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in text):
+        raise QuotaError(f"Invalid --provider identifier: {raw!r}.")
+    key = normalize_state_key(text)
+    if not key or key == "unknown" or key.startswith("_") or not LANE_ID.fullmatch(key):
+        raise QuotaError(f"Invalid --provider identifier: {raw!r}.")
+    return key
+
+
+def _validate_manual_note(note):
+    if note is None:
+        return None
+    if not isinstance(note, str):
+        raise QuotaError("--note must be a string.")
+    cleaned = note.strip()
+    if len(cleaned) > MAX_NOTE_LEN or any(ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+        raise QuotaError(f"--note must be a single-line string (<= {MAX_NOTE_LEN} chars).")
+    return cleaned or None
+
+
+def read_manual(
+    provider,
+    *,
+    five_hour=None,
+    weekly=None,
+    five_hour_resets=None,
+    weekly_resets=None,
+    note=None,
+    now,
+):
+    """Validate and construct a manual quota reading for any pool."""
+    pool_key = _validate_manual_provider(provider)
+    if five_hour is None and weekly is None:
+        raise QuotaError("Manual reading requires at least one of --five-hour or --weekly.")
+
+    five_pct = _validate_manual_pct(five_hour, "--five-hour") if five_hour is not None else None
+    week_pct = _validate_manual_pct(weekly, "--weekly") if weekly is not None else None
+    clean_note = _validate_manual_note(note)
+
+    warnings = []
+    five_r = None
+    week_r = None
+    future = []
+    if five_hour_resets is not None:
+        dt = parse_iso_utc(five_hour_resets, "--five-hour-resets")
+        five_r = format_iso_utc(dt)
+        if dt > now:
+            future.append(five_r)
+        else:
+            warnings.append(f"--five-hour-resets ({five_r}) is not in the future relative to observed_at.")
+    if weekly_resets is not None:
+        dt = parse_iso_utc(weekly_resets, "--weekly-resets")
+        week_r = format_iso_utc(dt)
+        if dt > now:
+            future.append(week_r)
+        else:
+            warnings.append(f"--weekly-resets ({week_r}) is not in the future relative to observed_at.")
+
+    now_iso = format_iso_utc(now)
+    return {
+        "source": "manual",
+        "provider": pool_key,
+        "five_hour_pct": five_pct,
+        "weekly_pct": week_pct,
+        "five_hour_resets_at": five_r,
+        "weekly_resets_at": week_r,
+        "resets_at": min(future) if future else None,
+        "source_time": now_iso,
+        "observed_at": now_iso,
+        "note": clean_note,
+        "warnings": warnings,
+    }
+
+
 def render_text(reading):
     def part(label, pct, resets):
         pct_text = f"{pct:g}%" if pct is not None else "unknown"
         return f"{label} {pct_text}" + (f" (resets {resets})" if resets else "")
+
+    if reading["source"] == "manual":
+        note_part = f" · note {reading['note']}" if reading.get("note") else ""
+        return (
+            f"{reading['provider']} (manual): "
+            f"{part('5h', reading['five_hour_pct'], reading['five_hour_resets_at'])} · "
+            f"{part('weekly', reading['weekly_pct'], reading['weekly_resets_at'])} · "
+            f"observed {reading['observed_at']}{note_part}"
+        )
 
     return (
         f"{reading['source']}: "
@@ -234,22 +339,42 @@ def load_state(path):
 
 
 def apply_reading(state, reading):
-    """Update only the codex entry's quota fields and note; every other key is preserved."""
+    """Update only the target pool's quota fields and note; every other key is preserved."""
+    target_pool = reading.get("provider") or "codex"
     key = next(
-        (k for k, v in state.items() if k != "_calibration" and isinstance(k, str) and isinstance(v, dict)
-         and normalize_state_key(k) == "codex"),
+        (
+            k
+            for k, v in state.items()
+            if k not in RESERVED_STATE_KEYS
+            and isinstance(k, str)
+            and isinstance(v, dict)
+            and normalize_state_key(k) == target_pool
+        ),
         None,
     )
     if key is None:
-        key = "codex"
+        key = target_pool
         state[key] = {"status": "up"}
     entry = state[key]
     entry["five_hour_pct"] = reading["five_hour_pct"]
     entry["weekly_pct"] = reading["weekly_pct"]
     entry["resets_at"] = reading["resets_at"]
     entry["observed_at"] = reading["observed_at"]
-    entry["note"] = merge_note(entry.get("note"), reading["source_time"])
+    if reading.get("source") == "codex":
+        entry["note"] = merge_note(entry.get("note"), reading["source_time"])
+    elif reading.get("note") is not None:
+        entry["note"] = reading["note"]
     return state
+
+
+def _parse_pct_arg(raw):
+    try:
+        val = float(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"invalid percentage: {raw!r}") from err
+    if not math.isfinite(val) or val < 0.0 or val > 100.0:
+        raise argparse.ArgumentTypeError(f"percentage must be between 0 and 100 (got {raw!r})")
+    return val
 
 
 def build_parser():
@@ -261,13 +386,50 @@ def build_parser():
     parser.add_argument(
         "--codex-home",
         default=None,
-        help="Codex home directory holding sessions/ (default: $CODEX_HOME or ~/.codex).",
+        help="Codex home directory holding sessions/ (default: $CODEX_HOME or ~/.codex; --source codex only).",
+    )
+    parser.add_argument(
+        "--provider",
+        default=None,
+        help="Target pool or model key for --source manual (e.g. claude, gemini, deepseek, codex).",
+    )
+    parser.add_argument(
+        "--five-hour",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Five-hour window usage percentage 0-100 (--source manual).",
+    )
+    parser.add_argument(
+        "--weekly",
+        type=_parse_pct_arg,
+        default=None,
+        metavar="PCT",
+        help="Weekly window usage percentage 0-100 (--source manual).",
+    )
+    parser.add_argument(
+        "--five-hour-resets",
+        default=None,
+        metavar="ISO",
+        help="Optional five-hour reset timestamp in ISO-8601 UTC (--source manual).",
+    )
+    parser.add_argument(
+        "--weekly-resets",
+        default=None,
+        metavar="ISO",
+        help="Optional weekly reset timestamp in ISO-8601 UTC (--source manual).",
+    )
+    parser.add_argument(
+        "--note",
+        default=None,
+        metavar="TEXT",
+        help="Optional single-line note to store with the reading (--source manual).",
     )
     parser.add_argument("--format", choices=("text", "json"), default="text", help="Output format (default: text).")
     parser.add_argument(
         "--write",
         action="store_true",
-        help="Update the codex entry (five_hour_pct, weekly_pct, resets_at, observed_at, note) in "
+        help="Update the pool entry (five_hour_pct, weekly_pct, resets_at, observed_at, note) in "
         "<workspace>/.orchestration/provider-state.json. The file must already exist.",
     )
     parser.add_argument("--workspace", default=".", help="Workspace root for --write (default: .).")
@@ -282,7 +444,31 @@ def main(argv=None):
         now = parse_iso_utc(args.now, "--now") if args.now else datetime.now(timezone.utc)
     except ValueError as err:
         parser.error(str(err))
-    codex_home = args.codex_home or os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
+
+    manual_flags_used = any(
+        val is not None
+        for val in (
+            args.provider,
+            args.five_hour,
+            args.weekly,
+            args.five_hour_resets,
+            args.weekly_resets,
+            args.note,
+        )
+    )
+    if args.source == "codex":
+        if manual_flags_used:
+            parser.error(
+                "--provider, --five-hour, --weekly, --five-hour-resets, --weekly-resets, "
+                "and --note require --source manual."
+            )
+    else:
+        if args.codex_home is not None:
+            parser.error("--codex-home cannot be used with --source manual.")
+        if not args.provider:
+            parser.error("--provider is required with --source manual.")
+        if args.five_hour is None and args.weekly is None:
+            parser.error("--source manual requires at least one of --five-hour or --weekly.")
 
     try:
         state = None
@@ -290,7 +476,19 @@ def main(argv=None):
         if args.write:
             path = state_path_for(args.workspace)
             state = load_state(path)
-        reading = read_codex(codex_home, now)
+        if args.source == "manual":
+            reading = read_manual(
+                args.provider,
+                five_hour=args.five_hour,
+                weekly=args.weekly,
+                five_hour_resets=args.five_hour_resets,
+                weekly_resets=args.weekly_resets,
+                note=args.note,
+                now=now,
+            )
+        else:
+            codex_home = args.codex_home or os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
+            reading = read_codex(codex_home, now)
         if args.write:
             _write_json_atomic(path, apply_reading(state, reading))
     except (QuotaError, ValueError, OSError) as err:

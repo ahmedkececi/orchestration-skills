@@ -5,7 +5,7 @@
 Run the catalog plan inside the skill using the actual workspace root. The bundled registry defines the active reference models named by the orchestration presets. It includes official [OpenAI](https://developers.openai.com/api/docs/models), [Anthropic](https://platform.claude.com/docs/en/models/overview), [Google](https://aistudio.google.com/docs/models) and [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing/) sources as well as additions from this workspace.
 
 ```sh
-python3 -B scripts/catalogs.py plan --workspace /path/to/project
+python3 -I scripts/catalogs.py plan --workspace /path/to/project
 ```
 
 1. Use the official model documentation and dated release history to confirm each reference model's release date. For a moving alias, use the pinned revision documented by the preset or archive. Keep the alias and its model revision distinct.
@@ -27,7 +27,7 @@ Supply one JSON object with `checked_on` (an ISO date) and `providers` (an array
 When an apparent alias from one source resolves to a canonical release listed elsewhere, use the canonical release ID in both `seen` and `releases`. A catalog row that cannot be resolved keeps its observed ID in `seen` so the verifier can flag it.
 
 ```sh
-python3 -B scripts/catalogs.py verify --workspace /path/to/project --input scan.json
+python3 -I scripts/catalogs.py verify --workspace /path/to/project --input scan.json
 ```
 
 The helper checks each registered provider, source, reference version and observed ID. It returns only verified models with dates strictly after their reference date and reports incomplete coverage separately. Show these models to the user and wait for a selection. After selection, collect `benchmark_checks` and any found `measurements` for the selected IDs only. Pass each chosen ID as a separate `--select` argument with `--catalog-report`. Model rows come from the verified report. The helper rejects an empty selection when the report contains candidates, IDs outside the verified list, and observations for unselected models. The program checks structure, date order and source coverage against the submitted evidence. Live lookups and confirmation of what each source says are the agent's responsibility.

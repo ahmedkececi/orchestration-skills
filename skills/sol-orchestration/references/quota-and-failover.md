@@ -53,25 +53,27 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
    stop** thresholds, paired with the self-calibrating pre-dispatch guard below
    so a large unit cannot push an active window past 95 % mid-work.
 
-   **Read the Codex quota before dispatch (no interactive `/status` needed):**
-   run `python3 -B <skills>/update-orchestration-skills/scripts/read_quota.py --write`
-   (`<skills>` is `.claude/skills` or `.agents/skills`) **before**
-   `resolve_lanes.py --unit-size ...`. It takes the newest Codex `rate_limits`
-   event from `~/.codex/sessions/` and writes `five_hour_pct`, `weekly_pct`,
-   `resets_at` and `observed_at` of the `codex` entry in
-   `.orchestration/provider-state.json` (the file must already exist; other
-   entries and `_calibration` are untouched). `observed_at` is the reading
-   time, not the log time: Codex percentages change only when Codex is used, so
-   the latest event is current even if it is old. Without a fresh `observed_at`
-   the resolver treats the pool as `stale` (5-minute TTL) and ignores its
-   percentages. ChatGPT web usage draws on the same weekly pool but is not in
-   the Codex log, so read the weekly figure as a lower bound. Claude and
-   Gemini pools are still read live as in step 1.
+   **Refresh live pool readings before dispatch (Codex log + manual writer):**
+   - **Codex (no interactive `/status` needed):** run
+     `python3 -I <skills>/update-orchestration-skills/scripts/read_quota.py --write`
+     (`<skills>` is `.claude/skills` or `.agents/skills`) **before**
+     `resolve_lanes.py --unit-size ...`. It reads the newest Codex `rate_limits`
+     event from `~/.codex/sessions/` and updates `five_hour_pct`, `weekly_pct`,
+     `resets_at` and `observed_at` of `codex` in `.orchestration/provider-state.json`
+     (file must already exist; other pools, `_calibration`, and `_pending` are untouched).
+     `observed_at` is the reading time so the pool is not treated as `stale` (5-minute TTL).
+     ChatGPT web usage shares the weekly pool but is not in the Codex log; read the weekly figure as a lower bound.
+   - **Claude (`/usage`) or any non-Codex pool:** run
+     `python3 -I <skills>/update-orchestration-skills/scripts/read_quota.py --source manual --provider <pool> --five-hour <pct> --weekly <pct> [--five-hour-resets ISO] [--weekly-resets ISO] [--note TEXT] --write`
+     to validate (0–100 and ISO timestamps) and atomically write that pool's reading with `observed_at = now` instead of hand-editing JSON.
 
-   **Pre-dispatch projected overflow guard & self-calibration (`_calibration`):**
-   Before dispatching each unit, classify its size and run
-   `resolve_lanes.py --unit-size <xs|s|m|l|xl>` against fresh live readings in
-   `.orchestration/provider-state.json`. The resolver computes
+   **Pre-dispatch projected overflow guard, `--candidate` & self-calibration (`_calibration` / `_pending`):**
+   Task-type routing picks the lane; before dispatching, classify unit size and gate that lane with
+   `resolve_lanes.py --role <role> --unit-size <xs|s|m|l|xl> --unit <id> [--candidate MODEL:EFFORT]`
+   against fresh live readings in `.orchestration/provider-state.json`. `--candidate MODEL:EFFORT`
+   reports the chosen lane's eligibility, pool state, `deprioritized`, projected headroom and
+   `dispatch_ok` without changing the overall ranking, and Markdown prints `dispatch_ok: true|false`
+   explicitly on its own line (and for `--candidate`) so JSON parsing is unnecessary. The resolver computes
    `projected = current + estimated_burn × safety_margin` for each known fresh
    window:
 
@@ -90,25 +92,18 @@ as fast as possible within that. Act **before** a pool runs dry, not after.
      pieces that fit safely below 95 %.
    - **`projected-deprioritized` (`90 % <= projected < 95 %`):** The lane is
      deprioritized so healthy equivalent lanes with headroom rank ahead of it.
-   - **A recommended lane flagged `deprioritized` or `projected-deprioritized`**
-     (the resolver ranks quality first, so it still recommends such a lane when
-     no other lane is within ±3 points; the JSON field `dispatch_ok` is then
-     `false`): **do not dispatch new units to that pool.** Take the next ladder
+   - **A recommended or `--candidate` lane flagged `deprioritized` or `projected-deprioritized`**
+     (`dispatch_ok: false` in both Markdown and JSON): **do not dispatch new units to that pool.** Take the next ladder
      step (label it below-tier and raise verification one step) or wait for the
      reset. `projected-overflow` (`>= 95 %`) is a hard stop: the lane is
      excluded and never receives the unit.
-   - **Cold-start & automatic EWMA plan calibration:** On cold start (`0`
+   - **Cold-start & automatic EWMA plan calibration (`_pending` → `--record-burn --unit <id>`):** On cold start (`0`
      samples), `resolve_lanes.py` uses conservative medium-unit baselines
      (`codex` 5.0%/2.0%, `claude` 6.0%/2.5%, `gemini` 4.5%/1.8%, `deepseek`
      2.0%/1.0% for 5h/weekly, scaled by model weight) with `safety_margin = 1.40`
      (dropping to `1.25` at 1–2 samples and adaptive
      `min(1.50, max(1.15, max_ratio))` at 3+ samples; optional override
-     `--safety-margin <1.0..3.0>`). Right after each unit finishes, read live
-     usage again and run `resolve_lanes.py --record-burn` to update the EWMA
-     (`alpha = 0.35`) under `_calibration` in `.orchestration/provider-state.json`
-     (lane-specific `lanes["<provider>/<model>/<effort>"]` with `by_size` plus
-     pool-level `pools["<provider>"]`), so estimates automatically adapt to the
-     operator's exact subscription plan (Pro / Plus / Max / Team).
+     `--safety-margin <1.0..3.0>`). Passing `--unit <id>` on a dispatchable pre-dispatch gate stores a pending baseline snapshot under `_pending` in `.orchestration/provider-state.json`. Right after the unit finishes, refresh live usage with `read_quota.py` and run `resolve_lanes.py --record-burn --unit <id>`: it reads "before" from `_pending`, reads "after" from live state (explicit `--before-*/--after-*` override), updates EWMA (`alpha = 0.35`) under `_calibration`, and clears `_pending`.
    - **Window-reset guard:** If a window resets during a unit (`after < before`,
      or `--reset-occurred` is passed), `resolve_lanes.py --record-burn`
      automatically skips the EWMA update for that window while still recording
@@ -245,12 +240,13 @@ Hydrogen and Neon together.
 
 A fallback lane starts from files, never from another model's memory.
 
+- **Single-manager claim (`manager-lock.json`).** Only one manager session may coordinate a workspace at a time. At session start run `python3 -I <skills>/update-orchestration-skills/scripts/manager_lock.py status` then `claim --who <label>` (main loop + short session hint, e.g. `sol-s1`; stored locally in `.orchestration/manager-lock.json`, git-ignored alongside `provider-state.json`, default 30-min TTL). `claim` prints a random per-session `token: <hex>`; record it in the checkpoint's manager line and pass `--token <hex>` to `heartbeat` whenever updating the checkpoint, to `release` at handoff or session end, and to `claim --token <hex>` when renewing. `--who` alone never matches an active claim, and a new session (even of the same model) must **never** reuse another session's token: if `claim` exits with code 2 (another session holds a fresh claim), **stop and ask the operator** — never dispatch; pass `--force` (on `claim` or `release`) only with explicit operator approval. An expired claim can be taken without a token.
 - **Checkpoint file.** `.orchestration/orchestration-checkpoint.md` holds the
   goal, decisions made and why, the unit list with a status per
   unit (todo, running, done, verified), where each output lives, and open
   questions. Write it before any fan-out, update it lightly after each accepted
   unit (not only at 90%/95% quota or before fan-outs), and update it whenever a
-  unit changes state. Commit it with the project, together with `orchestration-ledger.md`, so the handover history survives across clients (ignore them only if you keep handovers local); `provider-state.json` stays local and git-ignored.
+  unit changes state. Commit it with the project, together with `orchestration-ledger.md`, so the handover history survives across clients (ignore them only if you keep handovers local); `provider-state.json` and `manager-lock.json` stay local and git-ignored.
 - **Compaction recovery.** Whenever context compaction or session resume occurs,
   re-read `.orchestration/orchestration-checkpoint.md`,
   `.orchestration/provider-state.json`, and `git status --short` before spawning

@@ -91,32 +91,33 @@ cohort when multiple live cohorts exist. Add `--author-family` for review and
 `--restricted-data` when the unit touches restricted data. The project still
 controls what each worker can access and which tools it can use.
 
-For pre-dispatch overflow protection and automatic plan calibration, pass
-`--unit-size <xs|s|m|l|xl>` (and optional `--safety-margin <1.0..3.0>`) before
-dispatching each unit, and run `--record-burn` right after the unit completes:
+For pre-dispatch overflow protection, `--candidate` gating, and automatic plan calibration, pass
+`--unit-size <xs|s|m|l|xl>` and `--unit <id>` (plus `--candidate MODEL:EFFORT` when routing picked a specific lane, and optional `--safety-margin <1.0..3.0>`) before
+dispatching each unit, and run `--record-burn --unit <id>` right after the unit completes:
 
 ```sh
-# 0. Refresh the Codex reading from its session logs (observed_at = now; a stale reading is ignored)
-python3 -B skills/update-orchestration-skills/scripts/read_quota.py --write
+# 0a. Refresh the Codex reading from its session logs (observed_at = now; a stale reading is ignored)
+python3 -I skills/update-orchestration-skills/scripts/read_quota.py --write
 
-# 1. Pre-dispatch ranking with projected overflow guard (90% move / 95% stop)
-python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
-  --workspace . --role coding --unit-size l \
+# 0b. Record a manual reading for Claude (/usage) or any other non-Codex pool
+python3 -I skills/update-orchestration-skills/scripts/read_quota.py \
+  --source manual --provider claude --five-hour 34 --weekly 40 --write
+
+# 1. Pre-dispatch gate with projected overflow guard (90% move / 95% stop),
+#    optional --candidate MODEL:EFFORT check, and pending baseline snapshot (--unit)
+python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --role coding --unit-size l --unit u1 --candidate claude-opus-5-5:medium \
   --state .orchestration/provider-state.json
 
-# 2. Post-unit burn calibration (updates live after-% and _calibration EWMA)
-python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
-  --workspace . --state .orchestration/provider-state.json \
-  --record-burn --burn-provider codex --burn-model gpt-6.2-sol --burn-effort high \
-  --unit-size l --before-5h 72 --after-5h 83 --before-weekly 40 --after-weekly 44
+# 2. Post-unit burn calibration (refresh live usage first, then record from _pending + live state)
+python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  --workspace . --state .orchestration/provider-state.json --record-burn --unit u1
 ```
 
-`read_quota.py` reads only Codex (the newest `rate_limits` event under `~/.codex/sessions/`, or
-`--codex-home`); it never creates `provider-state.json`, and ChatGPT web usage, which shares the weekly
-pool, is not in the log. A recommended lane flagged `deprioritized` or `projected-deprioritized` has
-`dispatch_ok: false` in the JSON output (`--format json`): do not dispatch to it.
+`read_quota.py` reads Codex logs by default (newest `rate_limits` event under `~/.codex/sessions/`, or
+`--codex-home`; ChatGPT web usage shares the weekly pool and is not in the log) and supports `--source manual --provider <pool> --five-hour PCT --weekly PCT [--five-hour-resets ISO] [--weekly-resets ISO] [--note TEXT] --write` for Claude or any other pool; it never creates `provider-state.json`. Task-type routing picks the lane and `--candidate MODEL:EFFORT` gates it without changing the ranking. Markdown output prints `dispatch_ok: true|false` explicitly on its own line (and for `--candidate`), matching `--format json`: if `false` (`deprioritized`, `projected-deprioritized`, `projected-overflow`, or excluded), do not dispatch to it.
 
-If a window resets mid-unit (`after < before`, or when `--reset-occurred` is
+Passing `--unit <id>` with `--unit-size` saves a pending baseline under `_pending` in `provider-state.json`; `--record-burn --unit <id>` then reads "before" from `_pending` and "after" from live state (explicit `--before-*/--after-*` still override) and clears `_pending`. If a window resets mid-unit (`after < before`, or when `--reset-occurred` is
 passed), `--record-burn` skips the EWMA update for that reset window while
 still recording the live `after` percentage. Do not dispatch to any lane flagged
 `projected-overflow` (`projected >= 95%`); route to a healthy equivalent

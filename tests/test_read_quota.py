@@ -233,6 +233,97 @@ class ReadQuotaTests(unittest.TestCase):
         self.assertEqual(data["five_hour_pct"], 14.0)
         self.assertEqual(data["weekly_pct"], 92.0)
 
+    def test_manual_write_updates_pool_preserves_other_keys_and_is_fresh(self):
+        original = {
+            "codex": {"status": "up", "five_hour_pct": 12, "observed_at": "2026-11-23T13:55:00Z"},
+            "claude": {"status": "up", "five_hour_pct": 10, "weekly_pct": 20, "observed_at": None},
+            "_calibration": {"version": 1, "lanes": {}},
+            "_pending": {"u1": {"pool": "claude", "model": "claude-opus-5-5", "effort": "medium", "unit_size": "m", "five_hour_pct": 34.0, "weekly_pct": 40.0, "observed_at": "2026-11-23T13:50:00Z"}},
+        }
+        self.state.write_text(json.dumps(original), encoding="utf-8")
+        res = run(
+            "--source", "manual",
+            "--provider", "anthropic",
+            "--five-hour", "68",
+            "--weekly", "45.5",
+            "--five-hour-resets", "2026-11-23T18:00:00Z",
+            "--weekly-resets", "2026-11-28T00:00:00Z",
+            "--note", "from /usage",
+            "--workspace", str(self.ws),
+            "--now", NOW,
+            "--write",
+            "--format", "json",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        reading = json.loads(res.stdout)
+        self.assertEqual(reading["source"], "manual")
+        self.assertEqual(reading["provider"], "claude")
+        self.assertEqual(reading["five_hour_pct"], 68.0)
+        self.assertEqual(reading["weekly_pct"], 45.5)
+        self.assertEqual(reading["resets_at"], "2026-11-23T18:00:00Z")
+        self.assertEqual(reading["observed_at"], NOW)
+
+        updated = json.loads(self.state.read_text(encoding="utf-8"))
+        self.assertEqual(updated["codex"], original["codex"])
+        self.assertEqual(updated["_calibration"], original["_calibration"])
+        self.assertEqual(updated["_pending"], original["_pending"])
+        self.assertEqual(updated["claude"]["five_hour_pct"], 68.0)
+        self.assertEqual(updated["claude"]["weekly_pct"], 45.5)
+        self.assertEqual(updated["claude"]["resets_at"], "2026-11-23T18:00:00Z")
+        self.assertEqual(updated["claude"]["observed_at"], NOW)
+        self.assertEqual(updated["claude"]["note"], "from /usage")
+
+        states, warnings = resolve_lanes.parse_provider_state(updated, resolve_lanes.parse_iso_utc(NOW), 5)
+        self.assertFalse(states["claude"]["stale"])
+        self.assertEqual(warnings, [])
+
+    def test_manual_text_output_and_validation_errors(self):
+        ok = run(
+            "--source", "manual",
+            "--provider", "claude",
+            "--five-hour", "34",
+            "--weekly", "40",
+            "--now", NOW,
+        )
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn("claude (manual): 5h 34%", ok.stdout)
+        self.assertIn("weekly 40%", ok.stdout)
+
+        for bad_args in (
+            ("--source", "manual", "--provider", "claude", "--five-hour", "-1", "--now", NOW),
+            ("--source", "manual", "--provider", "claude", "--weekly", "101", "--now", NOW),
+            ("--source", "manual", "--provider", "claude", "--five-hour", "nan", "--now", NOW),
+            ("--source", "manual", "--provider", "claude", "--five-hour", "20", "--five-hour-resets", "not-iso", "--now", NOW),
+            ("--source", "manual", "--provider", "_calibration", "--five-hour", "20", "--now", NOW),
+            ("--source", "manual", "--provider", "_pending", "--five-hour", "20", "--now", NOW),
+            ("--source", "manual", "--five-hour", "20", "--now", NOW),
+            ("--source", "manual", "--provider", "claude", "--now", NOW),
+            ("--source", "codex", "--provider", "claude", "--five-hour", "20", "--now", NOW),
+            ("--source", "manual", "--codex-home", str(self.home), "--provider", "claude", "--five-hour", "20", "--now", NOW),
+        ):
+            with self.subTest(bad_args=bad_args):
+                res = run(*bad_args)
+                self.assertNotEqual(res.returncode, 0, f"Expected failure for {bad_args}")
+
+    def test_manual_write_refuses_missing_state_and_symlink(self):
+        missing = run(
+            "--source", "manual", "--provider", "claude", "--five-hour", "34", "--weekly", "40",
+            "--workspace", str(self.ws), "--now", NOW, "--write",
+        )
+        self.assertEqual(missing.returncode, 1)
+        self.assertFalse(self.state.exists())
+
+        target = Path(self._tmp.name) / "real-manual.json"
+        target.write_text("{}", encoding="utf-8")
+        self.state.symlink_to(target)
+        sym = run(
+            "--source", "manual", "--provider", "claude", "--five-hour", "34", "--weekly", "40",
+            "--workspace", str(self.ws), "--now", NOW, "--write",
+        )
+        self.assertEqual(sym.returncode, 1)
+        self.assertIn("symlink", sym.stderr.lower())
+        self.assertEqual(target.read_text(encoding="utf-8"), "{}")
+
 
 if __name__ == "__main__":
     unittest.main()

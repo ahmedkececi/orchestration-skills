@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-26
+
+### Added
+- **Single-manager workspace lock (`skills/update-orchestration-skills/scripts/manager_lock.py`):** Zero-dependency Python 3.9+ helper with `claim --who <label> [--token <hex>] [--ttl-minutes N] [--force]`, `heartbeat [--who <label>] --token <hex>`, `release [--who <label>] --token <hex> [--force]`, and `status` (text and `--format json`), storing a local, git-ignored claim and random per-session `token` (`secrets.token_hex(8)`) in `.orchestration/manager-lock.json` (default 30-min TTL, atomic writes with symlink guard). `claim` prints `token: <hex>` (or JSON `token`) and refuses any concurrent claim — even with the same `--who` label — with exit code `2` naming the active holder and age unless the matching `--token` (renewal) or operator-approved `--force` (minting a fresh token) is passed. `heartbeat` and `release` require the matching `--token` (`release --force` allowed with operator approval); expired claims can be taken without a token. Documented across all five coordinator presets (`SKILL.md`, `references/quota-and-failover.md` Handoff rules, `workflow-templates.md`, `project-profile.example.md`) and `.gitignore`/FAQ guidance in `README.md` (EN/TR): record the token in the checkpoint's manager line, and never let a new session (even of the same model) reuse another session's token.
+- **Isolated-mode script invocations (`python3 -I`):** Standardized skill bodies, references, `examples/first-run.md`, and `README.md` (EN/TR) from `python3 -B` to `python3 -I` when invoking repository helper scripts.
+- **Pending burn snapshots (`_pending`) & `--record-burn --unit <id>` (`resolve_lanes.py`):** Pre-dispatch runs with `--unit-size <size>` and `--unit <id>` store the chosen lane's (`--candidate` or recommended) baseline snapshot under reserved key `_pending` in `.orchestration/provider-state.json`. Post-unit `resolve_lanes.py --record-burn --unit <id>` reads "before" from `_pending` and "after" from the current live pool reading (explicit `--before-*/--after-*` still override), respects existing window-reset handling, updates `_calibration`, and clears `_pending` atomically.
+- **Explicit candidate lane gate (`resolve_lanes.py --candidate MODEL:EFFORT`):** Checks a routing-selected lane's eligibility, pool state, `deprioritized`, projected headroom, and `dispatch_ok` (Markdown summary line + JSON `candidate` object) without changing the overall ranking. Documented across all five coordinator presets.
+- **Manual quota writer (`read_quota.py --source manual`):** Validates 0–100 percentages and ISO-8601 reset timestamps via `--source manual --provider <pool> --five-hour PCT --weekly PCT [--five-hour-resets ISO] [--weekly-resets ISO] [--note TEXT] --write`, updating that pool's entry with `observed_at = now` atomically while preserving other pools, `_calibration`, and `_pending`. Documented next to the Codex reader across all five presets and `README.md` (EN/TR).
+- **Explicit Markdown `dispatch_ok` lines (`resolve_lanes.py`):** Markdown output now prints `dispatch_ok: true|false` on its own line (and for `--candidate`), removing the need to parse JSON for go/no-go dispatch decisions.
+- Unit tests covering `manager_lock.py`, pending burn snapshots, `--candidate`, `read_quota.py --source manual`, Markdown `dispatch_ok` lines, and v1.3.2 preset invariants.
+
 ## [1.3.1] - 2026-11-23
 
 ### Fixed

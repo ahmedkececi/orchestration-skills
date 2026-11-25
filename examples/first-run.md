@@ -11,7 +11,7 @@ With Git and Python 3.9 or newer:
 ```sh
 git clone https://github.com/ahmedkececi/ultimate-orchestration-skills.git
 cd ultimate-orchestration-skills
-python3 -B skills/update-orchestration-skills/scripts/refresh.py \
+python3 -I skills/update-orchestration-skills/scripts/refresh.py \
   --workspace . --input examples/measurements.json --preview \
   | awk '/^## Live workspace measurements/{show=1} /^<!-- observations:start -->/{exit} show'
 ```
@@ -34,17 +34,17 @@ against the bundled benchmark snapshot and a fixed quota reading. The
 `--now` value makes the fixture's age reproducible.
 
 ```sh
-python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --workspace . --profile skills/astra-orchestration/project-profile.example.md \
   --role coding --state examples/provider-state.json --now 2026-11-21T16:00:00Z
 
-python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --workspace . --profile skills/astra-orchestration/project-profile.example.md \
   --role review --author-family openai \
   --state examples/provider-state.json --now 2026-11-21T16:00:00Z
 
 # Pre-dispatch projected-overflow check for a large (`l`) coding unit
-python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
   --workspace . --profile skills/astra-orchestration/project-profile.example.md \
   --role coding --unit-size l \
   --state examples/provider-state.json --now 2026-11-21T16:00:00Z
@@ -76,7 +76,7 @@ What the output demonstrates:
   window reset occurred):
 
   ```sh
-  python3 -B skills/update-orchestration-skills/scripts/resolve_lanes.py \
+  python3 -I skills/update-orchestration-skills/scripts/resolve_lanes.py \
     --workspace . --state .orchestration/provider-state.json \
     --record-burn --burn-provider codex --burn-model gpt-6.2-sol --burn-effort high \
     --unit-size l --before-5h 72 --after-5h 83 --before-weekly 40 --after-weekly 44

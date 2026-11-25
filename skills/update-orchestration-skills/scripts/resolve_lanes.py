@@ -51,6 +51,8 @@ DEFAULT_BURN_PER_M = {
 FALLBACK_BURN_PER_M = {"five_hour_pct": 5.0, "weekly_pct": 2.0}
 
 CALIBRATION_KEY = "_calibration"
+PENDING_KEY = "_pending"
+RESERVED_STATE_KEYS = (CALIBRATION_KEY, PENDING_KEY)
 CALIBRATION_VERSION = 1
 CALIBRATION_ALPHA = 0.35
 SAFETY_MARGIN_COLD = 1.40
@@ -151,6 +153,7 @@ PROFILE_MARKER = "<!-- orchestration-lanes:v1 -->"
 PROFILE_LANES_RE = re.compile(r"^[ \t]*```json[ \t]*\r?\n(.*?)\r?\n[ \t]*```[ \t]*(?:\r?\n|$)", re.DOTALL)
 LANE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}")
 POOL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+UNIT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 REQUIRED_LANE_FIELDS = {"model", "effort", "pool", "runner", "roles"}
 MAX_LIMIT_LEN = 160
 
@@ -1504,13 +1507,100 @@ def _write_json_atomic(path, payload):
             temp.unlink(missing_ok=True)
 
 
+def _validate_unit_id(unit_id):
+    if not isinstance(unit_id, str) or not unit_id.strip():
+        raise ValueError(f"unit ID must be a non-empty string (got {unit_id!r}).")
+    cleaned = unit_id.strip()
+    if not UNIT_ID.fullmatch(cleaned) or any(ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in cleaned):
+        raise ValueError(f"Invalid unit ID: {unit_id!r}.")
+    return cleaned
+
+
+def parse_candidate_spec(raw):
+    """Parse MODEL:EFFORT candidate specification (splitting on the last ':')."""
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("--candidate must use MODEL:EFFORT format (e.g. claude-opus-5-5:medium).")
+    text = raw.strip()
+    if ":" not in text or any(ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in text):
+        raise ValueError(f"Invalid --candidate {raw!r}; expected MODEL:EFFORT.")
+    model_part, effort_part = text.rsplit(":", 1)
+    model_clean = model_part.strip()
+    effort_clean = effort_part.strip().lower()
+    if not model_clean or not effort_clean:
+        raise ValueError(f"Invalid --candidate {raw!r}; expected MODEL:EFFORT.")
+    return model_clean, effort_clean
+
+
+def parse_pending(raw_state):
+    """Extract and validate optional '_pending' unit snapshots from raw provider-state dict."""
+    if raw_state is None:
+        return {}
+    if not isinstance(raw_state, dict):
+        raise ValueError("provider-state.json must contain a JSON object.")
+    raw_pending = raw_state.get(PENDING_KEY)
+    if raw_pending is None:
+        return {}
+    if not isinstance(raw_pending, dict):
+        raise ValueError(f"'{PENDING_KEY}' must be a JSON object keyed by unit ID.")
+
+    out = {}
+    for raw_uid, entry in raw_pending.items():
+        uid = _validate_unit_id(raw_uid)
+        if not isinstance(entry, dict):
+            raise ValueError(f"Pending snapshot for unit {raw_uid!r} must be a JSON object.")
+        raw_pool = entry.get("pool")
+        if not isinstance(raw_pool, str) or not raw_pool.strip():
+            raise ValueError(f"Pending snapshot for unit '{uid}' is missing 'pool'.")
+        pool = normalize_pool(raw_pool)
+        if pool == "unknown" or not POOL_ID.fullmatch(pool):
+            raise ValueError(f"Pending snapshot for unit '{uid}' has invalid pool {raw_pool!r}.")
+        raw_model = entry.get("model")
+        if not isinstance(raw_model, str) or not raw_model.strip() or any(
+            ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in raw_model
+        ):
+            raise ValueError(f"Pending snapshot for unit '{uid}' has invalid model {raw_model!r}.")
+        raw_effort = entry.get("effort")
+        if not isinstance(raw_effort, str) or not raw_effort.strip() or any(
+            ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in raw_effort
+        ):
+            raise ValueError(f"Pending snapshot for unit '{uid}' has invalid effort {raw_effort!r}.")
+        norm_size = _validate_unit_size(entry.get("unit_size"))
+        five_pct = (
+            _validate_pct_value(entry["five_hour_pct"], f"{PENDING_KEY}[{uid}].five_hour_pct")
+            if entry.get("five_hour_pct") is not None
+            else None
+        )
+        wk_pct = (
+            _validate_pct_value(entry["weekly_pct"], f"{PENDING_KEY}[{uid}].weekly_pct")
+            if entry.get("weekly_pct") is not None
+            else None
+        )
+        obs_raw = entry.get("observed_at")
+        obs_iso = (
+            format_iso_utc(parse_iso_utc(obs_raw, f"{PENDING_KEY}[{uid}].observed_at"))
+            if obs_raw is not None
+            else None
+        )
+        out[uid] = {
+            "pool": pool,
+            "model": raw_model.strip(),
+            "effort": raw_effort.strip().lower(),
+            "unit_size": norm_size,
+            "five_hour_pct": five_pct,
+            "weekly_pct": wk_pct,
+            "observed_at": obs_iso,
+        }
+    return out
+
+
 def record_burn(
     state_path,
     *,
-    provider,
-    model,
-    effort="medium",
-    unit_size,
+    unit=None,
+    provider=None,
+    model=None,
+    effort=None,
+    unit_size=None,
     before_5h=None,
     after_5h=None,
     before_weekly=None,
@@ -1520,40 +1610,10 @@ def record_burn(
     alpha=None,
 ):
     """Record an observed post-unit burn sample into provider-state.json atomically."""
-    if not isinstance(provider, str) or not provider.strip():
-        raise ValueError("provider must be a non-empty string.")
-    pool = normalize_pool(provider)
-    if pool == "unknown" or not POOL_ID.fullmatch(pool):
-        raise ValueError(f"Invalid provider ID: {provider!r}.")
-
-    if not isinstance(model, str) or not model.strip() or any(
-        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in model
-    ):
-        raise ValueError(f"Invalid model ID: {model!r}.")
-    clean_model = model.strip()
-
-    if not isinstance(effort, str) or not effort.strip() or any(
-        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in effort
-    ):
-        raise ValueError(f"Invalid effort value: {effort!r}.")
-    norm_effort = effort.strip().lower()
-
-    norm_size = _validate_unit_size(unit_size)
-
     if type(reset_occurred) is not bool:
         raise ValueError("reset_occurred must be a boolean.")
 
-    if (before_5h is None) != (after_5h is None):
-        raise ValueError("Both before_5h and after_5h must be provided together.")
-    if (before_weekly is None) != (after_weekly is None):
-        raise ValueError("Both before_weekly and after_weekly must be provided together.")
-    if before_5h is None and before_weekly is None:
-        raise ValueError("At least one metric pair (before_5h/after_5h or before_weekly/after_weekly) is required.")
-
-    b5 = _validate_pct_value(before_5h, "before_5h") if before_5h is not None else None
-    a5 = _validate_pct_value(after_5h, "after_5h") if after_5h is not None else None
-    bw = _validate_pct_value(before_weekly, "before_weekly") if before_weekly is not None else None
-    aw = _validate_pct_value(after_weekly, "after_weekly") if after_weekly is not None else None
+    unit_id = _validate_unit_id(unit) if unit is not None else None
 
     if now is None:
         eval_now = datetime.now(timezone.utc)
@@ -1578,13 +1638,52 @@ def record_burn(
         if not isinstance(raw_state, dict):
             raise ValueError("provider-state.json must contain a JSON object keyed by pool name.")
     else:
+        if unit_id is not None:
+            raise ValueError(f"Provider state file does not exist: {s_path}")
         raw_state = {}
+
+    pending_map = parse_pending(raw_state)
+    pending_warnings = []
+    snap = None
+    if unit_id is not None:
+        snap = pending_map.get(unit_id)
+        if snap is None:
+            raise ValueError(f"No pending burn snapshot found for unit '{unit_id}' in {s_path}.")
+        eff_provider = provider if provider is not None else snap["pool"]
+        eff_model = model if model is not None else snap["model"]
+        eff_effort = effort if effort is not None else snap["effort"]
+        eff_unit_size = unit_size if unit_size is not None else snap["unit_size"]
+    else:
+        eff_provider = provider
+        eff_model = model
+        eff_effort = effort if effort is not None else "medium"
+        eff_unit_size = unit_size
+
+    if not isinstance(eff_provider, str) or not eff_provider.strip():
+        raise ValueError("provider must be a non-empty string.")
+    pool = normalize_pool(eff_provider)
+    if pool == "unknown" or not POOL_ID.fullmatch(pool):
+        raise ValueError(f"Invalid provider ID: {eff_provider!r}.")
+
+    if not isinstance(eff_model, str) or not eff_model.strip() or any(
+        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in eff_model
+    ):
+        raise ValueError(f"Invalid model ID: {eff_model!r}.")
+    clean_model = eff_model.strip()
+
+    if not isinstance(eff_effort, str) or not eff_effort.strip() or any(
+        ord(ch) < 32 or ord(ch) == 127 or ch == "|" for ch in eff_effort
+    ):
+        raise ValueError(f"Invalid effort value: {eff_effort!r}.")
+    norm_effort = eff_effort.strip().lower()
+
+    norm_size = _validate_unit_size(eff_unit_size)
 
     # Validate existing provider keys for alias collisions and find matching live entry key.
     seen_keys = {}
     target_provider_key = None
     for raw_key, entry in raw_state.items():
-        if raw_key == CALIBRATION_KEY:
+        if raw_key in RESERVED_STATE_KEYS:
             continue
         if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(entry, dict):
             raise ValueError(f"Invalid provider-state entry for key {raw_key!r}.")
@@ -1597,6 +1696,57 @@ def record_burn(
         seen_keys[norm_key] = raw_key
         if norm_key == pool:
             target_provider_key = raw_key
+
+    if snap is not None:
+        cur_entry = raw_state[target_provider_key] if target_provider_key is not None else {}
+        live_5h = _optional_pct(cur_entry, "five_hour_pct") if cur_entry else None
+        live_wk = _optional_pct(cur_entry, "weekly_pct") if cur_entry else None
+
+        def _resolve_pair(explicit_before, explicit_after, snap_val, live_val, label):
+            if explicit_before is not None and explicit_after is not None:
+                return explicit_before, explicit_after
+            if explicit_before is not None and explicit_after is None:
+                if live_val is not None:
+                    return explicit_before, live_val
+                raise ValueError(
+                    f"before_{label} was provided without after_{label} and no live {label} reading exists for '{pool}'."
+                )
+            if explicit_before is None and explicit_after is not None:
+                if snap_val is not None:
+                    return snap_val, explicit_after
+                raise ValueError(
+                    f"after_{label} was provided without before_{label} and pending snapshot for '{unit_id}' has no {label} baseline."
+                )
+            if snap_val is not None and live_val is not None:
+                return snap_val, live_val
+            if snap_val is not None and live_val is None:
+                pending_warnings.append(
+                    f"Pending snapshot '{unit_id}' had {label}={_fmt_num(snap_val)}%, "
+                    f"but current provider state for '{pool}' has no live {label} reading."
+                )
+            return None, None
+
+        eff_b5, eff_a5 = _resolve_pair(before_5h, after_5h, snap.get("five_hour_pct"), live_5h, "five_hour_pct")
+        eff_bw, eff_aw = _resolve_pair(before_weekly, after_weekly, snap.get("weekly_pct"), live_wk, "weekly_pct")
+        if eff_b5 is None and eff_bw is None:
+            raise ValueError(
+                f"Could not determine before/after percentages for unit '{unit_id}': "
+                f"refresh live usage in {s_path} or pass --before-*/--after-*."
+            )
+    else:
+        if (before_5h is None) != (after_5h is None):
+            raise ValueError("Both before_5h and after_5h must be provided together.")
+        if (before_weekly is None) != (after_weekly is None):
+            raise ValueError("Both before_weekly and after_weekly must be provided together.")
+        if before_5h is None and before_weekly is None:
+            raise ValueError("At least one metric pair (before_5h/after_5h or before_weekly/after_weekly) is required.")
+        eff_b5, eff_a5 = before_5h, after_5h
+        eff_bw, eff_aw = before_weekly, after_weekly
+
+    b5 = _validate_pct_value(eff_b5, "before_5h") if eff_b5 is not None else None
+    a5 = _validate_pct_value(eff_a5, "after_5h") if eff_a5 is not None else None
+    bw = _validate_pct_value(eff_bw, "before_weekly") if eff_bw is not None else None
+    aw = _validate_pct_value(eff_aw, "after_weekly") if eff_aw is not None else None
 
     had_calibration = CALIBRATION_KEY in raw_state and raw_state[CALIBRATION_KEY] is not None
     cal = parse_calibration(raw_state)
@@ -1628,7 +1778,7 @@ def record_burn(
         else:
             prev_pool_est[pct_field] = defaults[pct_field] * weight * mult
 
-    warnings = []
+    warnings = list(pending_warnings)
     skipped_windows = []
     valid_deltas = {}
     deltas_report = {"five_hour_pct": None, "weekly_pct": None}
@@ -1761,10 +1911,20 @@ def record_burn(
     if valid_deltas or had_calibration:
         updated_state[CALIBRATION_KEY] = cal
 
+    pending_cleared = False
+    if unit_id is not None and unit_id in pending_map:
+        remaining_pending = dict(pending_map)
+        del remaining_pending[unit_id]
+        if remaining_pending:
+            updated_state[PENDING_KEY] = remaining_pending
+        else:
+            updated_state.pop(PENDING_KEY, None)
+        pending_cleared = True
+
     _write_json_atomic(s_path, updated_state)
 
     updated_est = estimate_burn(pool, clean_model, norm_effort, norm_size, calibration=cal)
-    return {
+    summary = {
         "mode": "record_burn",
         "state_path": str(s_path),
         "provider": pool,
@@ -1782,6 +1942,10 @@ def record_burn(
         "pool_calibration": cal["pools"].get(pool),
         "provider_state": live_entry,
     }
+    if unit_id is not None:
+        summary["unit"] = unit_id
+        summary["pending_cleared"] = pending_cleared
+    return summary
 
 
 def render_record_burn_markdown(summary):
@@ -1801,22 +1965,31 @@ def render_record_burn_markdown(summary):
         "",
         f"- **State file:** `{summary['state_path']}`",
         f"- **Lane:** `{_md_cell(summary['lane_key'])}` (unit size `{summary['unit_size']}`)",
-        f"- **Recorded at:** `{summary['recorded_at']}`",
-        f"- **Observed delta:** {delta_str}",
-        f"- **Calibration updated:** `{'yes' if summary['calibration_updated'] else 'no'}`",
-        (
-            f"- **Updated estimate (`{est['unit_size']}`):** "
-            f"5h `+{_fmt_num(est['five_hour_pct'])}%`, weekly `+{_fmt_num(est['weekly_pct'])}%` "
-            f"(safety margin `{_fmt_num(est['safety_margin'])}x`, source `{est['source']}`, samples `{est['samples']}`)"
-        ),
-        (
-            f"- **Updated provider state (`{summary['provider']}`):** "
-            f"status `{_md_cell(pstate.get('status', 'up'))}`, "
-            f"5h `{_fmt_num(pstate.get('five_hour_pct'))}%`, "
-            f"weekly `{_fmt_num(pstate.get('weekly_pct'))}%`, "
-            f"observed_at `{_md_cell(pstate.get('observed_at'))}`"
-        ),
     ]
+    if summary.get("unit"):
+        lines.append(
+            f"- **Unit:** `{_md_cell(summary['unit'])}` "
+            f"(pending snapshot cleared: `{'yes' if summary.get('pending_cleared') else 'no'}`)"
+        )
+    lines.extend(
+        [
+            f"- **Recorded at:** `{summary['recorded_at']}`",
+            f"- **Observed delta:** {delta_str}",
+            f"- **Calibration updated:** `{'yes' if summary['calibration_updated'] else 'no'}`",
+            (
+                f"- **Updated estimate (`{est['unit_size']}`):** "
+                f"5h `+{_fmt_num(est['five_hour_pct'])}%`, weekly `+{_fmt_num(est['weekly_pct'])}%` "
+                f"(safety margin `{_fmt_num(est['safety_margin'])}x`, source `{est['source']}`, samples `{est['samples']}`)"
+            ),
+            (
+                f"- **Updated provider state (`{summary['provider']}`):** "
+                f"status `{_md_cell(pstate.get('status', 'up'))}`, "
+                f"5h `{_fmt_num(pstate.get('five_hour_pct'))}%`, "
+                f"weekly `{_fmt_num(pstate.get('weekly_pct'))}%`, "
+                f"observed_at `{_md_cell(pstate.get('observed_at'))}`"
+            ),
+        ]
+    )
     if summary["warnings"]:
         lines.extend(["", "## Warnings", ""])
         for warning in summary["warnings"]:
@@ -1833,11 +2006,13 @@ def parse_provider_state(raw_state, now, stale_minutes):
 
     if CALIBRATION_KEY in raw_state:
         parse_calibration(raw_state)
+    if PENDING_KEY in raw_state:
+        parse_pending(raw_state)
 
     normalized_entries = {}
     seen_raw_keys = {}
     for raw_key, entry in raw_state.items():
-        if raw_key == CALIBRATION_KEY:
+        if raw_key in RESERVED_STATE_KEYS:
             continue
         if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(entry, dict):
             raise ValueError(f"Invalid provider-state entry for key {raw_key!r}.")
@@ -2040,6 +2215,106 @@ def _is_unconfigured_placeholder(state):
     )
 
 
+def _evaluate_candidate(candidate_spec, eligible, excluded, provider_states):
+    """Inspect a specific MODEL:EFFORT lane without altering the overall ranking."""
+    req_model, req_effort = parse_candidate_spec(candidate_spec)
+    target_model_key = canonical_model_id(req_model).lower()
+
+    for row in eligible:
+        if canonical_model_id(row["model"]).lower() == target_model_key and row["effort"].lower() == req_effort:
+            return {
+                "requested": candidate_spec,
+                "found": True,
+                "eligible": True,
+                "model": row["model"],
+                "effort": row["effort"],
+                "pool": row["pool"],
+                "family": row["family"],
+                "runner": row.get("runner"),
+                "rank": row["rank"],
+                "score": row["score"],
+                "tier": row["tier"],
+                "pool_state": row["pool_state"],
+                "deprioritized": bool(row["deprioritized"]),
+                "projected_deprioritized": bool(row["projected_deprioritized"]),
+                "projected_overflow": bool(row["projected_overflow"]),
+                "stale": bool(row["stale"]),
+                "headroom": row["headroom"],
+                "projected_five_hour_pct": row["projected_five_hour_pct"],
+                "projected_weekly_pct": row["projected_weekly_pct"],
+                "projected_headroom_pct": row["projected_headroom_pct"],
+                "estimated_burn": row["estimated_burn"],
+                "flags": list(row["flags"]),
+                "reasons": list(row["state_reasons"]),
+                "dispatch_ok": dispatch_ok(row),
+            }
+
+    for row in excluded:
+        if canonical_model_id(row["model"]).lower() == target_model_key and row["effort"].lower() == req_effort:
+            pstate = provider_states.get(row["pool"])
+            pool_state = row.get("pool_state") or (pstate["effective_state"] if pstate else "unknown")
+            flags = ["excluded"]
+            if row.get("projected_overflow"):
+                flags.append("projected-overflow")
+            if pstate and pstate.get("deprioritized"):
+                flags.append("deprioritized")
+            if pstate and pstate.get("stale"):
+                flags.append("stale")
+            return {
+                "requested": candidate_spec,
+                "found": True,
+                "eligible": False,
+                "model": row["model"],
+                "effort": row["effort"],
+                "pool": row["pool"],
+                "family": row["family"],
+                "runner": None,
+                "rank": None,
+                "score": row["score"],
+                "tier": None,
+                "pool_state": pool_state,
+                "deprioritized": bool(pstate["deprioritized"]) if pstate else False,
+                "projected_deprioritized": bool(row.get("projected_deprioritized", False)),
+                "projected_overflow": bool(row.get("projected_overflow", False)),
+                "stale": bool(pstate["stale"]) if pstate else False,
+                "headroom": pstate["headroom"] if pstate else None,
+                "projected_five_hour_pct": row.get("projected_five_hour_pct"),
+                "projected_weekly_pct": row.get("projected_weekly_pct"),
+                "projected_headroom_pct": row.get("projected_headroom_pct"),
+                "estimated_burn": row.get("estimated_burn"),
+                "flags": flags,
+                "reasons": list(row["reasons"]),
+                "dispatch_ok": False,
+            }
+
+    return {
+        "requested": candidate_spec,
+        "found": False,
+        "eligible": False,
+        "model": req_model,
+        "effort": req_effort,
+        "pool": None,
+        "family": None,
+        "runner": None,
+        "rank": None,
+        "score": None,
+        "tier": None,
+        "pool_state": None,
+        "deprioritized": False,
+        "projected_deprioritized": False,
+        "projected_overflow": False,
+        "stale": False,
+        "headroom": None,
+        "projected_five_hour_pct": None,
+        "projected_weekly_pct": None,
+        "projected_headroom_pct": None,
+        "estimated_burn": None,
+        "flags": ["not-found"],
+        "reasons": [f"candidate '{candidate_spec}' not found in measurements"],
+        "dispatch_ok": False,
+    }
+
+
 def resolve_lanes(
     candidates,
     provider_states,
@@ -2055,11 +2330,15 @@ def resolve_lanes(
     unit_size=None,
     safety_margin=None,
     calibration=None,
+    candidate=None,
 ):
     """Filter, score, classify (±3-pt equivalence), and deterministically rank lanes."""
     warnings = list(state_warnings or [])
     eligible = []
     excluded = []
+
+    if candidate is not None:
+        parse_candidate_spec(candidate)
 
     norm_unit_size = _validate_unit_size(unit_size) if unit_size is not None else None
     norm_safety_margin = _validate_safety_margin(safety_margin) if safety_margin is not None else None
@@ -2458,6 +2737,12 @@ def resolve_lanes(
     if top_lane is not None and top_lane["stale"]:
         warnings.append("Top lane has stale or untracked quota state. Confirm live usage before routing.")
 
+    candidate_report = (
+        _evaluate_candidate(candidate, eligible, excluded, provider_states)
+        if candidate is not None
+        else None
+    )
+
     return {
         "top_score": top_score,
         "score_basis": score_basis,
@@ -2466,6 +2751,7 @@ def resolve_lanes(
         "unit_size": norm_unit_size,
         "safety_margin": norm_safety_margin,
         "recommended": top_lane if authorized_lanes is not None else None,
+        "candidate": candidate_report,
         "ranked": eligible,
         "excluded": excluded,
         "warnings": warnings,
@@ -2574,6 +2860,7 @@ def render_markdown(report):
         )
 
     rec = report["recommended"]
+    rec_dispatch_ok = bool(report.get("dispatch_ok", dispatch_ok(rec)))
     if rec:
         headroom_str = f"{_fmt_num(rec['headroom'])}%" if rec["headroom"] is not None else "unknown"
         flags_str = f" · flags: {', '.join(rec['flags'])}" if rec["flags"] else ""
@@ -2604,15 +2891,69 @@ def render_markdown(report):
                 f"headroom `{headroom_str}`{flags_str}"
             )
         lines.append(f"- **Authorized runner:** {_md_cell(rec['runner'])}")
-        if not dispatch_ok(rec):
+        lines.append(f"- dispatch_ok: {'true' if rec_dispatch_ok else 'false'}")
+        if not rec_dispatch_ok:
             lines.append(
                 "- **Dispatch:** not OK. Do not send new units to this pool; "
                 "take the next ladder step (below-tier, verification one step higher) or wait for the reset."
             )
     elif report["advisory"]:
         lines.append("- **Recommended lane:** none (advisory only)")
+        lines.append("- dispatch_ok: false")
     else:
         lines.append("- **Recommended lane:** none")
+        lines.append("- dispatch_ok: false")
+
+    cand = report.get("candidate")
+    if cand is not None:
+        if cand["found"]:
+            elig_str = "yes" if cand["eligible"] else "no"
+            dep_str = "true" if cand["deprioritized"] else "false"
+            pool_str = f"pool `{_md_cell(cand['pool'])}` (`{_md_cell(cand['pool_state'])}`)"
+            cur_hr = f"{_fmt_num(cand['headroom'])}%" if cand.get("headroom") is not None else "unknown"
+            if unit_size:
+                proj_hr = (
+                    f"{_fmt_num(cand['projected_headroom_pct'])}%"
+                    if cand.get("projected_headroom_pct") is not None
+                    else "unknown"
+                )
+                proj_summary = _fmt_projected_cell(cand)
+                proj_extra = f" ({proj_summary})" if proj_summary != "-" else ""
+                hr_str = f"projected headroom `{proj_hr}`{proj_extra} (current `{cur_hr}`)"
+            else:
+                hr_str = f"headroom `{cur_hr}`"
+            reason_str = (
+                f" · reason: {_md_cell('; '.join(cand['reasons']))}"
+                if (not cand["eligible"] and cand.get("reasons"))
+                else ""
+            )
+            lines.append(
+                f"- **Candidate lane:** `{_md_cell(cand['model'])}` (`{_md_cell(cand['effort'])}`) · "
+                f"eligible `{elig_str}` · {pool_str} · deprioritized `{dep_str}` · {hr_str}{reason_str}"
+            )
+        else:
+            lines.append(
+                f"- **Candidate lane:** `{_md_cell(cand['model'])}` (`{_md_cell(cand['effort'])}`) · "
+                "eligible `no` · not found in measurements"
+            )
+        lines.append(f"- **Candidate** dispatch_ok: {'true' if cand['dispatch_ok'] else 'false'}")
+
+    pending_info = report.get("pending_unit")
+    if isinstance(pending_info, dict):
+        if pending_info.get("stored"):
+            snap = pending_info["snapshot"]
+            five_s = f"{_fmt_num(snap['five_hour_pct'])}%" if snap.get("five_hour_pct") is not None else "unknown"
+            wk_s = f"{_fmt_num(snap['weekly_pct'])}%" if snap.get("weekly_pct") is not None else "unknown"
+            lines.append(
+                f"- **Pending burn snapshot:** saved unit `{_md_cell(pending_info['unit'])}` "
+                f"(`{_md_cell(snap['pool'])}/{_md_cell(snap['model'])}/{_md_cell(snap['effort'])}`, "
+                f"size `{snap['unit_size']}`, 5h `{five_s}`, wk `{wk_s}`)"
+            )
+        else:
+            lines.append(
+                f"- **Pending burn snapshot:** not saved for unit `{_md_cell(pending_info['unit'])}` "
+                f"({_md_cell(pending_info.get('reason', 'skipped'))})"
+            )
 
     if report["warnings"]:
         lines.extend(["", "## Warnings", ""])
@@ -2769,6 +3110,21 @@ def _parse_pct_arg(raw):
         raise argparse.ArgumentTypeError(str(err)) from err
 
 
+def _parse_candidate_arg(raw):
+    try:
+        parse_candidate_spec(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
+    return raw.strip()
+
+
+def _parse_unit_id_arg(raw):
+    try:
+        return _validate_unit_id(raw)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(str(err)) from err
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description=(
@@ -2839,6 +3195,20 @@ def build_parser():
         help="Restrict eligible lanes to those explicitly authorized for restricted data in the project profile.",
     )
     parser.add_argument(
+        "--candidate",
+        type=_parse_candidate_arg,
+        default=None,
+        metavar="MODEL:EFFORT",
+        help="Check a specific chosen lane (eligibility, pool state, deprioritized, projected headroom, dispatch_ok) without changing the ranking.",
+    )
+    parser.add_argument(
+        "--unit",
+        type=_parse_unit_id_arg,
+        default=None,
+        metavar="ID",
+        help="Unit ID for pending burn snapshot (with --unit-size at pre-dispatch) or auto-filled --record-burn.",
+    )
+    parser.add_argument(
         "--unit-size",
         type=_parse_unit_size_arg,
         default=None,
@@ -2864,19 +3234,19 @@ def build_parser():
         "--burn-provider",
         default=None,
         metavar="PROVIDER",
-        help="Provider/pool for --record-burn (e.g. codex, claude, gemini, deepseek).",
+        help="Provider/pool for --record-burn (e.g. codex, claude, gemini, deepseek; optional when --unit is set).",
     )
     parser.add_argument(
         "--burn-model",
         default=None,
         metavar="MODEL",
-        help="Model ID for --record-burn (e.g. gpt-6.2-sol, claude-opus-5-5).",
+        help="Model ID for --record-burn (e.g. gpt-6.2-sol, claude-opus-5-5; optional when --unit is set).",
     )
     parser.add_argument(
         "--burn-effort",
-        default="medium",
+        default=None,
         metavar="EFFORT",
-        help="Effort level for --record-burn (default: medium).",
+        help="Effort level for --record-burn (default: medium, or pending snapshot's effort when --unit is set).",
     )
     parser.add_argument(
         "--before-5h",
@@ -2965,11 +3335,16 @@ def resolve_from_paths(
     cohort=None,
     unit_size=None,
     safety_margin=None,
+    candidate=None,
+    unit=None,
 ):
     """Load files from disk and return the structured lane resolution report dict."""
     _validate_stale_minutes(stale_minutes)
     norm_unit_size = _validate_unit_size(unit_size) if unit_size is not None else None
     norm_safety_margin = _validate_safety_margin(safety_margin) if safety_margin is not None else None
+    unit_id = _validate_unit_id(unit) if unit is not None else None
+    if unit_id is not None and norm_unit_size is None:
+        raise ValueError("unit requires unit_size.")
     ws = Path(workspace)
     if not ws.exists() or not ws.is_dir():
         raise ValueError(f"Workspace directory does not exist: {ws}")
@@ -2993,6 +3368,7 @@ def resolve_from_paths(
 
     state_loaded = False
     resolved_state_path = None
+    raw_state = None
     provider_states = {}
     state_warnings = []
     calibration = empty_calibration()
@@ -3045,7 +3421,54 @@ def resolve_from_paths(
         unit_size=norm_unit_size,
         safety_margin=norm_safety_margin,
         calibration=calibration,
+        candidate=candidate,
     )
+
+    pending_unit = None
+    if unit_id is not None and norm_unit_size is not None:
+        if result["candidate"] is not None:
+            chosen = result["candidate"]
+            chosen_ok = bool(chosen["found"] and chosen["eligible"] and chosen["dispatch_ok"])
+        else:
+            chosen = result["recommended"]
+            chosen_ok = bool(chosen is not None and dispatch_ok(chosen))
+
+        if resolved_state_path is None:
+            reason = "no provider-state.json found"
+            result["warnings"].append(f"Cannot store pending snapshot for unit '{unit_id}': {reason}.")
+            pending_unit = {"unit": unit_id, "stored": False, "reason": reason}
+        elif not chosen_ok:
+            reason = "chosen lane is not dispatchable (dispatch_ok: false)"
+            pending_unit = {"unit": unit_id, "stored": False, "reason": reason}
+        else:
+            pstate = provider_states.get(chosen["pool"])
+            if pstate is not None and not pstate["stale"]:
+                snap_5h = pstate["five_hour_pct"]
+                snap_wk = pstate["weekly_pct"]
+                snap_obs = pstate["observed_at"] or format_iso_utc(eval_now)
+            else:
+                snap_5h = None
+                snap_wk = None
+                snap_obs = (pstate.get("observed_at") if pstate else None) or format_iso_utc(eval_now)
+                result["warnings"].append(
+                    f"Pending snapshot for unit '{unit_id}' saved without live baseline percentages "
+                    f"(pool '{chosen['pool']}' is stale or untracked)."
+                )
+            snapshot = {
+                "pool": chosen["pool"],
+                "model": chosen["model"],
+                "effort": chosen["effort"],
+                "unit_size": norm_unit_size,
+                "five_hour_pct": snap_5h,
+                "weekly_pct": snap_wk,
+                "observed_at": snap_obs,
+            }
+            updated_raw = dict(raw_state)
+            pending_map = dict(parse_pending(raw_state))
+            pending_map[unit_id] = snapshot
+            updated_raw[PENDING_KEY] = pending_map
+            _write_json_atomic(resolved_state_path, updated_raw)
+            pending_unit = {"unit": unit_id, "stored": True, "snapshot": snapshot}
 
     return {
         "role": role,
@@ -3075,6 +3498,8 @@ def resolve_from_paths(
         "providers": provider_states,
         "recommended": result["recommended"],
         "dispatch_ok": dispatch_ok(result["recommended"]),
+        "candidate": result["candidate"],
+        "pending_unit": pending_unit,
         "ranked": result["ranked"],
         "excluded": result["excluded"],
     }
@@ -3092,21 +3517,24 @@ def main(argv=None):
             parser.error(str(err))
 
     if args.record_burn:
-        if not args.burn_provider:
-            parser.error("--burn-provider is required with --record-burn.")
-        if not args.burn_model:
-            parser.error("--burn-model is required with --record-burn.")
-        if args.unit_size is None:
-            parser.error("--unit-size is required with --record-burn.")
-        if (args.before_5h is None) != (args.after_5h is None):
-            parser.error("--before-5h and --after-5h must be provided together.")
-        if (args.before_weekly is None) != (args.after_weekly is None):
-            parser.error("--before-weekly and --after-weekly must be provided together.")
-        if args.before_5h is None and args.before_weekly is None:
-            parser.error(
-                "--record-burn requires at least one metric pair "
-                "(--before-5h/--after-5h or --before-weekly/--after-weekly)."
-            )
+        if args.candidate is not None:
+            parser.error("--candidate cannot be used with --record-burn.")
+        if args.unit is None:
+            if not args.burn_provider:
+                parser.error("--burn-provider is required with --record-burn (unless --unit is given).")
+            if not args.burn_model:
+                parser.error("--burn-model is required with --record-burn (unless --unit is given).")
+            if args.unit_size is None:
+                parser.error("--unit-size is required with --record-burn (unless --unit is given).")
+            if (args.before_5h is None) != (args.after_5h is None):
+                parser.error("--before-5h and --after-5h must be provided together.")
+            if (args.before_weekly is None) != (args.after_weekly is None):
+                parser.error("--before-weekly and --after-weekly must be provided together.")
+            if args.before_5h is None and args.before_weekly is None:
+                parser.error(
+                    "--record-burn requires at least one metric pair "
+                    "(--before-5h/--after-5h or --before-weekly/--after-weekly)."
+                )
 
         if args.state is not None:
             target_state = args.state
@@ -3119,6 +3547,7 @@ def main(argv=None):
         try:
             summary = record_burn(
                 target_state,
+                unit=args.unit,
                 provider=args.burn_provider,
                 model=args.burn_model,
                 effort=args.burn_effort,
@@ -3142,13 +3571,17 @@ def main(argv=None):
     if (
         args.burn_provider is not None
         or args.burn_model is not None
+        or args.burn_effort is not None
         or args.before_5h is not None
         or args.after_5h is not None
         or args.before_weekly is not None
         or args.after_weekly is not None
         or args.reset_occurred
     ):
-        parser.error("--burn-provider, --burn-model, --before-*, --after-*, and --reset-occurred require --record-burn.")
+        parser.error("--burn-provider, --burn-model, --burn-effort, --before-*, --after-*, and --reset-occurred require --record-burn.")
+
+    if args.unit is not None and args.unit_size is None:
+        parser.error("--unit requires --unit-size (for pre-dispatch snapshot) or --record-burn.")
 
     try:
         report = resolve_from_paths(
@@ -3165,6 +3598,8 @@ def main(argv=None):
             cohort=args.cohort,
             unit_size=args.unit_size,
             safety_margin=args.safety_margin,
+            candidate=args.candidate,
+            unit=args.unit,
         )
     except (ValueError, OSError, OverflowError, RecursionError) as err:
         parser.exit(1, f"Lane resolution failed: {err}\n")

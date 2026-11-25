@@ -38,6 +38,7 @@ Supply only context the reviewer needs. Keep the author's conclusions out of the
 Save active handoff state to `.orchestration/orchestration-checkpoint.md`:
 
 ```markdown
+Manager (session label and lock token):
 Goal and current baseline:
 Accepted decisions and unresolved decisions:
 

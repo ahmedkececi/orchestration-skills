@@ -82,6 +82,13 @@ V120_INVARIANT_PATTERNS = (
     ("projected-overflow", re.compile(r"projected-overflow")),
     ("90% move threshold", re.compile(r"90\s*%")),
     ("95% stop threshold", re.compile(r"95\s*%")),
+    ("manager_lock.py", re.compile(r"manager_lock\.py")),
+    ("manager-lock.json", re.compile(r"manager-lock\.json")),
+    ("manager lock --token", re.compile(r"--token")),
+    ("--candidate", re.compile(r"--candidate")),
+    ("read_quota manual source", re.compile(r"--source\s+manual")),
+    ("record-burn --unit", re.compile(r"--record-burn\s+--unit")),
+    ("dispatch_ok", re.compile(r"dispatch_ok")),
 )
 
 LEGACY_WEEKLY_85_RE = re.compile(r"(?:\b85\s*%|%85\b)")
@@ -628,6 +635,10 @@ class SkillIntegrityTests(unittest.TestCase):
             self.assertTrue(
                 (target_dir / "update-orchestration-skills" / "scripts" / "resolve_lanes.py").is_file(),
                 "Installed update-orchestration-skills is missing scripts/resolve_lanes.py",
+            )
+            self.assertTrue(
+                (target_dir / "update-orchestration-skills" / "scripts" / "manager_lock.py").is_file(),
+                "Installed update-orchestration-skills is missing scripts/manager_lock.py",
             )
 
     def test_install_sh_backs_up_existing_skill_folders(self):

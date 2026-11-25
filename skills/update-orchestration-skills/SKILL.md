@@ -12,18 +12,18 @@ Run `/update-orchestration-skills` in Claude Code or Antigravity, or `$update-or
 A name supplied in the invocation or in the user's next message selects **only that model**. Resolve the name to the provider's exact documented ID and release, then search primary benchmark sources for that exact variant and effort. Ask for clarification if multiple distinct IDs fit. Skip the broad catalog scan. Named lookups have no release-date cutoff. Use the complete benchmark checklist below even if the release has no published scores.
 
 ```sh
-python3 -B scripts/refresh.py --workspace /path/to/project --model EXACT_ID --input observations.json
+python3 -I scripts/refresh.py --workspace /path/to/project --model EXACT_ID --input observations.json
 ```
 
 ## Without a model name
 
-1. Run `python3 -B scripts/catalogs.py plan --workspace /path/to/project`. It lists official sources, reference versions and any providers added to the workspace.
+1. Run `python3 -I scripts/catalogs.py plan --workspace /path/to/project`. It lists official sources, reference versions and any providers added to the workspace.
 2. Read each provider's model catalog and release history. Verify the reference dates and newer model IDs using the [catalog workflow](references/catalog-workflow.md), then run `catalogs.py verify`. Cover relevant pages and dates and identify any gaps.
 3. Show the verified newer models as a numbered list with provider, exact model ID, release date and source. Report any incomplete coverage. If the list is empty, report that and stop. Ask **which models the user wants to add**. Accept one, several or explicit all. Stop and wait for their answer before any benchmark lookup or workspace write. Keep the verified report for the next step.
 4. Use the checklist below only for the chosen IDs. If the selection is unclear, clarify it. On cancellation, finish without importing. Pass one `--select` flag per chosen model. An explicit choice of all means passing each verified ID from the displayed list.
 
 ```sh
-python3 -B scripts/refresh.py --workspace /path/to/project --catalog-report scan.json \
+python3 -I scripts/refresh.py --workspace /path/to/project --catalog-report scan.json \
   --select EXACT_ID --input observations.json
 ```
 
@@ -41,7 +41,7 @@ Add `--preview` when requested. Read the resulting workspace file or preview and
 
 For an explicit user-supplied measurement export, use the [import procedure](references/collection.md). To register a new provider for future scans, use [add-provider-orchestration-skills](../add-provider-orchestration-skills/).
 
-For deterministic lane ranking, run `python3 -B scripts/resolve_lanes.py --workspace /path/to/project --role coding` from the updater skill directory. The resolver uses workspace measurements, provider state and the authorization block in `.orchestration/project-profile.md` (or `--profile PATH`). A missing block gives an advisory ranking with no recommended lane. Use `--providers` to narrow the pool list, `--author-family` for independent review, `--restricted-data` for restricted inputs, and `--format json` for machine-readable output.
+For deterministic lane ranking, run `python3 -I scripts/resolve_lanes.py --workspace /path/to/project --role coding` from the updater skill directory. The resolver uses workspace measurements, provider state and the authorization block in `.orchestration/project-profile.md` (or `--profile PATH`). A missing block gives an advisory ranking with no recommended lane. Use `--providers` to narrow the pool list, `--author-family` for independent review, `--restricted-data` for restricted inputs, `--candidate MODEL:EFFORT` to gate a routing-chosen lane without changing the ranking, `--unit-size <xs|s|m|l|xl> --unit <id>` to save a pre-dispatch burn baseline for `--record-burn --unit <id>`, and `--format json` for machine-readable output (Markdown also prints `dispatch_ok: true|false` on its own line). Refresh pool quota readings with `scripts/read_quota.py --write` (Codex) or `--source manual --provider <pool> --five-hour PCT --weekly PCT --write` (Claude or other pools), and guard single-manager workspace ownership with `scripts/manager_lock.py`.
 
 Use `--cohort ID` to select a compatible live benchmark cohort. When multiple
 live cohorts are applicable and no cohort is selected, the resolver warns
